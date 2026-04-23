@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>철봉.com | AI Pull-Up Bar Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="brand-row">
+        <div class="brand-mark">철봉.com</div>
+        <div class="brand-tools">
+          <div class="brand-note" data-i18n="brandNote">Upload a pull-up bar photo. Let the model inspect it and place it into context.</div>
+          <div class="lang-switch" role="group" aria-label="Language switcher">
+            <button id="langEnButton" class="lang-button" type="button" data-lang="en">EN</button>
+            <button id="langKoButton" class="lang-button" type="button" data-lang="ko">KO</button>
+          </div>
+        </div>
+      </div>
+      <div class="hero-grid">
+        <div>
+          <span class="eyebrow" data-i18n="heroEyebrow">LLM-first website interface</span>
+          <h1 data-i18n="heroTitle">Analyze the bar from the image, then verify it on the map.</h1>
+          <p data-i18n="heroBody">
+            The main interface for 철봉.com is an AI analysis workspace. A user uploads a photo of a
+            pull-up bar, and the model estimates the location, reads the environment around it, checks the bar condition,
+            and suggests the best matching spot on the map.
+          </p>
+        </div>
+        <div class="stats">
+          <article class="stat">
+            <strong id="stat-count">0</strong>
+            <span data-i18n="statsMapped">mapped pull-up bar spots</span>
+          </article>
+          <article class="stat">
+            <strong id="stat-nearest">--</strong>
+            <span data-i18n="statsNearest">nearest mapped spot after location sharing</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="ai-layout">
+      <article class="panel upload-panel">
+        <div class="panel-header panel-header-stack">
+          <div>
+            <h2 data-i18n="uploadTitle">Analyze a Pull-Up Bar Photo</h2>
+            <p data-i18n="uploadBody">Upload one image and send it to the vision model for a structured inspection.</p>
+          </div>
+          <div class="chip-row">
+            <span class="chip" data-i18n="chipLocation">Location clues</span>
+            <span class="chip" data-i18n="chipEnvironment">Environment scan</span>
+            <span class="chip" data-i18n="chipCondition">Condition check</span>
+          </div>
+        </div>
+
+        <div class="upload-grid">
+          <section class="dropzone-card">
+            <label for="imageInput" id="dropzone" class="dropzone">
+              <input id="imageInput" type="file" accept="image/*" hidden>
+              <div class="dropzone-copy">
+                <strong data-i18n="dropzoneTitle">Drop an image here or click to upload</strong>
+                <span data-i18n="dropzoneBody">Best for outdoor photos with the bar and surrounding area visible.</span>
+              </div>
+            </label>
+            <div class="prompt-box">
+              <label for="analysisPrompt" data-i18n="analysisPromptLabel">Extra instruction</label>
+              <textarea id="analysisPrompt" data-i18n-placeholder="analysisPromptPlaceholder" placeholder="Example: Focus on signs, nearby buildings, flooring, and whether the bar looks rusted or safe."></textarea>
+            </div>
+            <div class="action-row">
+              <button id="analyzeButton" class="button button-primary" type="button" data-i18n="analyzeButton">Analyze Image</button>
+              <button id="locateButton" class="button button-secondary" type="button" data-i18n="locateButton">Use My Location</button>
+            </div>
+            <p id="analysisStatus" class="status-text">No image uploaded yet.</p>
+          </section>
+
+          <section class="preview-card">
+            <div class="preview-header">
+              <h3 data-i18n="previewTitle">Image Preview</h3>
+              <span id="fileMeta" class="file-meta">No file selected</span>
+            </div>
+            <div class="preview-frame">
+              <img id="previewImage" alt="Uploaded pull-up bar preview">
+              <div id="previewPlaceholder" class="preview-placeholder" data-i18n="previewPlaceholder">
+                The uploaded pull-up bar image will appear here.
+              </div>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <aside class="sidebar">
+        <section class="panel sidebar-section">
+          <h3 data-i18n="reportTitle">AI Report</h3>
+          <p class="section-note" data-i18n="reportBody">The model returns a compact inspection of the scene and bar quality.</p>
+          <div id="analysisSummary" class="analysis-summary">
+            <article class="summary-card">
+              <span class="summary-label" data-i18n="summaryStatusLabel">Status</span>
+              <strong data-i18n="summaryWaitingTitle">Waiting for an image</strong>
+              <p data-i18n="summaryWaitingBody">Upload a pull-up bar photo to generate the first report.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel sidebar-section">
+          <h3 data-i18n="suggestedTitle">Suggested Map Match</h3>
+          <p class="section-note" data-i18n="suggestedBody">When the model spots location clues, the nearest matching bar on the map appears here.</p>
+          <div id="selectedBar" class="detail-card">
+            <p class="empty-state" data-i18n="emptySuggested">No suggested location yet.</p>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="map-layout">
+      <article class="panel map-panel">
+        <div class="panel-header">
+          <div>
+            <h2 data-i18n="mapTitle">Reference Map</h2>
+            <p data-i18n="mapBody">The map becomes a verification tool after the LLM analyzes the uploaded photo.</p>
+          </div>
+        </div>
+        <div id="map"></div>
+        <div class="toolbar">
+          <input id="searchInput" class="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Search mapped bars by name, area, or address">
+        </div>
+      </article>
+
+      <aside class="sidebar">
+        <section class="panel sidebar-section">
+          <h3 data-i18n="nearbyTitle">Nearby Bars</h3>
+          <p class="section-note" data-i18n="nearbyBody">This list reorders itself after the browser shares the user's location.</p>
+          <div id="barList" class="list"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+  <script src="./script.js"></script>
+</body>
+</html>
