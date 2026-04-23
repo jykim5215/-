@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
-HOST = os.getenv("CHEOLBONG_HOST", "127.0.0.1")
+HOST = os.getenv("CHEOLBONG_HOST", "0.0.0.1")
 PORT = int(os.getenv("CHEOLBONG_PORT", "8000"))
 ROOT = Path(__file__).resolve().parent
 OPENAI_MODEL = os.getenv("CHEOLBONG_VISION_MODEL", "gpt-5.4-mini")
