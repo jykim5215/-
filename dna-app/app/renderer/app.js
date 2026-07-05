@@ -145,6 +145,45 @@ function makeMockAPI() {
 
 const api = window.dnaAPI || makeMockAPI();
 
+
+// ---------- 아이콘 (inline SVG, stroke 기반) ----------
+const ICON_PATHS = {
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.6 1 1.4 1 2.5h6c0-1.1.3-1.9 1-2.5A6 6 0 0 0 12 3z"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  folder: '<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
+  pen: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  spark: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  gauge: '<path d="M12 15l4-6M3 12a9 9 0 0 1 18 0 8.9 8.9 0 0 1-1.2 4.5H4.2A8.9 8.9 0 0 1 3 12z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  skip: '<path d="M5 4l10 8-10 8V4zM19 5v14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+};
+function ic(name) {
+  return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+}
+const STAGE_ICONS = { brainstorm: 'bulb', email: 'mail', collect: 'folder', analyze: 'chart', draft: 'pen', cardnews: 'grid' };
+
+// 버튼 로딩 상태 (텍스트 대신 스피너)
+function setBusy(btn, on) {
+  if (on) {
+    btn.dataset.idle = btn.innerHTML;
+    btn.classList.add('loading');
+    btn.disabled = true;
+  } else {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    if (btn.dataset.idle) btn.innerHTML = btn.dataset.idle;
+  }
+}
+
 // ---------- 상태 ----------
 const state = {
   projectId: null,
@@ -155,7 +194,7 @@ const state = {
   tags: new Set(),
   cardPlan: null,
   skippedStages: new Set(), // 선택 단계(이메일) 건너뛰기 표시
-  board: [],                // 브레인스토밍 보드 노트들
+  doc: null,                // 브레인스토밍 기획 문서 (노션식 블록)
   sideOpen: null,           // null = 단계별 자동 (브레인스토밍은 숨김)
 };
 
@@ -165,7 +204,7 @@ function sideVisible() {
 }
 function applySideVisibility() {
   document.querySelector('.frame').classList.toggle('no-side', !sideVisible());
-  $('#sideToggle').textContent = sideVisible() ? '📎 패널 접기' : '📎 패널 열기';
+  $('#sideToggle').innerHTML = `${ic('panel')} ${sideVisible() ? '패널 접기' : '패널 열기'}`;
 }
 
 const $ = (sel) => document.querySelector(sel);
@@ -214,7 +253,7 @@ function renderStepper() {
     div.className =
       'step' +
       (i === curIdx ? ' cur' : skipped ? ' skipped' : i < curIdx ? ' done' : ' next');
-    const mark = i === curIdx ? i + 1 : skipped ? '–' : i < curIdx ? '✓' : i + 1;
+    const mark = skipped ? '–' : i < curIdx ? '✓' : ic(STAGE_ICONS[s.key]);
     div.innerHTML = `<span class="n">${mark}</span>${s.name}` +
       (s.optional ? '<span class="opt-tag">선택</span>' : '');
     div.title = s.optional ? '선택 단계 — 필요할 때만 진행합니다' : '';
@@ -312,6 +351,9 @@ function renderFeedback() {
 async function renderWork() {
   const el = $('#workArea');
   el.innerHTML = '';
+  el.classList.remove('work-anim');
+  void el.offsetWidth;
+  el.classList.add('work-anim');
   if (!state.projectId) {
     el.innerHTML = `<div class="placeholder"><b>프로젝트가 없습니다.</b><br>상단의 "+ 새 프로젝트"로 시작하세요.</div>`;
     return;
@@ -324,80 +366,97 @@ async function renderWork() {
   if (state.stage === 'cardnews') return renderCardnewsStage(el);
 }
 
-// ---------- 단계 1: 브레인스토밍 (노션식 자유 배치 보드) ----------
-const NOTE_TYPES = {
-  keyword: '키워드', angle: '기사 각도', title: '제목 후보',
-  question: '취재 질문', checklist: '필요 자료', source: '취재원', free: '메모',
-};
-let noteSeq = 1;
-const newNote = (type, text, x, y) => ({ id: 'n' + Date.now() + '-' + noteSeq++, type, text, x, y });
+// ---------- 단계 1: 브레인스토밍 (노션식 문서 에디터) ----------
+// 섹션 정의: 마커/색은 은은하게, 구조는 문서 블록으로.
+const SEC_DEFS = [
+  { key: 'angle', name: '기사 각도', dot: '#3B82F6', marker: '•', ph: '각도 아이디어…' },
+  { key: 'title', name: '제목 후보', dot: '#10B981', marker: 'n', ph: '제목 후보…' },
+  { key: 'question', name: '취재 질문', dot: '#8B5CF6', marker: 'Q', ph: '질문…' },
+  { key: 'checklist', name: '필요 자료 체크리스트', dot: '#F59E0B', marker: 'check', ph: '확보할 자료…' },
+  { key: 'source', name: '취재원', dot: '#EC4899', marker: '•', ph: '취재원(직함)…' },
+  { key: 'free', name: '메모', dot: '#C7C4BC', marker: '·', ph: '자유 메모…' },
+];
+let blkSeq = 1;
+const newBlock = (text = '', checked = false) => ({ id: 'b' + Date.now() + '-' + blkSeq++, text, checked });
 
-// AI 기획안 → 유형별 열로 보드에 배치
-function planToNotes(plan, keywords = []) {
-  const notes = [];
-  const col = (items, type, cx, fmt = (v) => v) =>
-    items.forEach((v, i) => notes.push(newNote(type, fmt(v), cx, 64 + i * 108)));
-  keywords.forEach((k, i) => notes.push(newNote('keyword', k, 16 + i * 150, 8)));
-  col(plan.angles || [], 'angle', 16, (a) => `[${a.type}] ${a.summary}\n관심도 ${a.readerInterest} — ${a.reason}`);
-  col(plan.titleCandidates || [], 'title', 268, (t) => t);
-  col(plan.questions || [], 'question', 520, (q) => q);
-  col(plan.sources || [], 'source', 772, (s2) => s2);
-  (plan.checklist || []).forEach((c, i) =>
-    notes.push(newNote('checklist', '☐ ' + c, 772, 64 + ((plan.sources || []).length + i) * 108)));
-  return notes;
+function emptyDoc() {
+  return { sections: SEC_DEFS.map((s) => ({ key: s.key, blocks: [] })) };
+}
+function docSection(key) {
+  return state.doc.sections.find((s) => s.key === key);
 }
 
-// 보드 → 이메일 단계가 읽을 수 있는 형식으로 직렬화
-function boardPayload() {
-  return {
-    notes: state.board,
-    questions: state.board.filter((n) => n.type === 'question').map((n) => n.text),
-    checklist: state.board.filter((n) => n.type === 'checklist').map((n) => n.text.replace(/^☐\s*/, '')),
+// AI 기획안 → 섹션 블록으로
+function planIntoDoc(plan) {
+  const add = (key, texts) => {
+    const sec = docSection(key);
+    for (const t of texts) if (t && String(t).trim()) sec.blocks.push(newBlock(String(t).trim()));
   };
+  add('angle', (plan.angles || []).map((a) => `[${a.type}] ${a.summary} — 관심도 ${a.readerInterest} (${a.reason})`));
+  add('title', plan.titleCandidates || []);
+  add('question', plan.questions || []);
+  add('checklist', plan.checklist || []);
+  add('source', plan.sources || []);
+}
+
+// 저장 형식 (단계 2 질문지·단계 3 추천 맥락과 호환)
+function docPayload() {
+  return {
+    sections: state.doc.sections,
+    questions: docSection('question').blocks.map((b) => b.text).filter(Boolean),
+    checklist: docSection('checklist').blocks.filter((b) => !b.checked).map((b) => b.text).filter(Boolean),
+  };
+}
+
+// 이전 형식 호환: {sections} | {notes}(구 보드) | plan JSON
+function loadDocFrom(content) {
+  const doc = emptyDoc();
+  try {
+    const data = JSON.parse(content);
+    if (data.sections) {
+      for (const s of data.sections) {
+        const sec = doc.sections.find((x) => x.key === s.key);
+        if (sec) sec.blocks = (s.blocks || []).map((b) => ({ ...newBlock(b.text, !!b.checked) }));
+      }
+    } else if (data.notes) {
+      const map = { angle: 'angle', title: 'title', question: 'question', checklist: 'checklist', source: 'source', keyword: 'free', free: 'free' };
+      for (const n of data.notes) {
+        const sec = doc.sections.find((x) => x.key === (map[n.type] || 'free'));
+        sec.blocks.push(newBlock(String(n.text || '').replace(/^☐\s*/, '')));
+      }
+    } else {
+      state.doc = doc;
+      planIntoDoc(data);
+      return state.doc;
+    }
+  } catch { /* 빈 문서 유지 */ }
+  return doc;
 }
 
 async function renderBrainstormStage(el) {
   el.innerHTML = `
-    <h1>브레인스토밍 보드</h1>
-    <p class="sub">노션처럼 노트를 자유롭게 배치하세요 — <b>드래그</b>로 이동, <b>더블클릭</b>으로 편집, ✕로 삭제. AI 기획안은 유형별 색 노트로 보드에 뿌려집니다.</p>
-    <div class="toolrow">
-      <button id="bsGenBtn" class="btn primary">AI 기획안 → 보드에 뿌리기</button>
-      <button id="bsAddBtn" class="btn">+ 빈 노트</button>
-      <select id="bsAddType" class="btn small" style="padding:6px 8px">
-        ${Object.entries(NOTE_TYPES).map(([k, v]) => `<option value="${k}" ${k === 'free' ? 'selected' : ''}>${v}</option>`).join('')}
-      </select>
-      <button id="bsSaveBtn" class="btn">보드 저장</button>
+    <div class="toolrow" style="margin-top:0">
+      <button id="bsGenBtn" class="btn primary">${ic('spark')} AI 기획안 생성</button>
+      <button id="bsSaveBtn" class="btn">${ic('save')} 저장</button>
     </div>
     <div id="bsNotes"></div>
-    <div id="board" class="board"><div class="board-inner" id="boardInner"></div></div>
-    <p class="board-hint">💡 취재 질문(보라) 노트는 단계 2 이메일 질문지로, 필요 자료(회색) 노트는 단계 3 AI 추천의 맥락으로 자동 연결됩니다.</p>
+    <div class="doc" id="doc"></div>
+    <p class="doc-hint">Enter = 아래에 새 블록 · 빈 블록에서 Backspace = 삭제 · ⋮⋮ 드래그 = 순서/섹션 이동 · 취재 질문은 단계 2 질문지로, 체크리스트는 단계 3 AI 추천 맥락으로 연결됩니다.</p>
   `;
 
-  // 저장된 보드 불러오기 (구버전 plan JSON도 노트로 변환)
   const prev = await api.outputLatest(state.projectId, 'brainstorm');
-  if (prev) {
-    try {
-      const data = JSON.parse(prev.content);
-      state.board = data.notes || planToNotes(data, state.project?.keywords || []);
-    } catch { state.board = []; }
-  } else if (!state.board.length) {
-    state.board = (state.project?.keywords || []).map((k, i) => newNote('keyword', k, 16 + i * 150, 8));
-  }
-  renderBoard();
+  state.doc = prev ? loadDocFrom(prev.content) : emptyDoc();
+  renderDoc();
 
   $('#bsGenBtn').onclick = async () => {
     const btn = $('#bsGenBtn');
-    btn.disabled = true; btn.textContent = '생성 중…';
+    setBusy(btn, true);
     try {
       const { plan, recordId, duplicates } = await api.aiBrainstorm(state.projectId);
       state.currentRecordId = recordId;
       state.rating = 0; state.tags = new Set();
-      // 기존 노트(직접 쓴 메모)는 지우지 않고, AI 노트를 아래쪽에 추가
-      const baseY = state.board.length ? Math.max(...state.board.map((n) => n.y)) + 130 : 0;
-      const fresh = planToNotes(plan, prev || state.board.length ? [] : state.project?.keywords || []);
-      fresh.forEach((n) => { n.y += baseY; });
-      state.board.push(...fresh);
-      renderBoard();
+      planIntoDoc(plan); // 기존 블록 보존, AI 블록은 각 섹션 뒤에 추가
+      renderDoc();
       renderFeedback();
       if (duplicates?.length) {
         note('#bsNotes', 'warn', `과거 기사 중복 가능성 ${duplicates.length}건`,
@@ -407,96 +466,187 @@ async function renderBrainstormStage(el) {
         note('#bsNotes', 'ok', '중복 검사', n > 0 ? `아카이브 ${n}건과 겹치는 기사 없음` : '아카이브가 비어 있습니다 — scripts/import-archive.mjs로 과거 기사를 임포트하면 중복 검사가 활성화됩니다.');
       }
     } catch (e) { note('#bsNotes', 'alert', 'AI 오류', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = 'AI 기획안 → 보드에 뿌리기'; }
-  };
-
-  $('#bsAddBtn').onclick = () => {
-    const type = $('#bsAddType').value;
-    state.board.push(newNote(type, '', 40 + Math.random() * 200, 40 + Math.random() * 160));
-    renderBoard();
-    // 새 노트는 바로 편집 모드로
-    const last = $('#boardInner').lastElementChild?.querySelector('.nc-text');
-    if (last) startEdit(last);
+    finally { setBusy(btn, false); }
   };
 
   $('#bsSaveBtn').onclick = async () => {
-    const content = JSON.stringify(boardPayload(), null, 2);
+    const content = JSON.stringify(docPayload(), null, 2);
     await api.outputSave({ projectId: state.projectId, stage: 'brainstorm', content });
     if (state.currentRecordId) await api.recordFinalize(state.currentRecordId, content);
-    setSave('보드 저장됨 — 취재 질문이 단계 2 이메일에 자동 첨부됩니다', true);
+    setSave('기획 문서 저장됨', true);
   };
 }
 
-function renderBoard() {
-  const inner = $('#boardInner');
-  if (!inner) return;
-  inner.innerHTML = '';
-  for (const n of state.board) {
-    const card = document.createElement('div');
-    card.className = `note-card t-${n.type}`;
-    card.style.left = n.x + 'px';
-    card.style.top = n.y + 'px';
-    card.dataset.id = n.id;
-    card.innerHTML = `<span class="nc-type">${NOTE_TYPES[n.type] || '메모'}</span><button class="nc-del" title="삭제">✕</button><div class="nc-text"></div>`;
-    card.querySelector('.nc-text').textContent = n.text;
-    card.querySelector('.nc-del').onclick = (e) => {
-      e.stopPropagation();
-      state.board = state.board.filter((x) => x.id !== n.id);
-      renderBoard();
-    };
-    card.ondblclick = () => startEdit(card.querySelector('.nc-text'));
-    attachDrag(card, n);
-    inner.appendChild(card);
+let dragCtx = null; // { fromSec, id }
+
+function renderDoc(focusId = null) {
+  const doc = $('#doc');
+  if (!doc) return;
+  doc.innerHTML = '';
+
+  const title = document.createElement('div');
+  title.className = 'doc-title';
+  title.textContent = state.project?.title || '기획 문서';
+  doc.appendChild(title);
+
+  const kws = document.createElement('div');
+  kws.className = 'doc-kws';
+  for (const k of state.project?.keywords || []) {
+    const chip = document.createElement('span');
+    chip.textContent = '# ' + k;
+    kws.appendChild(chip);
   }
-  // 보드 높이 = 노트 최하단 + 여백
-  const maxY = Math.max(620, ...state.board.map((x) => x.y + 160));
-  inner.style.minHeight = maxY + 'px';
+  doc.appendChild(kws);
+
+  const meta = document.createElement('div');
+  meta.className = 'doc-meta';
+  const total = state.doc.sections.reduce((s, x) => s + x.blocks.length, 0);
+  meta.textContent = `기획 문서 · 블록 ${total}개`;
+  doc.appendChild(meta);
+
+  for (const def of SEC_DEFS) {
+    const sec = docSection(def.key);
+    const secEl = document.createElement('div');
+    secEl.className = 'sec';
+    secEl.dataset.sec = def.key;
+
+    const h = document.createElement('div');
+    h.className = 'sec-h';
+    h.innerHTML = `<span class="sec-dot"></span><span class="sec-name"></span><span class="sec-count"></span>`;
+    h.querySelector('.sec-dot').style.background = def.dot;
+    h.querySelector('.sec-name').textContent = def.name;
+    h.querySelector('.sec-count').textContent = sec.blocks.length || '';
+    secEl.appendChild(h);
+
+    sec.blocks.forEach((b, idx) => secEl.appendChild(buildBlock(def, sec, b, idx)));
+
+    const add = document.createElement('button');
+    add.className = 'blk-add';
+    add.textContent = '＋ 추가';
+    add.onclick = () => {
+      const nb = newBlock('');
+      sec.blocks.push(nb);
+      renderDoc(nb.id);
+    };
+    // 섹션 끝으로 드롭 허용
+    add.ondragover = (e) => { e.preventDefault(); };
+    add.ondrop = (e) => { e.preventDefault(); dropBlock(def.key, null); };
+    secEl.appendChild(add);
+
+    doc.appendChild(secEl);
+  }
+
+  if (focusId) focusBlock(focusId);
 }
 
-function startEdit(textEl) {
-  textEl.setAttribute('contenteditable', 'true');
-  textEl.focus();
-  const card = textEl.closest('.note-card');
-  const id = card.dataset.id;
-  textEl.onblur = () => {
-    textEl.removeAttribute('contenteditable');
-    const n = state.board.find((x) => x.id === id);
-    if (n) n.text = textEl.textContent;
+function buildBlock(def, sec, b, idx) {
+  const row = document.createElement('div');
+  row.className = 'blk' + (b.checked ? ' checked' : '');
+  row.dataset.id = b.id;
+
+  const handle = document.createElement('span');
+  handle.className = 'blk-handle';
+  handle.textContent = '⋮⋮';
+  handle.draggable = true;
+  handle.ondragstart = (e) => {
+    dragCtx = { fromSec: sec.key, id: b.id };
+    e.dataTransfer.effectAllowed = 'move';
   };
+  row.appendChild(handle);
+
+  const marker = document.createElement('span');
+  marker.className = 'blk-marker';
+  if (def.marker === 'check') {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = b.checked;
+    cb.onchange = () => { b.checked = cb.checked; row.classList.toggle('checked', b.checked); };
+    marker.appendChild(cb);
+  } else if (def.marker === 'n') {
+    marker.textContent = (idx + 1) + '.';
+  } else {
+    marker.textContent = def.marker;
+  }
+  row.appendChild(marker);
+
+  const text = document.createElement('div');
+  text.className = 'blk-text';
+  text.contentEditable = 'true';
+  text.dataset.ph = def.ph;
+  text.textContent = b.text;
+  text.oninput = () => { b.text = text.textContent; };
+  text.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const nb = newBlock('');
+      sec.blocks.splice(sec.blocks.indexOf(b) + 1, 0, nb);
+      renderDoc(nb.id);
+    } else if (e.key === 'Backspace' && !text.textContent) {
+      e.preventDefault();
+      const i = sec.blocks.indexOf(b);
+      sec.blocks.splice(i, 1);
+      const prevBlk = sec.blocks[i - 1] || sec.blocks[i];
+      renderDoc(prevBlk?.id || null);
+    }
+  };
+  row.appendChild(text);
+
+  const del = document.createElement('button');
+  del.className = 'blk-del';
+  del.textContent = '✕';
+  del.title = '블록 삭제';
+  del.onclick = () => {
+    sec.blocks.splice(sec.blocks.indexOf(b), 1);
+    renderDoc();
+  };
+  row.appendChild(del);
+
+  // 블록 위로 드롭 → 그 앞에 삽입
+  row.ondragover = (e) => { e.preventDefault(); row.classList.add('drag-over'); };
+  row.ondragleave = () => row.classList.remove('drag-over');
+  row.ondrop = (e) => { e.preventDefault(); row.classList.remove('drag-over'); dropBlock(sec.key, b.id); };
+
+  return row;
 }
 
-function attachDrag(card, noteObj) {
-  card.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.nc-del')) return;
-    if (card.querySelector('.nc-text[contenteditable="true"]')) return; // 편집 중엔 드래그 금지
-    e.preventDefault();
-    card.setPointerCapture(e.pointerId);
-    card.classList.add('dragging');
-    const startX = e.clientX, startY = e.clientY;
-    const origX = noteObj.x, origY = noteObj.y;
-    const onMove = (ev) => {
-      noteObj.x = Math.max(0, origX + ev.clientX - startX);
-      noteObj.y = Math.max(0, origY + ev.clientY - startY);
-      card.style.left = noteObj.x + 'px';
-      card.style.top = noteObj.y + 'px';
-    };
-    const onUp = () => {
-      card.classList.remove('dragging');
-      card.removeEventListener('pointermove', onMove);
-      card.removeEventListener('pointerup', onUp);
-    };
-    card.addEventListener('pointermove', onMove);
-    card.addEventListener('pointerup', onUp);
-  });
+function dropBlock(toSecKey, beforeId) {
+  if (!dragCtx) return;
+  const from = docSection(dragCtx.fromSec);
+  const i = from.blocks.findIndex((x) => x.id === dragCtx.id);
+  if (i < 0) { dragCtx = null; return; }
+  const [moved] = from.blocks.splice(i, 1);
+  const to = docSection(toSecKey);
+  if (beforeId && beforeId !== moved.id) {
+    const j = to.blocks.findIndex((x) => x.id === beforeId);
+    to.blocks.splice(j < 0 ? to.blocks.length : j, 0, moved);
+  } else if (!beforeId) {
+    to.blocks.push(moved);
+  } else {
+    from.blocks.splice(i, 0, moved); // 자기 자신 위 드롭 → 원위치
+  }
+  dragCtx = null;
+  renderDoc(moved.id);
+}
+
+function focusBlock(id) {
+  const el = document.querySelector(`.blk[data-id="${id}"] .blk-text`);
+  if (!el) return;
+  el.focus();
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
 }
 
 // ---------- 단계 2: 취재 이메일 ----------
 async function renderEmailStage(el) {
   el.innerHTML = `
     <h1>취재 이메일 작성 <span class="hint" style="font-size:12px; vertical-align:middle; background:var(--bg); padding:3px 10px; border-radius:99px">선택 단계</span></h1>
-    <p class="sub">외부 취재가 필요할 때만 진행하는 단계입니다. 이미 자료가 충분하거나 대면·전화 취재로 대체한다면 건너뛰어도 됩니다.<br>DNA 공식 형식(제목 [디지스트신문 DNA] + 용건, 직함→이름 자기소개, 서명)이 자동 적용되고 규칙 검사기가 확인합니다. 단계 1의 취재 질문이 질문지로 자동 첨부됩니다.</p>
+    <p class="sub">외부 취재가 필요할 때만 — DNA 공식 형식이 자동 적용되고, 단계 1의 질문이 질문지로 첨부됩니다.</p>
     <div class="toolrow">
-      <button id="emSkipBtn" class="btn ghost">이 단계 건너뛰기 → 자료 수집</button>
+      <button id="emSkipBtn" class="btn ghost">${ic('skip')} 건너뛰고 자료 수집으로</button>
     </div>
     <div class="cardplan">
       <div class="card-item">
@@ -506,9 +656,9 @@ async function renderEmailStage(el) {
       </div>
     </div>
     <div class="toolrow">
-      <button id="emGenBtn" class="btn primary">AI 이메일 생성</button>
+      <button id="emGenBtn" class="btn primary">${ic('spark')} AI 이메일 생성</button>
       <button id="emCheckBtn" class="btn">형식 검사</button>
-      <button id="emSaveBtn" class="btn">최종본 저장</button>
+      <button id="emSaveBtn" class="btn">${ic('save')} 최종본 저장</button>
     </div>
     <div id="emNotes"></div>
     <input id="emSubject" style="width:100%; font-family:inherit; font-size:15px; font-weight:700; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px" placeholder="제목">
@@ -527,7 +677,7 @@ async function renderEmailStage(el) {
   $('#emGenBtn').onclick = async () => {
     state.skippedStages.delete('email');
     const btn = $('#emGenBtn');
-    btn.disabled = true; btn.textContent = '생성 중…';
+    setBusy(btn, true);
     try {
       const { email, recordId, questions } = await api.aiEmail(state.projectId, {
         recipient: $('#emRecipient').value || '담당자',
@@ -542,7 +692,7 @@ async function renderEmailStage(el) {
       if (questions?.length) note('#emNotes', 'ai', '질문지 자동 첨부', `단계 1의 취재 질문 ${questions.length}개가 본문에 포함되었습니다.`);
       runEmailCheck();
     } catch (e) { note('#emNotes', 'alert', 'AI 오류', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = 'AI 이메일 생성'; }
+    finally { setBusy(btn, false); }
   };
   $('#emCheckBtn').onclick = runEmailCheck;
   $('#emSaveBtn').onclick = async () => {
@@ -563,11 +713,11 @@ async function renderEmailStage(el) {
 async function renderCollectStage(el) {
   el.innerHTML = `
     <h1>관련 자료 수집</h1>
-    <p class="sub">URL은 본문·메타데이터가 자동 추출되고, 파일(docx/pdf/txt)은 텍스트가 추출되어 프로젝트에 저장됩니다. 모든 자료는 출처가 필수입니다.</p>
+    <p class="sub">URL·파일(docx/pdf/txt)에서 본문을 자동 추출합니다 — 출처는 필수.</p>
     <div class="cardplan">
       <div class="card-item" style="border-color:#CBD9F2; background:var(--navy-soft)">
         <h4>🔎 AI 추천 자료 <span class="hint">키워드·기획안·이미 모은 자료를 보고 "더 찾아야 할 것"을 제안합니다</span></h4>
-        <button id="colSuggestBtn" class="btn primary" style="margin-top:6px">추천 받기</button>
+        <button id="colSuggestBtn" class="btn primary" style="margin-top:6px">${ic('search')} 추천 받기</button>
         <div id="colSuggestions" style="margin-top:10px"></div>
       </div>
       <div class="card-item">
@@ -590,7 +740,7 @@ async function renderCollectStage(el) {
   `;
   $('#colSuggestBtn').onclick = async () => {
     const btn = $('#colSuggestBtn');
-    btn.disabled = true; btn.textContent = '분석 중…';
+    setBusy(btn, true);
     try {
       const { suggestions, recordId } = await api.aiSuggestMaterials(state.projectId);
       state.currentRecordId = recordId;
@@ -630,13 +780,13 @@ async function renderCollectStage(el) {
         box.appendChild(d);
       }
     } catch (e) { note('#colNotes', 'alert', 'AI 추천 실패', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = '추천 받기'; }
+    finally { setBusy(btn, false); }
   };
   $('#colUrlBtn').onclick = async () => {
     const url = $('#colUrl').value.trim();
     if (!url) return;
     const btn = $('#colUrlBtn');
-    btn.disabled = true; btn.textContent = '추출 중…';
+    setBusy(btn, true);
     try {
       const art = await api.extractUrl(url);
       await api.materialAdd({
@@ -650,7 +800,7 @@ async function renderCollectStage(el) {
       $('#colUrl').value = '';
       renderMaterials();
     } catch (e) { note('#colNotes', 'alert', 'URL 추출 실패', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = '추출 후 저장'; }
+    finally { setBusy(btn, false); }
   };
   $('#colFileBtn').onclick = async () => {
     const f = $('#colFile').files[0];
@@ -671,10 +821,10 @@ async function renderCollectStage(el) {
 async function renderAnalyzeStage(el) {
   el.innerHTML = `
     <h1>자료 분석 및 제언</h1>
-    <p class="sub">수집 자료를 종합해 타임라인·상충 주장·팩트체크 리스트·부족한 것 제언을 만듭니다.</p>
+    <p class="sub">타임라인 · 상충 주장 · 팩트체크 · 부족한 것 제언</p>
     <div class="toolrow">
-      <button id="anGenBtn" class="btn primary">AI 분석 실행</button>
-      <button id="anSaveBtn" class="btn" disabled>리포트 저장</button>
+      <button id="anGenBtn" class="btn primary">${ic('spark')} AI 분석 실행</button>
+      <button id="anSaveBtn" class="btn" disabled>${ic('save')} 리포트 저장</button>
     </div>
     <div id="anNotes"></div>
     <div id="anResult" class="cardplan"></div>
@@ -685,7 +835,7 @@ async function renderAnalyzeStage(el) {
   let current = null;
   $('#anGenBtn').onclick = async () => {
     const btn = $('#anGenBtn');
-    btn.disabled = true; btn.textContent = '분석 중…';
+    setBusy(btn, true);
     try {
       const { report, recordId } = await api.aiAnalyze(state.projectId);
       current = report;
@@ -695,7 +845,7 @@ async function renderAnalyzeStage(el) {
       renderFeedback();
       $('#anSaveBtn').disabled = false;
     } catch (e) { note('#anNotes', 'alert', '분석 오류', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = 'AI 분석 실행'; }
+    finally { setBusy(btn, false); }
   };
   $('#anSaveBtn').onclick = async () => {
     if (!current) return;
@@ -770,14 +920,14 @@ function esc(s) {
 async function renderDraftStage(el) {
   el.innerHTML = `
     <h1>기사 초안</h1>
-    <p class="sub">수집 자료를 근거로 초안을 생성하고, 인용 검증 후 수정해 저장하세요. 저장 시 (AI 초안 ↔ 최종본) 쌍이 학습 데이터로 축적됩니다.</p>
+    <p class="sub">자료 근거 초안 → 인용 검증 → 수정·저장 (저장하면 학습 데이터로 축적)</p>
     <div class="toolrow">
-      <button id="genBtn" class="btn primary">AI 초안 생성</button>
+      <button id="genBtn" class="btn primary">${ic('spark')} AI 초안 생성</button>
       <button id="checkBtn" class="btn">인용·따옴표 검사</button>
-      <button id="previewBtn" class="btn">📄 미리보기</button>
+      <button id="previewBtn" class="btn">${ic('eye')} 미리보기</button>
       <button id="spellBtn" class="btn">맞춤법 (바른한글 열기)</button>
-      <button id="saveDraftBtn" class="btn">최종본 저장</button>
-      <button id="docxBtn" class="btn">⬇ docx 내보내기</button>
+      <button id="saveDraftBtn" class="btn">${ic('save')} 최종본 저장</button>
+      <button id="docxBtn" class="btn">${ic('download')} docx</button>
     </div>
     <div id="draftNotes"></div>
     <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
@@ -788,7 +938,7 @@ async function renderDraftStage(el) {
 
   $('#genBtn').onclick = async () => {
     const btn = $('#genBtn');
-    btn.disabled = true; btn.textContent = '생성 중…'; setSave('AI 초안 생성 중');
+    setBusy(btn, true);
     try {
       const { text, recordId } = await api.aiDraft(state.projectId);
       $('#draftEditor').value = text;
@@ -800,7 +950,7 @@ async function renderDraftStage(el) {
     } catch (e) {
       note('#draftNotes', 'alert', 'AI 오류', e.message || String(e));
       setSave('오류');
-    } finally { btn.disabled = false; btn.textContent = 'AI 초안 생성'; }
+    } finally { setBusy(btn, false); }
   };
   $('#checkBtn').onclick = runCheck;
   $('#spellBtn').onclick = () => window.open('https://바른한글.kr', '_blank');
@@ -813,11 +963,11 @@ async function renderDraftStage(el) {
       const res = await api.validateQuotes(ta.value, state.projectId);
       pv.innerHTML = buildDraftPreviewHtml(ta.value, res.quotes || []);
       pv.hidden = false; ta.hidden = true;
-      $('#previewBtn').textContent = '✏ 편집으로';
+      $('#previewBtn').innerHTML = `${ic('pen')} 편집으로`;
       renderValidation(res);
     } else {
       pv.hidden = true; ta.hidden = false;
-      $('#previewBtn').textContent = '📄 미리보기';
+      $('#previewBtn').innerHTML = `${ic('eye')} 미리보기`;
     }
   };
 
@@ -850,10 +1000,10 @@ async function renderDraftStage(el) {
 async function renderCardnewsStage(el) {
   el.innerHTML = `
     <h1>카드뉴스 제작</h1>
-    <p class="sub">기사 초안 → 구성안(커버/카드/마무리) → 공식 2025 템플릿 pptx 생성. 폰트·색·레이아웃은 절대 변경되지 않습니다.</p>
+    <p class="sub">초안 → 구성안 → 공식 템플릿 pptx (폰트·색·레이아웃 불변)</p>
     <div class="toolrow">
-      <button id="planBtn" class="btn primary">AI 구성안 생성</button>
-      <button id="pptxBtn" class="btn" disabled>pptx 생성</button>
+      <button id="planBtn" class="btn primary">${ic('spark')} AI 구성안 생성</button>
+      <button id="pptxBtn" class="btn" disabled>${ic('download')} pptx 생성</button>
     </div>
     <div id="cnNotes"></div>
     <div id="planArea" class="cardplan"></div>
@@ -864,7 +1014,7 @@ async function renderCardnewsStage(el) {
       return note('#cnNotes', 'alert', '초안 없음', '먼저 단계 5에서 기사 초안을 저장하세요.');
     }
     const btn = $('#planBtn');
-    btn.disabled = true; btn.textContent = '생성 중…';
+    setBusy(btn, true);
     try {
       const { plan, recordId } = await api.aiCardplan(state.projectId, draft.content);
       state.cardPlan = plan;
@@ -878,7 +1028,7 @@ async function renderCardnewsStage(el) {
       if (v.errors?.length) note('#cnNotes', 'alert', '규격 위반', v.errors.join('\n'));
     } catch (e) {
       note('#cnNotes', 'alert', 'AI 오류', e.message || String(e));
-    } finally { btn.disabled = false; btn.textContent = 'AI 구성안 생성'; }
+    } finally { setBusy(btn, false); }
   };
   $('#pptxBtn').onclick = async () => {
     collectPlanFromEditor();
@@ -1088,5 +1238,9 @@ function renderAll() {
   applySideVisibility();
 }
 
+// 헤더 아이콘
+$('#dashBtn').innerHTML = `${ic('gauge')} 지표`;
+$('#settingsBtn').innerHTML = `${ic('gear')} 설정`;
+$('#newProjectBtn').innerHTML = `${ic('plus')} 새 프로젝트`;
 if (api._demo) setSave('브라우저 데모 모드 (Electron 아님)');
 refreshProjects();
