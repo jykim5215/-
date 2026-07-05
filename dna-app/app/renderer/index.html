@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNA 편집 스튜디오</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="logo"><span class="badge">DNA</span> 편집 스튜디오</div>
+    <select id="projectSelect" class="proj-select"></select>
+    <button id="newProjectBtn" class="btn small">+ 새 프로젝트</button>
+    <span id="saveState" class="save">대기</span>
+    <button id="settingsBtn" class="btn small ghost">⚙ 설정</button>
+  </header>
+
+  <nav class="stepper" id="stepper"></nav>
+
+  <div class="frame">
+    <main class="panel work" id="workArea"></main>
+
+    <aside class="side">
+      <section class="panel box">
+        <h3>수집 자료 <span id="matCount"></span></h3>
+        <div id="materialList"></div>
+        <details class="add-mat">
+          <summary>+ 자료 추가</summary>
+          <input id="matTitle" placeholder="제목">
+          <select id="matKind">
+            <option value="transcript">인터뷰 녹취</option>
+            <option value="url">URL 기사</option>
+            <option value="file">문서</option>
+            <option value="note">메모</option>
+          </select>
+          <textarea id="matContent" placeholder="본문/녹취 텍스트"></textarea>
+          <input id="matSource" placeholder="출처 (필수 — 없으면 저장 불가)">
+          <button id="matAddBtn" class="btn">자료 저장</button>
+        </details>
+        <div class="law">📌 저작권법 제28조 — 인용은 주(主)·종(從) 관계를 지키고 출처를 반드시 표시합니다. 출처 없는 자료는 저장할 수 없습니다.</div>
+      </section>
+
+      <section class="panel box" id="validatorBox" hidden>
+        <h3>자동 검사</h3>
+        <div id="validatorResults"></div>
+      </section>
+
+      <section class="panel box" id="feedbackBox" hidden>
+        <h3>이 결과 평가 <span class="hint">(학습 데이터로 축적)</span></h3>
+        <div class="stars" id="stars"></div>
+        <div class="tags" id="fbTags"></div>
+        <button id="fbSaveBtn" class="btn small">평가 저장</button>
+      </section>
+    </aside>
+  </div>
+
+  <dialog id="settingsDlg">
+    <h2>설정</h2>
+    <label>기자 이름 <input id="setName" placeholder="홍길동"></label>
+    <label>직함 <input id="setTitle" placeholder="기자"></label>
+    <label>Claude API 키 <input id="setApiKey" type="password" placeholder="sk-ant-…"></label>
+    <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
+    <div class="row">
+      <button id="setSaveBtn" class="btn">저장</button>
+      <button id="setCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
