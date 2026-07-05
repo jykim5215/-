@@ -79,6 +79,7 @@ function makeMockAPI() {
       ] } };
     },
     async cardnewsGenerate() { return { outPath: '(데모 모드 — Electron에서만 생성됩니다)', warnings: [], slideCount: 4 }; },
+    async draftExportDocx() { return { outPath: '(데모 모드 — Electron 앱에서 docx가 프로젝트 폴더에 저장됩니다)' }; },
     async showFile() {},
     async validateEmail(d) {
       const issues = [];
@@ -614,6 +615,41 @@ async function renderAnalyzeStage(el) {
   }
 }
 
+// 초안 텍스트 → 미리보기 HTML (첫 줄=제목, ---확인 필요--- 섹션, 인용 하이라이트)
+function buildDraftPreviewHtml(text, quoteResults) {
+  const lines = String(text).replace(/\r\n/g, '\n').trim().split('\n');
+  const title = lines.shift() || '';
+  const rest = lines.join('\n').trim();
+  const [bodyPart, todoPart] = rest.split(/-{2,}\s*확인 필요\s*-{2,}/);
+
+  const statusByQuote = new Map();
+  for (const q of quoteResults) {
+    if (q.verdict) statusByQuote.set(q.text, q.verdict.status);
+  }
+  const highlight = (escapedPara, rawPara) => {
+    let out = escapedPara;
+    for (const [qText, status] of statusByQuote) {
+      if (!rawPara.includes(qText)) continue;
+      for (const [open, close] of [['“', '”'], ['"', '"']]) {
+        const target = esc(open + qText + close);
+        if (out.includes(target)) {
+          out = out.split(target).join(`<span class="q-${status}" title="인용 검증: ${status}">${target}</span>`);
+        }
+      }
+    }
+    return out;
+  };
+
+  const paras = (bodyPart || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const todos = (todoPart || '').split('\n').map((t) => t.replace(/^[-•]\s*/, '').trim()).filter(Boolean);
+  return [
+    `<h2>${esc(title)}</h2>`,
+    `<div class="byline">디지스트신문 DNA · 초안 미리보기 <span class="hint">(docx 내보내기와 동일 구성 · <span class="q-exact">초록=검증됨</span> <span class="q-fuzzy">노랑=원문과 다름</span> <span class="q-missing">빨강=근거 없음</span>)</span></div>`,
+    ...paras.map((p) => `<p>${highlight(esc(p), p)}</p>`),
+    todos.length ? `<div class="todo">※ 확인 필요<br>${todos.map((t) => '· ' + esc(t)).join('<br>')}</div>` : '',
+  ].join('');
+}
+
 // HTML 이스케이프 (AI/사용자 텍스트를 innerHTML 조각에 넣을 때 필수)
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -626,11 +662,14 @@ async function renderDraftStage(el) {
     <div class="toolrow">
       <button id="genBtn" class="btn primary">AI 초안 생성</button>
       <button id="checkBtn" class="btn">인용·따옴표 검사</button>
+      <button id="previewBtn" class="btn">📄 미리보기</button>
       <button id="spellBtn" class="btn">맞춤법 (바른한글 열기)</button>
       <button id="saveDraftBtn" class="btn">최종본 저장</button>
+      <button id="docxBtn" class="btn">⬇ docx 내보내기</button>
     </div>
     <div id="draftNotes"></div>
-    <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요."></textarea>
+    <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
+    <div id="draftPreview" class="draft-preview" hidden></div>
   `;
   const prev = await api.outputLatest(state.projectId, 'draft');
   if (prev) $('#draftEditor').value = prev.content;
@@ -653,6 +692,33 @@ async function renderDraftStage(el) {
   };
   $('#checkBtn').onclick = runCheck;
   $('#spellBtn').onclick = () => window.open('https://바른한글.kr', '_blank');
+
+  // 미리보기 ↔ 편집 토글 (직접인용은 검증 결과 색으로 하이라이트)
+  $('#previewBtn').onclick = async () => {
+    const ta = $('#draftEditor');
+    const pv = $('#draftPreview');
+    if (pv.hidden) {
+      const res = await api.validateQuotes(ta.value, state.projectId);
+      pv.innerHTML = buildDraftPreviewHtml(ta.value, res.quotes || []);
+      pv.hidden = false; ta.hidden = true;
+      $('#previewBtn').textContent = '✏ 편집으로';
+      renderValidation(res);
+    } else {
+      pv.hidden = true; ta.hidden = false;
+      $('#previewBtn').textContent = '📄 미리보기';
+    }
+  };
+
+  // docx 내보내기
+  $('#docxBtn').onclick = async () => {
+    const text = $('#draftEditor').value;
+    if (!text.trim()) return note('#draftNotes', 'alert', '내용 없음', '내보낼 초안이 없습니다.');
+    try {
+      const { outPath } = await api.draftExportDocx(state.projectId, text);
+      note('#draftNotes', 'ok', 'docx 저장됨', outPath);
+      if (api.showFile && !api._demo) api.showFile(outPath);
+    } catch (e) { note('#draftNotes', 'alert', 'docx 실패', e.message || String(e)); }
+  };
   $('#saveDraftBtn').onclick = async () => {
     const text = $('#draftEditor').value;
     await api.outputSave({ projectId: state.projectId, stage: 'draft', content: text });
@@ -719,33 +785,89 @@ async function renderCardnewsStage(el) {
   function renderPlanEditor(plan) {
     const area = $('#planArea');
     area.innerHTML = '';
+    const noteEl = document.createElement('p');
+    noteEl.className = 'prev-note';
+    noteEl.textContent = '오른쪽 미리보기는 근사치입니다 — 실제 폰트(나눔스퀘어_ac·Pretendard)·정렬은 생성된 pptx에서 확인하세요. 입력하면 즉시 반영됩니다.';
+    area.appendChild(noteEl);
+
+    // 커버: 편집 폼 + 실시간 미리보기
     const cover = document.createElement('div');
-    cover.className = 'card-item';
-    cover.innerHTML = `<h4>커버</h4>
-      <input id="cpTitle" placeholder="커버 제목 (최대 2줄, \\n로 줄 구분)">
-      <input id="cpCategory" placeholder="카테고리 (대괄호 금지)">`;
+    cover.className = 'card-item cn-grid';
+    cover.innerHTML = `
+      <div><h4>커버</h4>
+        <textarea id="cpTitle" rows="2" placeholder="커버 제목 (최대 2줄 — 줄바꿈으로 구분)"></textarea>
+        <input id="cpCategory" placeholder="카테고리 (대괄호 금지)">
+      </div>
+      <div class="cn-prev cover" id="prevCover">
+        <span class="photo-hint">📷 사진 영역</span>
+        <span class="cat"></span><span class="ttl"></span>
+      </div>`;
     area.appendChild(cover);
     $('#cpTitle').value = plan.coverTitle || '';
     $('#cpCategory').value = plan.category || '';
+
     (plan.cards || []).forEach((c, i) => {
       const d = document.createElement('div');
-      d.className = 'card-item';
-      d.innerHTML = `<h4>카드 ${i + 1}</h4>
-        <input class="cTitle" placeholder="카드 제목">
-        <textarea class="cBody" placeholder="카드 본문"></textarea>
-        <input class="cCredit" placeholder="사진 출처 (퍼온 사진만, 예: 대한민국 국회)">`;
+      d.className = 'card-item cn-grid cn-card';
+      d.innerHTML = `
+        <div><h4>카드 ${i + 1}</h4>
+          <input class="cTitle" placeholder="카드 제목">
+          <textarea class="cBody" rows="5" placeholder="카드 본문 (최대 380자 권장)"></textarea>
+          <input class="cCredit" placeholder="사진 출처 (퍼온 사진만, 예: 대한민국 국회)">
+        </div>
+        <div class="cn-prev body">
+          <span class="h"></span><span class="b"></span>
+          <span class="credit"></span><span class="logo">DGIST 로고</span>
+        </div>`;
       area.appendChild(d);
       d.querySelector('.cTitle').value = c.title || '';
       d.querySelector('.cBody').value = c.body || '';
       d.querySelector('.cCredit').value = c.photoCredit || '';
     });
+
+    // 마무리 장 (고정 양식 미리보기)
+    const last = document.createElement('div');
+    last.className = 'card-item cn-grid';
+    last.innerHTML = `
+      <div><h4>마무리 장</h4><p class="sub" style="margin:0">공식 양식 그대로 들어갑니다 (마스코트 + 링크).</p></div>
+      <div class="cn-prev last"><span class="mascot">DNA</span><span class="q">이 기사가 궁금하다면?</span><span class="u">https://dgistdna.com/</span></div>`;
+    area.appendChild(last);
+
+    area.addEventListener('input', updatePreviews);
+    updatePreviews();
   }
+
+  // 편집 폼 값 → 미리보기 즉시 반영 (분량 초과 경고 포함)
+  function updatePreviews() {
+    const pc = $('#prevCover');
+    if (pc) {
+      pc.querySelector('.cat').textContent = $('#cpCategory').value || '카테고리';
+      pc.querySelector('.ttl').textContent = $('#cpTitle').value || '커버 제목';
+    }
+    for (const d of document.querySelectorAll('#planArea .cn-card')) {
+      const body = d.querySelector('.cBody').value;
+      const prev = d.querySelector('.cn-prev');
+      prev.querySelector('.h').textContent = d.querySelector('.cTitle').value || '제목';
+      prev.querySelector('.b').textContent = body;
+      const credit = d.querySelector('.cCredit').value.trim();
+      prev.querySelector('.credit').textContent = credit ? `사진 = ${credit} 제공` : '';
+      const over = body.replace(/\s+/g, ' ').length > 380;
+      prev.classList.toggle('overflow-warn', over);
+      let chip = prev.querySelector('.cn-warn-chip');
+      if (over && !chip) {
+        chip = document.createElement('span');
+        chip.className = 'cn-warn-chip';
+        chip.textContent = '분량 초과 — 로고 침범 위험';
+        prev.appendChild(chip);
+      } else if (!over && chip) chip.remove();
+    }
+  }
+
   function collectPlanFromEditor() {
     if (!state.cardPlan) return;
     state.cardPlan.coverTitle = $('#cpTitle').value;
     state.cardPlan.category = $('#cpCategory').value;
-    const items = [...document.querySelectorAll('#planArea .card-item')].slice(1);
-    state.cardPlan.cards = items.map((d) => ({
+    state.cardPlan.cards = [...document.querySelectorAll('#planArea .cn-card')].map((d) => ({
       title: d.querySelector('.cTitle').value,
       body: d.querySelector('.cBody').value,
       photoCredit: d.querySelector('.cCredit').value || undefined,

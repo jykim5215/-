@@ -271,6 +271,20 @@ function registerIpc() {
     return { plan, recordId };
   });
 
+  // 단계 5: 기사 초안 docx 내보내기
+  h('draft:exportDocx', async (s, projectId, draftText) => {
+    const { buildDraftDocx } = require('./src/main/docx');
+    const name = getSetting(s, 'reporterName');
+    const title = getSetting(s, 'reporterTitle') || '기자';
+    const byline = name ? `디지스트신문 DNA ${title} ${name}` : '디지스트신문 DNA';
+    const buf = await buildDraftDocx(draftText, { byline });
+    const outDir = path.join(dataDir(), 'projects', projectId);
+    fs.mkdirSync(outDir, { recursive: true });
+    const outPath = path.join(outDir, `기사초안-${Date.now()}.docx`);
+    fs.writeFileSync(outPath, buf);
+    return { outPath };
+  });
+
   // 카드뉴스 pptx 생성
   h('cardnews:generate', async (s, projectId, plan) => {
     const buf = fs.readFileSync(TEMPLATE_PATH());

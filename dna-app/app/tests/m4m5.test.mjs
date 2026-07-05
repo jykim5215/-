@@ -94,6 +94,26 @@ test('아카이브 중복 검사', async () => {
   assert.equal(archive.searchArchive(store, ['존재하지않는키워드']).length, 0);
 });
 
+test('docx 생성기 — 초안 파싱 + OOXML 구조', async () => {
+  const { buildDraftDocx, parseDraft } = require('../src/main/docx');
+  const draft = '조정부, 학생단체 승격\n\n첫 문단이다.\n\n둘째 문단. “인용문”도 있다.\n\n---확인 필요---\n- 심의 일정\n- 예산 규모';
+  const p = parseDraft(draft);
+  assert.equal(p.title, '조정부, 학생단체 승격');
+  assert.equal(p.paragraphs.length, 2);
+  assert.deepEqual(p.todos, ['심의 일정', '예산 규모']);
+
+  const buf = await buildDraftDocx(draft, { byline: '디지스트신문 DNA 기자 홍길동' });
+  const zip = await JSZip.loadAsync(buf);
+  assert.ok(zip.file('word/document.xml') && zip.file('[Content_Types].xml') && zip.file('word/styles.xml'));
+  const doc = await zip.file('word/document.xml').async('string');
+  assert.ok(doc.includes('&#xC870;'), '한글 유니코드 이스케이프'); // '조'
+  assert.ok(doc.includes('w:pStyle w:val="Title"'));
+  assert.ok(doc.includes('w:pStyle w:val="Todo"'));
+  // XML 정합성
+  const { unescapeXmlText } = require('../src/pptx/escape');
+  assert.ok(unescapeXmlText(doc).includes('조정부, 학생단체 승격'));
+});
+
 test('pptx 스타일 diff — 템플릿 충실성 검증기', { skip: !hasTemplate }, async () => {
   const tbuf = fs.readFileSync(TEMPLATE);
   // 생성물은 템플릿의 부분집합이어야 함
