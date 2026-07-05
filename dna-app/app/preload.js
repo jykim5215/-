@@ -24,7 +24,17 @@ contextBridge.exposeInMainWorld('dnaAPI', {
 
   validateQuotes: invoke('validate:quotes'),
   validateCardplan: invoke('validate:cardplan'),
+  validateEmail: invoke('validate:email'),
 
+  extractUrl: invoke('extract:url'),
+  extractFile: invoke('extract:file'),
+  archiveSearch: invoke('archive:search'),
+  archiveCount: invoke('archive:count'),
+  backupRun: invoke('backup:run'),
+
+  aiBrainstorm: invoke('ai:brainstorm'),
+  aiEmail: invoke('ai:email'),
+  aiAnalyze: invoke('ai:analyze'),
   aiDraft: invoke('ai:draft'),
   aiCardplan: invoke('ai:cardplan'),
   cardnewsGenerate: invoke('cardnews:generate'),

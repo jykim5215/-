@@ -47,6 +47,17 @@ CREATE TABLE IF NOT EXISTS records (
   timestamp TEXT NOT NULL
 );
 
+-- 과거 DNA 기사 아카이브 (부트스트랩 임포트 대상) — 브레인스토밍 중복 검사에 사용
+CREATE TABLE IF NOT EXISTS archive (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  published_at TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'dgistdna.com',
+  imported_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''

@@ -12,8 +12,16 @@
 cd dna-app/app
 npm install        # 최초 1회 (Electron 포함)
 npm start          # 앱 실행
-npm test           # 테스트 (13개)
+npm run shortcut   # 바탕화면 바로가기 생성 (신문/펜/DNA 아이콘)
+npm test           # 테스트 (19개)
+npm run eval       # 골드셋 평가 + 회귀 검사 (하락 시 배포 차단)
 npm run dist       # 보안 스캔 + 배포 zip 생성 (dna-app/dist/)
+npm run installer  # electron-builder 설치본 (AppImage/NSIS/DMG)
+
+# 부트스트랩 임포트 (네트워크 되는 PC에서)
+node scripts/import-archive.mjs --db <userData>/dna-data/dna.sqlite            # dgistdna.com 기사
+node scripts/import-archive.mjs --db <...> --pptx 과거카드뉴스.pptx --match-title "기사제목"
+node scripts/export-dataset.mjs --db <...> --tag dataset-v0.1 --finetune       # 데이터셋 export
 ```
 
 - Claude API 키: 앱 내 ⚙설정에서 입력 → OS 키체인(safeStorage)으로 암호화 저장. 또는 `ANTHROPIC_API_KEY` 환경변수.
@@ -26,10 +34,13 @@ npm run dist       # 보안 스캔 + 배포 zip 생성 (dna-app/dist/)
 | 1. UI 스타일 시안 3종 → **시안 C(파이프라인 스튜디오) 선택됨** | ✅ |
 | 2. 프로젝트 구조 + 데이터 스키마 + 저장 계층 (학습 데이터 파이프라인 Layer 1) | ✅ |
 | 3. 단계 5(기사 초안) + 단계 6(카드뉴스 pptx 생성) | ✅ |
-| 4. 단계 1~4 | ⬜ |
-| 5. RAG 스타일 엔진 + 평가 하네스 | ⬜ (구조만: `rules/` vs `style_corpus/` 분리, 프롬프트 버전 관리) |
-| 6. 과거 자산 임포트 + 파인튜닝 트랙 스캐폴딩 | ⬜ (골드 스탠다드 1호 등록됨) |
-| 7. 패키징·바로가기·최종 보안 점검 | ⬜ (배포 zip 스크립트는 동작) |
+| 4. 단계 1~4 (브레인스토밍·이메일·수집·분석) | ✅ |
+| 5. RAG 스타일 엔진(BM25 few-shot) + 평가 하네스(검사기·judge·회귀 차단·대시보드) | ✅ |
+| 6. 과거 자산 임포트(WP REST/RSS·pptx 쌍) + 파인튜닝 트랙(LoRA 스캐폴드·발동 조건 강제) | ✅ |
+| 7. 아이콘·바로가기·electron-builder·배포 zip·보안 점검 | ✅ |
+
+남은 작업: 실사용 데이터 축적 후 골드셋 20~30케이스 확장, 임베딩 검색 업그레이드(BM25 → 벡터),
+아카이브 임포트 실행(네트워크 가능한 PC에서), Windows용 icon.ico 변환.
 
 ## 구조
 

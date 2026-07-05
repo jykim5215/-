@@ -9,7 +9,12 @@ const { Store } = require('./src/main/db');
 const projects = require('./src/main/projects');
 const records = require('./src/main/records');
 const claude = require('./src/main/claude');
+const archive = require('./src/main/archive');
+const extract = require('./src/main/extract');
+const styleEngine = require('./src/main/styleEngine');
+const JSZip = require('jszip');
 const quotes = require('./src/shared/validators/quotes');
+const emailCheck = require('./src/shared/validators/email');
 const quoteVerify = require('./src/shared/validators/quoteVerify');
 const { validateCardPlan } = require('./src/pptx/cardnewsRules');
 const { generateCardnews } = require('./src/pptx/cardnews');
@@ -17,8 +22,12 @@ const { generateCardnews } = require('./src/pptx/cardnews');
 let store = null;
 let win = null;
 
-const TEMPLATE_PATH = () =>
-  path.join(__dirname, '..', 'templates', '인스타그램_카드뉴스_2025개편.pptx');
+// 개발 실행: dna-app/templates/, 패키징(electron-builder) 실행: resources/templates/
+const TEMPLATE_PATH = () => {
+  const dev = path.join(__dirname, '..', 'templates', '인스타그램_카드뉴스_2025개편.pptx');
+  if (fs.existsSync(dev)) return dev;
+  return path.join(process.resourcesPath || '', 'templates', '인스타그램_카드뉴스_2025개편.pptx');
+};
 
 function dataDir() {
   return path.join(app.getPath('userData'), 'dna-data');
@@ -98,14 +107,116 @@ function registerIpc() {
   });
   h('validate:cardplan', (_s, plan) => validateCardPlan(plan));
 
+  // 단계 3: URL 추출 / 파일 텍스트 추출
+  h('extract:url', async (_s, url) => extract.fetchArticle(url));
+  h('extract:file', async (_s, name, arrayBuffer) =>
+    extract.extractFile(name, Buffer.from(arrayBuffer))
+  );
+
+  // 아카이브 중복 검사
+  h('archive:search', (s, keywords) => archive.searchArchive(s, keywords));
+  h('archive:count', (s) => archive.archiveCount(s));
+
+  // 이메일 형식 검사 (rule-based)
+  h('validate:email', async (s, data) =>
+    emailCheck.checkEmail({
+      ...data,
+      reporterName: getSetting(s, 'reporterName'),
+      reporterTitle: getSetting(s, 'reporterTitle'),
+    })
+  );
+
+  // 단계 1: 브레인스토밍 (+ 아카이브 중복 검사 결과 동봉)
+  h('ai:brainstorm', async (s, projectId) => {
+    const project = projects.getProject(s, projectId);
+    const { data, modelVersion } = await claude.brainstorm({
+      apiKey: getApiKey(s),
+      keywords: project.keywords,
+      context: project.title,
+    });
+    const recordId = records.createRecord(s, {
+      projectId, stage: 'brainstorm',
+      input: { keywords: project.keywords },
+      aiOutput: JSON.stringify(data, null, 2),
+      modelVersion,
+    });
+    const duplicates = archive.searchArchive(s, project.keywords);
+    return { plan: data, recordId, duplicates };
+  });
+
+  // 단계 2: 취재 이메일
+  h('ai:email', async (s, projectId, { recipient, purpose, external }) => {
+    const bs = projects.latestStageOutput(s, projectId, 'brainstorm');
+    let questions = [];
+    try { questions = JSON.parse(bs?.content || '{}').questions || []; } catch { /* 무시 */ }
+    const { data, modelVersion } = await claude.writeEmail({
+      apiKey: getApiKey(s),
+      reporterName: getSetting(s, 'reporterName'),
+      reporterTitle: getSetting(s, 'reporterTitle') || '기자',
+      recipient, purpose, external, questions,
+    });
+    const recordId = records.createRecord(s, {
+      projectId, stage: 'email',
+      input: { context: `수신자:${recipient} 용건:${purpose}` },
+      aiOutput: JSON.stringify(data, null, 2),
+      modelVersion,
+    });
+    return { email: data, recordId, questions };
+  });
+
+  // 단계 4: 자료 분석·제언
+  h('ai:analyze', async (s, projectId) => {
+    const project = projects.getProject(s, projectId);
+    const mats = projects.listMaterials(s, projectId);
+    if (!mats.length) throw new Error('수집된 자료가 없습니다. 단계 3에서 자료를 먼저 추가하세요.');
+    const { data, modelVersion } = await claude.analyze({
+      apiKey: getApiKey(s), project, materials: mats,
+    });
+    const recordId = records.createRecord(s, {
+      projectId, stage: 'analyze',
+      input: { materials: mats.map((m) => m.title) },
+      aiOutput: JSON.stringify(data, null, 2),
+      modelVersion,
+    });
+    return { report: data, recordId };
+  });
+
+  // 프로젝트 폴더 자동 백업 (거버넌스 — 배포 zip과 별도)
+  h('backup:run', async (s) => {
+    const zip = new JSZip();
+    const base = dataDir();
+    const addDir = (dir, prefix) => {
+      if (!fs.existsSync(dir)) return;
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) addDir(p, `${prefix}/${e.name}`);
+        else zip.file(`${prefix}/${e.name}`, fs.readFileSync(p));
+      }
+    };
+    if (fs.existsSync(path.join(base, 'dna.sqlite'))) {
+      zip.file('dna.sqlite', fs.readFileSync(path.join(base, 'dna.sqlite')));
+    }
+    addDir(path.join(base, 'projects'), 'projects');
+    const outDir = path.join(base, 'backups');
+    fs.mkdirSync(outDir, { recursive: true });
+    const out = path.join(outDir, `backup-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`);
+    fs.writeFileSync(out, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+    return out;
+  });
+
   // AI 호출 + 레코드 자동 생성 (Layer 1: ai_output 저장)
   h('ai:draft', async (s, projectId) => {
     const project = projects.getProject(s, projectId);
     const mats = projects.listMaterials(s, projectId);
+    // RAG: 유사 우수 사례를 few-shot으로 동적 삽입 (Layer 2)
+    const styleExamples = styleEngine.retrieve(
+      s, `${project.title} ${(project.keywords || []).join(' ')}`, 2
+    );
     const { text, modelVersion } = await claude.generateDraft({
       apiKey: getApiKey(s),
       project,
       materials: mats,
+      styleExamples,
     });
     const recordId = records.createRecord(s, {
       projectId,

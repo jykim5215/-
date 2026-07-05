@@ -13,6 +13,7 @@
     <select id="projectSelect" class="proj-select"></select>
     <button id="newProjectBtn" class="btn small">+ 새 프로젝트</button>
     <span id="saveState" class="save">대기</span>
+    <button id="dashBtn" class="btn small ghost">📊 지표</button>
     <button id="settingsBtn" class="btn small ghost">⚙ 설정</button>
   </header>
 
@@ -54,6 +55,16 @@
       </section>
     </aside>
   </div>
+
+  <dialog id="dashDlg">
+    <h2>자동화 성숙도 지표</h2>
+    <p class="hint">단계별 평균 수정량(edit distance)과 평점. 수정량이 내려가면 자동화 성숙도가 올라가는 것입니다.</p>
+    <div id="dashBody" style="margin-top:10px; font-size:13.5px"></div>
+    <div class="row">
+      <button id="dashBackupBtn" class="btn">프로젝트 백업 zip 생성</button>
+      <button id="dashCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
 
   <dialog id="settingsDlg">
     <h2>설정</h2>
