@@ -18,6 +18,35 @@ const FB_TAGS = ['구조 좋음', '인용 오류', '톤 부적절', '리드 약�
 function makeMockAPI() {
   const db = { projects: [], materials: [], outputs: [], records: [], settings: {} };
   const uid = () => Math.random().toString(36).slice(2, 10);
+  // 데모용 샘플 프로젝트 시드 — 화면 구경용
+  const demoPid = uid();
+  db.projects.push({
+    id: demoPid,
+    title: '조정부, 학생단체 승격의 갈림길',
+    keywords: ['조정부', '학생단체 승격'],
+    article_type: '스트레이트',
+    current_stage: 'draft',
+  });
+  db.materials.push(
+    {
+      id: uid(), project_id: demoPid, kind: 'transcript',
+      title: '인터뷰 녹취 — 조정부 부장',
+      content: '박성현입니다. 2026년도 DGIST 조정부 부장을 맡고 있습니다. 지난 2년간 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔다. 앞으로 신입 부원 모집에 힘쓰겠습니다.',
+      source: '직접 취재 · 6.28',
+    },
+    {
+      id: uid(), project_id: demoPid, kind: 'file',
+      title: '동아리연합회 회칙.pdf',
+      content: '제12조(승격) 기타 학생단체 승격은 동아리연합회 전체회의 심의를 거친다.',
+      source: '동연 공개자료',
+    },
+    {
+      id: uid(), project_id: demoPid, kind: 'url',
+      title: '총학 공지 — 심의 일정',
+      content: '동아리연합회는 오는 15일 전체회의에서 조정부의 승격 안건을 다룰 예정이다.',
+      source: '총학생회 홈페이지',
+    }
+  );
   const DEMO_DRAFT = `침체기 딛고 다시 노를 젓다 — 조정부, 학생단체 승격\n\nDGIST 조정부가 2026년 '기타 학생단체'로 승격되었다. 코로나19로 활동이 중단됐던 조정부는 대회 복귀와 운영 정상화를 거쳐 승격 심의를 통과했다.\n\n조정부 부장 박성현 학생은 "지난 2년간 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔다"고 말했다.\n\n---확인 필요---\n- 동아리연합회 심의 일정 확정 여부\n- 승격 이후 예산 규모`;
   return {
     _demo: true,
