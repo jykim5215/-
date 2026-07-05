@@ -5,7 +5,7 @@
 
 const STAGES = [
   { key: 'brainstorm', name: '브레인스토밍' },
-  { key: 'email', name: '취재 이메일' },
+  { key: 'email', name: '취재 이메일', optional: true },
   { key: 'collect', name: '자료 수집' },
   { key: 'analyze', name: '분석·제언' },
   { key: 'draft', name: '기사 초안' },
@@ -90,6 +90,15 @@ function makeMockAPI() {
     async archiveSearch() { return []; },
     async archiveCount() { return 0; },
     async backupRun() { return '(데모 모드)'; },
+    async openExternal(url) { window.open(url, '_blank', 'noopener'); },
+    async aiSuggestMaterials() {
+      await sleep(600);
+      return { recordId: 'demo-sg', suggestions: [
+        { title: '동아리연합회 전체회의 회의록 (승격 심의)', why: '심의 기준·표결 결과의 1차 근거', where: '동아리연합회 (공개 요청)', query: 'DGIST 동아리연합회 회의록' },
+        { title: '타 대학 조정부 학생단체 운영 사례', why: '승격 기준 비교·맥락 제공', where: '각 대학 총학/동연 홈페이지', query: '대학 조정부 중앙동아리 승격 사례' },
+        { title: '본원(학생팀) 공식 입장', why: '반론·상대 입장 확보 — 기사 균형', where: '학생팀 (이메일 문의, 존재 여부 확인 필요)', query: 'DGIST 학생팀 기타 학생단체' },
+      ] };
+    },
     async aiBrainstorm() {
       await sleep(600);
       return { recordId: 'demo-bs', duplicates: [], plan: {
@@ -144,6 +153,7 @@ const state = {
   rating: 0,
   tags: new Set(),
   cardPlan: null,
+  skippedStages: new Set(), // 선택 단계(이메일) 건너뛰기 표시
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -181,15 +191,21 @@ async function refreshProjects() {
   renderAll();
 }
 
-// ---------- 스테퍼 ----------
+// ---------- 스테퍼 (화살표로 연결된 공정 흐름) ----------
 function renderStepper() {
   const el = $('#stepper');
   el.innerHTML = '';
   const curIdx = STAGE_ORDER.indexOf(state.stage);
   STAGES.forEach((s, i) => {
     const div = document.createElement('div');
-    div.className = 'pill' + (i < curIdx ? ' done' : i === curIdx ? ' cur' : '');
-    div.innerHTML = `<span class="n">${i < curIdx ? '✓' : i + 1}</span>${s.name}`;
+    const skipped = s.optional && state.skippedStages?.has(s.key) && i < curIdx;
+    div.className =
+      'step' +
+      (i === curIdx ? ' cur' : skipped ? ' skipped' : i < curIdx ? ' done' : ' next');
+    const mark = i === curIdx ? i + 1 : skipped ? '–' : i < curIdx ? '✓' : i + 1;
+    div.innerHTML = `<span class="n">${mark}</span>${s.name}` +
+      (s.optional ? '<span class="opt-tag">선택</span>' : '');
+    div.title = s.optional ? '선택 단계 — 필요할 때만 진행합니다' : '';
     div.onclick = () => { state.stage = s.key; if (state.projectId) api.projectSetStage(state.projectId, s.key); renderAll(); };
     el.appendChild(div);
   });
@@ -364,8 +380,11 @@ async function renderBrainstormStage(el) {
 // ---------- 단계 2: 취재 이메일 ----------
 async function renderEmailStage(el) {
   el.innerHTML = `
-    <h1>취재 이메일 작성</h1>
-    <p class="sub">DNA 공식 형식(제목 [디지스트신문 DNA] + 용건, 직함→이름 자기소개, 서명)이 자동 적용되고 규칙 검사기가 확인합니다. 단계 1의 취재 질문이 질문지로 자동 첨부됩니다.</p>
+    <h1>취재 이메일 작성 <span class="hint" style="font-size:12px; vertical-align:middle; background:var(--bg); padding:3px 10px; border-radius:99px">선택 단계</span></h1>
+    <p class="sub">외부 취재가 필요할 때만 진행하는 단계입니다. 이미 자료가 충분하거나 대면·전화 취재로 대체한다면 건너뛰어도 됩니다.<br>DNA 공식 형식(제목 [디지스트신문 DNA] + 용건, 직함→이름 자기소개, 서명)이 자동 적용되고 규칙 검사기가 확인합니다. 단계 1의 취재 질문이 질문지로 자동 첨부됩니다.</p>
+    <div class="toolrow">
+      <button id="emSkipBtn" class="btn ghost">이 단계 건너뛰기 → 자료 수집</button>
+    </div>
     <div class="cardplan">
       <div class="card-item">
         <input id="emRecipient" placeholder="수신자 (예: 동아리연합회 회장)">
@@ -385,7 +404,15 @@ async function renderEmailStage(el) {
   const prev = await api.outputLatest(state.projectId, 'email');
   if (prev) { try { const e2 = JSON.parse(prev.content); $('#emSubject').value = e2.subject || ''; $('#emBody').value = e2.body || ''; } catch { /* 무시 */ } }
 
+  $('#emSkipBtn').onclick = () => {
+    state.skippedStages.add('email');
+    state.stage = 'collect';
+    if (state.projectId) api.projectSetStage(state.projectId, 'collect');
+    setSave('취재 이메일 단계를 건너뛰었습니다', true);
+    renderAll();
+  };
   $('#emGenBtn').onclick = async () => {
+    state.skippedStages.delete('email');
     const btn = $('#emGenBtn');
     btn.disabled = true; btn.textContent = '생성 중…';
     try {
@@ -425,6 +452,11 @@ async function renderCollectStage(el) {
     <h1>관련 자료 수집</h1>
     <p class="sub">URL은 본문·메타데이터가 자동 추출되고, 파일(docx/pdf/txt)은 텍스트가 추출되어 프로젝트에 저장됩니다. 모든 자료는 출처가 필수입니다.</p>
     <div class="cardplan">
+      <div class="card-item" style="border-color:#CBD9F2; background:var(--navy-soft)">
+        <h4>🔎 AI 추천 자료 <span class="hint">키워드·기획안·이미 모은 자료를 보고 "더 찾아야 할 것"을 제안합니다</span></h4>
+        <button id="colSuggestBtn" class="btn primary" style="margin-top:6px">추천 받기</button>
+        <div id="colSuggestions" style="margin-top:10px"></div>
+      </div>
       <div class="card-item">
         <h4>URL 기사 추가</h4>
         <input id="colUrl" placeholder="https://…">
@@ -443,6 +475,50 @@ async function renderCollectStage(el) {
     </div>
     <div id="colNotes"></div>
   `;
+  $('#colSuggestBtn').onclick = async () => {
+    const btn = $('#colSuggestBtn');
+    btn.disabled = true; btn.textContent = '분석 중…';
+    try {
+      const { suggestions, recordId } = await api.aiSuggestMaterials(state.projectId);
+      state.currentRecordId = recordId;
+      state.rating = 0; state.tags = new Set();
+      renderFeedback();
+      const box = $('#colSuggestions');
+      box.innerHTML = '';
+      if (!suggestions.length) { box.textContent = '추천할 자료가 없습니다 — 이미 충분히 모였습니다.'; return; }
+      for (const sg of suggestions) {
+        const d = document.createElement('div');
+        d.className = 'm';
+        d.style.background = 'var(--card)';
+        d.innerHTML = `
+          <span class="t"></span>
+          <span class="s"><b>왜:</b> <span class="sg-why"></span></span>
+          <span class="s"><b>어디서:</b> <span class="sg-where"></span></span>
+          <div style="display:flex; gap:6px; margin-top:6px">
+            <button class="btn small sg-search">웹 검색</button>
+            <button class="btn small ghost sg-todo">체크리스트 메모로 저장</button>
+          </div>`;
+        d.querySelector('.t').textContent = sg.title;
+        d.querySelector('.sg-why').textContent = sg.why || '';
+        d.querySelector('.sg-where').textContent = sg.where || '';
+        d.querySelector('.sg-search').onclick = () =>
+          api.openExternal('https://www.google.com/search?q=' + encodeURIComponent(sg.query || sg.title));
+        d.querySelector('.sg-todo').onclick = async () => {
+          await api.materialAdd({
+            projectId: state.projectId, kind: 'note',
+            title: `[찾을 것] ${sg.title}`,
+            content: `왜: ${sg.why}\n어디서: ${sg.where}\n검색어: ${sg.query || ''}`,
+            source: 'AI 추천 — 자료 확보 후 실제 출처로 교체할 것',
+          });
+          d.querySelector('.sg-todo').textContent = '저장됨 ✓';
+          d.querySelector('.sg-todo').disabled = true;
+          renderMaterials();
+        };
+        box.appendChild(d);
+      }
+    } catch (e) { note('#colNotes', 'alert', 'AI 추천 실패', e.message || String(e)); }
+    finally { btn.disabled = false; btn.textContent = '추천 받기'; }
+  };
   $('#colUrlBtn').onclick = async () => {
     const url = $('#colUrl').value.trim();
     if (!url) return;

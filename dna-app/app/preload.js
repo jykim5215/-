@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   archiveCount: invoke('archive:count'),
   backupRun: invoke('backup:run'),
 
+  aiSuggestMaterials: invoke('ai:suggestMaterials'),
+  openExternal: invoke('shell:openExternal'),
+
   aiBrainstorm: invoke('ai:brainstorm'),
   aiEmail: invoke('ai:email'),
   aiAnalyze: invoke('ai:analyze'),

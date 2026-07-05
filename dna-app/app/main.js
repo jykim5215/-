@@ -164,6 +164,34 @@ function registerIpc() {
     return { email: data, recordId, questions };
   });
 
+  // 단계 3: AI 추천 자료
+  h('ai:suggestMaterials', async (s, projectId) => {
+    const project = projects.getProject(s, projectId);
+    const mats = projects.listMaterials(s, projectId);
+    let checklist = [];
+    try {
+      const bs = projects.latestStageOutput(s, projectId, 'brainstorm');
+      checklist = JSON.parse(bs?.content || '{}').checklist || [];
+    } catch { /* 무시 */ }
+    const { data, modelVersion } = await claude.suggestMaterials({
+      apiKey: getApiKey(s), project, materials: mats, checklist,
+    });
+    const recordId = records.createRecord(s, {
+      projectId, stage: 'collect',
+      input: { keywords: project.keywords, materials: mats.map((m) => m.title) },
+      aiOutput: JSON.stringify(data, null, 2),
+      modelVersion,
+    });
+    return { suggestions: data.suggestions || [], recordId };
+  });
+
+  // 외부 링크는 기본 브라우저로 (http/https만 허용)
+  h('shell:openExternal', (_s, url) => {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) throw new Error('http/https만 허용됩니다.');
+    return shell.openExternal(url);
+  });
+
   // 단계 4: 자료 분석·제언
   h('ai:analyze', async (s, projectId) => {
     const project = projects.getProject(s, projectId);

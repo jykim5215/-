@@ -153,6 +153,20 @@ async function writeEmail({ apiKey, reporterName, reporterTitle, recipient, purp
   return runJson({ apiKey, promptName: 'email_writer', user });
 }
 
+// 단계 3: AI 추천 자료 (수집 자료 갭 분석 → 찾아야 할 자료 제안)
+async function suggestMaterials({ apiKey, project, materials = [], checklist = [] }) {
+  const user = [
+    `기사 프로젝트: ${project.title}`,
+    `키워드: ${(project.keywords || []).join(', ')}`,
+    checklist.length ? `기획 단계 자료 체크리스트:\n${checklist.map((c) => `- ${c}`).join('\n')}` : '',
+    materials.length
+      ? `이미 수집된 자료:\n${materials.map((m) => `- [${m.kind}] ${m.title} (출처: ${m.source})`).join('\n')}`
+      : '이미 수집된 자료: 없음',
+    '추가로 확보하면 좋을 자료를 추천하라.',
+  ].filter(Boolean).join('\n\n');
+  return runJson({ apiKey, promptName: 'material_scout', user });
+}
+
 // 단계 4: 자료 분석·제언
 async function analyze({ apiKey, project, materials }) {
   const materialBlock = materials
@@ -164,5 +178,5 @@ async function analyze({ apiKey, project, materials }) {
 
 module.exports = {
   MODEL, generateDraft, planCardnews, buildSystem, modelVersion,
-  runJson, brainstorm, writeEmail, analyze,
+  runJson, brainstorm, writeEmail, analyze, suggestMaterials,
 };
