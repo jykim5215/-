@@ -155,7 +155,18 @@ const state = {
   tags: new Set(),
   cardPlan: null,
   skippedStages: new Set(), // 선택 단계(이메일) 건너뛰기 표시
+  board: [],                // 브레인스토밍 보드 노트들
+  sideOpen: null,           // null = 단계별 자동 (브레인스토밍은 숨김)
 };
+
+// 사이드 패널: 브레인스토밍에서는 기본 숨김 — 보드를 넓게 쓴다
+function sideVisible() {
+  return state.sideOpen ?? (state.stage !== 'brainstorm');
+}
+function applySideVisibility() {
+  document.querySelector('.frame').classList.toggle('no-side', !sideVisible());
+  $('#sideToggle').textContent = sideVisible() ? '📎 패널 접기' : '📎 패널 열기';
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -313,35 +324,81 @@ async function renderWork() {
   if (state.stage === 'cardnews') return renderCardnewsStage(el);
 }
 
-// ---------- 단계 1: 브레인스토밍 ----------
+// ---------- 단계 1: 브레인스토밍 (노션식 자유 배치 보드) ----------
+const NOTE_TYPES = {
+  keyword: '키워드', angle: '기사 각도', title: '제목 후보',
+  question: '취재 질문', checklist: '필요 자료', source: '취재원', free: '메모',
+};
+let noteSeq = 1;
+const newNote = (type, text, x, y) => ({ id: 'n' + Date.now() + '-' + noteSeq++, type, text, x, y });
+
+// AI 기획안 → 유형별 열로 보드에 배치
+function planToNotes(plan, keywords = []) {
+  const notes = [];
+  const col = (items, type, cx, fmt = (v) => v) =>
+    items.forEach((v, i) => notes.push(newNote(type, fmt(v), cx, 64 + i * 108)));
+  keywords.forEach((k, i) => notes.push(newNote('keyword', k, 16 + i * 150, 8)));
+  col(plan.angles || [], 'angle', 16, (a) => `[${a.type}] ${a.summary}\n관심도 ${a.readerInterest} — ${a.reason}`);
+  col(plan.titleCandidates || [], 'title', 268, (t) => t);
+  col(plan.questions || [], 'question', 520, (q) => q);
+  col(plan.sources || [], 'source', 772, (s2) => s2);
+  (plan.checklist || []).forEach((c, i) =>
+    notes.push(newNote('checklist', '☐ ' + c, 772, 64 + ((plan.sources || []).length + i) * 108)));
+  return notes;
+}
+
+// 보드 → 이메일 단계가 읽을 수 있는 형식으로 직렬화
+function boardPayload() {
+  return {
+    notes: state.board,
+    questions: state.board.filter((n) => n.type === 'question').map((n) => n.text),
+    checklist: state.board.filter((n) => n.type === 'checklist').map((n) => n.text.replace(/^☐\s*/, '')),
+  };
+}
+
 async function renderBrainstormStage(el) {
   el.innerHTML = `
-    <h1>키워드 브레인스토밍</h1>
-    <p class="sub">키워드(프로젝트 생성 시 입력)로 기사 각도·제목 후보·취재 질문·자료 체크리스트를 제안받고, 과거 DNA 기사와의 중복을 검사합니다.</p>
-    <div class="note ai"><span class="lab">키워드</span><span id="bsKeywords"></span></div>
+    <h1>브레인스토밍 보드</h1>
+    <p class="sub">노션처럼 노트를 자유롭게 배치하세요 — <b>드래그</b>로 이동, <b>더블클릭</b>으로 편집, ✕로 삭제. AI 기획안은 유형별 색 노트로 보드에 뿌려집니다.</p>
     <div class="toolrow">
-      <button id="bsGenBtn" class="btn primary">AI 기획안 생성</button>
-      <button id="bsSaveBtn" class="btn" disabled>기획안 저장</button>
+      <button id="bsGenBtn" class="btn primary">AI 기획안 → 보드에 뿌리기</button>
+      <button id="bsAddBtn" class="btn">+ 빈 노트</button>
+      <select id="bsAddType" class="btn small" style="padding:6px 8px">
+        ${Object.entries(NOTE_TYPES).map(([k, v]) => `<option value="${k}" ${k === 'free' ? 'selected' : ''}>${v}</option>`).join('')}
+      </select>
+      <button id="bsSaveBtn" class="btn">보드 저장</button>
     </div>
     <div id="bsNotes"></div>
-    <div id="bsResult" class="cardplan"></div>
+    <div id="board" class="board"><div class="board-inner" id="boardInner"></div></div>
+    <p class="board-hint">💡 취재 질문(보라) 노트는 단계 2 이메일 질문지로, 필요 자료(회색) 노트는 단계 3 AI 추천의 맥락으로 자동 연결됩니다.</p>
   `;
-  $('#bsKeywords').textContent = (state.project?.keywords || []).join(', ') || '(키워드 없음)';
-  const prev = await api.outputLatest(state.projectId, 'brainstorm');
-  if (prev) { try { renderPlanCards(JSON.parse(prev.content)); } catch { /* 무시 */ } }
 
-  let currentPlan = null;
+  // 저장된 보드 불러오기 (구버전 plan JSON도 노트로 변환)
+  const prev = await api.outputLatest(state.projectId, 'brainstorm');
+  if (prev) {
+    try {
+      const data = JSON.parse(prev.content);
+      state.board = data.notes || planToNotes(data, state.project?.keywords || []);
+    } catch { state.board = []; }
+  } else if (!state.board.length) {
+    state.board = (state.project?.keywords || []).map((k, i) => newNote('keyword', k, 16 + i * 150, 8));
+  }
+  renderBoard();
+
   $('#bsGenBtn').onclick = async () => {
     const btn = $('#bsGenBtn');
     btn.disabled = true; btn.textContent = '생성 중…';
     try {
       const { plan, recordId, duplicates } = await api.aiBrainstorm(state.projectId);
-      currentPlan = plan;
       state.currentRecordId = recordId;
       state.rating = 0; state.tags = new Set();
-      renderPlanCards(plan);
+      // 기존 노트(직접 쓴 메모)는 지우지 않고, AI 노트를 아래쪽에 추가
+      const baseY = state.board.length ? Math.max(...state.board.map((n) => n.y)) + 130 : 0;
+      const fresh = planToNotes(plan, prev || state.board.length ? [] : state.project?.keywords || []);
+      fresh.forEach((n) => { n.y += baseY; });
+      state.board.push(...fresh);
+      renderBoard();
       renderFeedback();
-      $('#bsSaveBtn').disabled = false;
       if (duplicates?.length) {
         note('#bsNotes', 'warn', `과거 기사 중복 가능성 ${duplicates.length}건`,
           duplicates.map((d) => `· ${d.title} (${d.published_at || '날짜 미상'})`).join('\n'));
@@ -350,32 +407,87 @@ async function renderBrainstormStage(el) {
         note('#bsNotes', 'ok', '중복 검사', n > 0 ? `아카이브 ${n}건과 겹치는 기사 없음` : '아카이브가 비어 있습니다 — scripts/import-archive.mjs로 과거 기사를 임포트하면 중복 검사가 활성화됩니다.');
       }
     } catch (e) { note('#bsNotes', 'alert', 'AI 오류', e.message || String(e)); }
-    finally { btn.disabled = false; btn.textContent = 'AI 기획안 생성'; }
-  };
-  $('#bsSaveBtn').onclick = async () => {
-    if (!currentPlan) return;
-    await api.outputSave({ projectId: state.projectId, stage: 'brainstorm', content: JSON.stringify(currentPlan, null, 2) });
-    if (state.currentRecordId) await api.recordFinalize(state.currentRecordId, JSON.stringify(currentPlan, null, 2));
-    setSave('기획안 저장됨 — 취재 질문이 단계 2 이메일에 자동 첨부됩니다', true);
+    finally { btn.disabled = false; btn.textContent = 'AI 기획안 → 보드에 뿌리기'; }
   };
 
-  function renderPlanCards(plan) {
-    const area = $('#bsResult');
-    area.innerHTML = '';
-    const card = (title, html) => {
-      const d = document.createElement('div');
-      d.className = 'card-item';
-      d.innerHTML = `<h4>${title}</h4>${html}`;
-      area.appendChild(d);
-      return d;
+  $('#bsAddBtn').onclick = () => {
+    const type = $('#bsAddType').value;
+    state.board.push(newNote(type, '', 40 + Math.random() * 200, 40 + Math.random() * 160));
+    renderBoard();
+    // 새 노트는 바로 편집 모드로
+    const last = $('#boardInner').lastElementChild?.querySelector('.nc-text');
+    if (last) startEdit(last);
+  };
+
+  $('#bsSaveBtn').onclick = async () => {
+    const content = JSON.stringify(boardPayload(), null, 2);
+    await api.outputSave({ projectId: state.projectId, stage: 'brainstorm', content });
+    if (state.currentRecordId) await api.recordFinalize(state.currentRecordId, content);
+    setSave('보드 저장됨 — 취재 질문이 단계 2 이메일에 자동 첨부됩니다', true);
+  };
+}
+
+function renderBoard() {
+  const inner = $('#boardInner');
+  if (!inner) return;
+  inner.innerHTML = '';
+  for (const n of state.board) {
+    const card = document.createElement('div');
+    card.className = `note-card t-${n.type}`;
+    card.style.left = n.x + 'px';
+    card.style.top = n.y + 'px';
+    card.dataset.id = n.id;
+    card.innerHTML = `<span class="nc-type">${NOTE_TYPES[n.type] || '메모'}</span><button class="nc-del" title="삭제">✕</button><div class="nc-text"></div>`;
+    card.querySelector('.nc-text').textContent = n.text;
+    card.querySelector('.nc-del').onclick = (e) => {
+      e.stopPropagation();
+      state.board = state.board.filter((x) => x.id !== n.id);
+      renderBoard();
     };
-    card('기사 각도 제안', '<div>' + (plan.angles || []).map((a) =>
-      `<p><b>[${esc(a.type)}]</b> ${esc(a.summary)} · 예상 관심도 <b>${esc(a.readerInterest)}</b> — ${esc(a.reason)}</p>`).join('') + '</div>');
-    card('제목 후보 3', '<p>' + (plan.titleCandidates || []).map(esc).join('<br>') + '</p>');
-    card('필요한 취재원', '<p>' + (plan.sources || []).map(esc).join(' · ') + '</p>');
-    card('취재 질문 초안', '<p>' + (plan.questions || []).map((q, i) => `${i + 1}. ${esc(q)}`).join('<br>') + '</p>');
-    card('필요 자료 체크리스트', '<p>' + (plan.checklist || []).map((c) => `☐ ${esc(c)}`).join('<br>') + '</p>');
+    card.ondblclick = () => startEdit(card.querySelector('.nc-text'));
+    attachDrag(card, n);
+    inner.appendChild(card);
   }
+  // 보드 높이 = 노트 최하단 + 여백
+  const maxY = Math.max(620, ...state.board.map((x) => x.y + 160));
+  inner.style.minHeight = maxY + 'px';
+}
+
+function startEdit(textEl) {
+  textEl.setAttribute('contenteditable', 'true');
+  textEl.focus();
+  const card = textEl.closest('.note-card');
+  const id = card.dataset.id;
+  textEl.onblur = () => {
+    textEl.removeAttribute('contenteditable');
+    const n = state.board.find((x) => x.id === id);
+    if (n) n.text = textEl.textContent;
+  };
+}
+
+function attachDrag(card, noteObj) {
+  card.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.nc-del')) return;
+    if (card.querySelector('.nc-text[contenteditable="true"]')) return; // 편집 중엔 드래그 금지
+    e.preventDefault();
+    card.setPointerCapture(e.pointerId);
+    card.classList.add('dragging');
+    const startX = e.clientX, startY = e.clientY;
+    const origX = noteObj.x, origY = noteObj.y;
+    const onMove = (ev) => {
+      noteObj.x = Math.max(0, origX + ev.clientX - startX);
+      noteObj.y = Math.max(0, origY + ev.clientY - startY);
+      card.style.left = noteObj.x + 'px';
+      card.style.top = noteObj.y + 'px';
+    };
+    const onUp = () => {
+      card.classList.remove('dragging');
+      card.removeEventListener('pointermove', onMove);
+      card.removeEventListener('pointerup', onUp);
+    };
+    card.addEventListener('pointermove', onMove);
+    card.addEventListener('pointerup', onUp);
+  });
 }
 
 // ---------- 단계 2: 취재 이메일 ----------
@@ -914,6 +1026,11 @@ $('#fbSaveBtn').onclick = async () => {
   await api.recordFeedback(state.currentRecordId, { rating: state.rating || undefined, tags: [...state.tags] });
   setSave('평가 저장됨 — 감사합니다', true);
 };
+$('#sideToggle').onclick = () => {
+  state.sideOpen = !sideVisible();
+  applySideVisibility();
+};
+
 $('#dashBtn').onclick = async () => {
   const m = await api.recordMetrics();
   const cnt = await api.archiveCount();
@@ -968,6 +1085,7 @@ function renderAll() {
   renderWork();
   renderMaterials();
   renderFeedback();
+  applySideVisibility();
 }
 
 if (api._demo) setSave('브라우저 데모 모드 (Electron 아님)');
