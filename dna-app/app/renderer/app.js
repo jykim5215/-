@@ -216,6 +216,17 @@ function applySideVisibility() {
   $('#sideToggle').innerHTML = `${ic('panel')} ${sideVisible() ? '패널 접기' : '패널 열기'}`;
 }
 
+// 상단 브레드크럼: 프로젝트 › 현재 단계
+function renderCrumb() {
+  const el = $('#crumb');
+  if (!el) return;
+  const stageName = STAGES.find((s) => s.key === state.stage)?.name || '';
+  const proj = state.project?.title || '프로젝트 없음';
+  el.innerHTML = `<span class="cr-dim"></span> › <span></span>`;
+  el.children[0].textContent = proj;
+  el.children[1].textContent = stageName;
+}
+
 const $ = (sel) => document.querySelector(sel);
 
 function setSave(text, ok = false) {
@@ -251,7 +262,7 @@ async function refreshProjects() {
   renderAll();
 }
 
-// ---------- 스테퍼 (화살표로 연결된 공정 흐름) ----------
+// ---------- 워크플로우 내비 (레일 세로 목록) ----------
 function renderStepper() {
   const el = $('#stepper');
   el.innerHTML = '';
@@ -260,11 +271,12 @@ function renderStepper() {
     const div = document.createElement('div');
     const skipped = s.optional && state.skippedStages?.has(s.key) && i < curIdx;
     div.className =
-      'step' +
-      (i === curIdx ? ' cur' : skipped ? ' skipped' : i < curIdx ? ' done' : ' next');
+      'nav-item' +
+      (i === curIdx ? ' cur' : skipped ? ' skipped' : i < curIdx ? ' done' : '');
     const mark = skipped ? '–' : i < curIdx ? '✓' : ic(STAGE_ICONS[s.key]);
-    div.innerHTML = `<span class="n">${mark}</span>${s.name}` +
+    div.innerHTML = `<span class="nv-st">${mark}</span><span class="nv-name"></span>` +
       (s.optional ? '<span class="opt-tag">선택</span>' : '');
+    div.querySelector('.nv-name').textContent = s.name;
     div.title = s.optional ? '선택 단계 — 필요할 때만 진행합니다' : '';
     div.onclick = () => { state.stage = s.key; if (state.projectId) api.projectSetStage(state.projectId, s.key); renderAll(); };
     el.appendChild(div);
@@ -1311,15 +1323,16 @@ $('#setCloseBtn').onclick = () => $('#settingsDlg').close();
 
 function renderAll() {
   renderStepper();
+  renderCrumb();
   renderWork();
   renderMaterials();
   renderFeedback();
   applySideVisibility();
 }
 
-// 헤더 아이콘
+// 레일 아이콘
 $('#dashBtn').innerHTML = `${ic('gauge')} 지표`;
 $('#settingsBtn').innerHTML = `${ic('gear')} 설정`;
-$('#newProjectBtn').innerHTML = `${ic('plus')} 새 프로젝트`;
+$('#sideToggle').innerHTML = `${ic('panel')} 패널`;
 if (api._demo) setSave('브라우저 데모 모드 (Electron 아님)');
 refreshProjects();
