@@ -309,3 +309,16 @@ details.law-d[open] { background: var(--navy-soft); border-radius: 10px; padding
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---- 맞춤법 교정 패널 ---- */
+.spell-panel { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 12px 14px; margin-bottom: 12px; box-shadow: var(--shadow-sm); animation: fadeUp .22s var(--ease) both; }
+.spell-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.spell-head .hint { flex: 1; }
+.spell-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 2px; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.spell-item:last-child { border-bottom: 0; }
+.spell-item.applied { opacity: .5; }
+.sp-org { color: var(--red); text-decoration: line-through; }
+.sp-arrow { color: var(--dim); }
+.sp-cand-one { color: var(--green); }
+.sp-cand { font-family: var(--sans); font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 7px; color: var(--green); }
+.sp-help { flex-basis: 100%; font-size: 12px; color: var(--dim); white-space: pre-wrap; }

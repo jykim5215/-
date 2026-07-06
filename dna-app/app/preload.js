@@ -42,5 +42,6 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   aiCardplan: invoke('ai:cardplan'),
   cardnewsGenerate: invoke('cardnews:generate'),
   draftExportDocx: invoke('draft:exportDocx'),
+  spellCheck: invoke('spell:check'),
   showFile: invoke('shell:showFile'),
 });

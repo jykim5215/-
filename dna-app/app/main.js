@@ -271,6 +271,12 @@ function registerIpc() {
     return { plan, recordId };
   });
 
+  // 맞춤법 검사 (nara-speller 우선, 실패 시 로컬 규칙 폴백)
+  h('spell:check', async (_s, text) => {
+    const { checkSpelling } = require('./src/main/speller');
+    return checkSpelling(text);
+  });
+
   // 단계 5: 기사 초안 docx 내보내기
   h('draft:exportDocx', async (s, projectId, draftText) => {
     const { buildDraftDocx } = require('./src/main/docx');

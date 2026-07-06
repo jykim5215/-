@@ -47,7 +47,7 @@ function makeMockAPI() {
       source: '총학생회 홈페이지',
     }
   );
-  const DEMO_DRAFT = `침체기 딛고 다시 노를 젓다 — 조정부, 학생단체 승격\n\nDGIST 조정부가 2026년 '기타 학생단체'로 승격되었다. 코로나19로 활동이 중단됐던 조정부는 대회 복귀와 운영 정상화를 거쳐 승격 심의를 통과했다.\n\n조정부 부장 박성현 학생은 "지난 2년간 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔다"고 말했다.\n\n---확인 필요---\n- 동아리연합회 심의 일정 확정 여부\n- 승격 이후 예산 규모`;
+  const DEMO_DRAFT = `침체기 딛고 다시 노를 젓다 — 조정부, 학생단체 승격\n\nDGIST 조정부가 2026년 '기타 학생단체'로 승격되었다. 코로나19로 활동이 중단됐던 조정부는 대회 복귀와 운영 정상화를 거쳐 승격 심의를 통과했다.\n\n조정부 부장 박성현 학생은 "지난 2년간 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔다"고 말했다.\n\n승격으로 조정부는 예산을 지원받을수 있게 됬다.\n\n---확인 필요---\n- 동아리연합회 심의 일정 확정 여부\n- 승격 이후 예산 규모`;
   return {
     _demo: true,
     async settingsGet(k) { return db.settings[k] || ''; },
@@ -80,6 +80,15 @@ function makeMockAPI() {
     },
     async cardnewsGenerate() { return { outPath: '(데모 모드 — Electron에서만 생성됩니다)', warnings: [], slideCount: 4 }; },
     async draftExportDocx() { return { outPath: '(데모 모드 — Electron 앱에서 docx가 프로젝트 폴더에 저장됩니다)' }; },
+    async spellCheck(text) {
+      await sleep(500);
+      const items = [];
+      if (/갓다/.test(text)) items.push({ orgStr: '갓다', candWords: ['갔다'], help: "'가았다'의 준말은 '갔다'입니다." });
+      if (/됬/.test(text)) items.push({ orgStr: '됬', candWords: ['됐'], help: "'되었-'의 준말은 '됐-'입니다." });
+      const su = text.match(/([가-힣])수 (있|없)/);
+      if (su && (su[1].codePointAt(0) - 0xac00) % 28 === 8) items.push({ orgStr: `${su[1]}수 ${su[2]}`, candWords: [`${su[1]} 수 ${su[2]}`], help: "의존명사 '수'는 앞말과 띄어 씁니다." });
+      return { engine: 'nara', items };
+    },
     async showFile() {},
     async validateEmail(d) {
       const issues = [];
@@ -925,11 +934,12 @@ async function renderDraftStage(el) {
       <button id="genBtn" class="btn primary">${ic('spark')} AI 초안 생성</button>
       <button id="checkBtn" class="btn">인용·따옴표 검사</button>
       <button id="previewBtn" class="btn">${ic('eye')} 미리보기</button>
-      <button id="spellBtn" class="btn">맞춤법 (바른한글 열기)</button>
+      <button id="spellBtn" class="btn">${ic('check')} 맞춤법 검사</button>
       <button id="saveDraftBtn" class="btn">${ic('save')} 최종본 저장</button>
       <button id="docxBtn" class="btn">${ic('download')} docx</button>
     </div>
     <div id="draftNotes"></div>
+    <div id="spellPanel" class="spell-panel" hidden></div>
     <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
     <div id="draftPreview" class="draft-preview" hidden></div>
   `;
@@ -953,7 +963,76 @@ async function renderDraftStage(el) {
     } finally { setBusy(btn, false); }
   };
   $('#checkBtn').onclick = runCheck;
-  $('#spellBtn').onclick = () => window.open('https://바른한글.kr', '_blank');
+
+  // 맞춤법 검사 (부산대·나라인포테크 검사기 → 실패 시 로컬 규칙)
+  $('#spellBtn').onclick = async () => {
+    const btn = $('#spellBtn');
+    setBusy(btn, true);
+    try {
+      const { engine, items, naraError } = await api.spellCheck($('#draftEditor').value);
+      renderSpellPanel(engine, items, naraError);
+    } catch (e) { note('#draftNotes', 'alert', '맞춤법 검사 실패', e.message || String(e)); }
+    finally { setBusy(btn, false); }
+  };
+
+  function renderSpellPanel(engine, items, naraError) {
+    const panel = $('#spellPanel');
+    panel.hidden = false;
+    panel.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'spell-head';
+    const engineLabel = engine === 'nara'
+      ? '한국어 맞춤법/문법 검사기 (부산대 인공지능연구실 · 나라인포테크)'
+      : '로컬 규칙 검사기' + (naraError ? ' — 검사기 서버 연결 실패, 오프라인 규칙만 적용' : '');
+    head.innerHTML = `<b>맞춤법 ${items.length ? `교정 제안 ${items.length}건` : '이상 없음 ✓'}</b><span class="hint"></span>
+      <button class="btn small" id="spellAllBtn" ${items.length ? '' : 'hidden'}>모두 적용</button>
+      <button class="btn small ghost" id="spellCloseBtn">닫기</button>`;
+    head.querySelector('.hint').textContent = engineLabel;
+    panel.appendChild(head);
+
+    const applyOne = (orgStr, cand) => {
+      const ta = $('#draftEditor');
+      if (!ta.value.includes(orgStr)) return false;
+      ta.value = ta.value.split(orgStr).join(cand);
+      return true;
+    };
+
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'spell-item';
+      row.innerHTML = `
+        <span class="sp-org"></span><span class="sp-arrow">→</span>
+        ${it.candWords.length > 1
+          ? `<select class="sp-cand">${it.candWords.map((c) => `<option></option>`).join('')}</select>`
+          : '<b class="sp-cand-one"></b>'}
+        <button class="btn small sp-apply">적용</button>
+        <button class="btn small ghost sp-skip">무시</button>
+        <div class="sp-help"></div>`;
+      row.querySelector('.sp-org').textContent = it.orgStr;
+      if (it.candWords.length > 1) {
+        [...row.querySelectorAll('option')].forEach((o, i) => { o.textContent = it.candWords[i]; o.value = it.candWords[i]; });
+      } else {
+        row.querySelector('.sp-cand-one').textContent = it.candWords[0];
+      }
+      row.querySelector('.sp-help').textContent = it.help || '';
+      row.querySelector('.sp-apply').onclick = () => {
+        const cand = it.candWords.length > 1 ? row.querySelector('.sp-cand').value : it.candWords[0];
+        if (applyOne(it.orgStr, cand)) { row.classList.add('applied'); row.querySelector('.sp-apply').textContent = '적용됨 ✓'; row.querySelector('.sp-apply').disabled = true; }
+        else { row.querySelector('.sp-help').textContent = '본문에서 해당 표현을 찾지 못했습니다 (이미 수정됨).'; }
+      };
+      row.querySelector('.sp-skip').onclick = () => row.remove();
+      panel.appendChild(row);
+    }
+
+    $('#spellCloseBtn').onclick = () => { panel.hidden = true; };
+    const allBtn = $('#spellAllBtn');
+    if (allBtn) allBtn.onclick = () => {
+      for (const row of panel.querySelectorAll('.spell-item:not(.applied)')) {
+        row.querySelector('.sp-apply')?.click();
+      }
+    };
+  }
 
   // 미리보기 ↔ 편집 토글 (직접인용은 검증 결과 색으로 하이라이트)
   $('#previewBtn').onclick = async () => {
