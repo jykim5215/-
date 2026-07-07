@@ -50,6 +50,42 @@ test('저장 계층 + 학습 레코드 파이프라인', async () => {
   assert.equal(v1.version, 1);
   assert.equal(v2.version, 2);
   assert.equal(projects.latestStageOutput(store, pid, 'draft').content, 'v2');
+
+  // 버전 이력 목록 + 복원 조회 (A묶음)
+  const vers = projects.listStageVersions(store, pid, 'draft');
+  assert.equal(vers.length, 2);
+  assert.equal(vers[0].version, 2); // 최신 우선
+  assert.equal(projects.getStageOutput(store, v1.id).content, 'v1');
+});
+
+test('A묶음: 자료 삭제·편집 + 프로젝트 이름변경·삭제', async () => {
+  const store = await Store.open(null);
+  const pid = projects.createProject(store, { title: '원제목', keywords: ['k'] });
+  const mid = projects.addMaterial(store, { projectId: pid, kind: 'note', title: '자료', content: 'c', source: '출처A' });
+
+  // 편집: 출처 비우면 거부
+  assert.throws(() => projects.updateMaterial(store, mid, { source: '  ' }), /출처/);
+  projects.updateMaterial(store, mid, { title: '수정됨', source: '출처B' });
+  const m = projects.listMaterials(store, pid)[0];
+  assert.equal(m.title, '수정됨');
+  assert.equal(m.source, '출처B');
+
+  // 삭제
+  projects.deleteMaterial(store, mid);
+  assert.equal(projects.listMaterials(store, pid).length, 0);
+
+  // 프로젝트 이름 변경 (빈 제목 거부)
+  assert.throws(() => projects.renameProject(store, pid, '  '), /제목/);
+  projects.renameProject(store, pid, '새제목');
+  assert.equal(projects.getProject(store, pid).title, '새제목');
+
+  // 프로젝트 삭제 → 연관 자료·산출물도 제거
+  projects.addMaterial(store, { projectId: pid, kind: 'note', title: 'x', content: 'y', source: 's' });
+  projects.saveStageOutput(store, { projectId: pid, stage: 'draft', content: 'd' });
+  projects.deleteProject(store, pid);
+  assert.equal(projects.getProject(store, pid), null);
+  assert.equal(projects.listMaterials(store, pid).length, 0);
+  assert.equal(projects.listStageVersions(store, pid, 'draft').length, 0);
 });
 
 test('개인정보 마스킹 export', async () => {

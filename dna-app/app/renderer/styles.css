@@ -341,3 +341,36 @@ dialog p.hint { margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---- A묶음: 자료 관리 · 자동저장 · 버전 · 프로젝트 액션 ---- */
+.proj-acts { display: flex; gap: 6px; align-items: center; }
+.proj-acts .rail-btn { flex: 1; }
+.rail-mini {
+  width: 30px; flex: none; background: none; border: none; color: var(--rail-dim);
+  border-radius: 8px; padding: 8px 0; cursor: pointer; font-size: 13px; transition: background .14s, color .14s;
+}
+.rail-mini:hover { background: #1E212A; color: #E6E8EE; }
+.rail-mini.danger:hover { background: rgba(229,72,77,.16); color: #FF8A8E; }
+
+.m-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.m-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .14s; flex: none; }
+.m:hover .m-acts { opacity: 1; }
+.m-acts button { border: none; background: none; color: var(--dim); cursor: pointer; padding: 2px 4px; border-radius: 6px; display: grid; place-items: center; }
+.m-acts button:hover { background: rgba(0,0,0,.06); color: var(--ink); }
+.m-acts .m-del:hover { color: var(--red); }
+
+.editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 0 2px; font-size: 12px; }
+.char-count { color: var(--dim); font-variant-numeric: tabular-nums; }
+.autosave-state { font-variant-numeric: tabular-nums; }
+.autosave-state.dirty { color: var(--amber); }
+.autosave-state.saved { color: var(--green); }
+.autosave-state.fail { color: var(--red); }
+
+.ver-panel { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card); padding: 12px 14px; margin-bottom: 12px; box-shadow: var(--shadow-sm); animation: fadeUp .22s var(--ease) both; }
+.ver-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.ver-empty { font-size: 13px; color: var(--dim); }
+.ver-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.ver-row:last-child { border-bottom: 0; }
+.ver-n { font-weight: 700; color: var(--accent); width: 40px; font-variant-numeric: tabular-nums; }
+.ver-t { flex: 1; color: var(--dim); }
+.ver-c { color: var(--dim); font-variant-numeric: tabular-nums; }

@@ -53,6 +53,27 @@ function listMaterials(store, projectId) {
     .map((m) => ({ ...m, meta: JSON.parse(m.meta || '{}') }));
 }
 
+function deleteMaterial(store, id) {
+  store.run('DELETE FROM materials WHERE id = ?', [id]);
+  store.persist();
+}
+
+// 자료 편집 — 출처는 여전히 필수(빈 값이면 거부)
+function updateMaterial(store, id, { title, content, source }) {
+  if (source !== undefined && !String(source).trim()) {
+    throw new Error('출처는 비울 수 없습니다. 저작권법 제28조 — 출처 표시는 필수입니다.');
+  }
+  const cur = store.get('SELECT * FROM materials WHERE id = ?', [id]);
+  if (!cur) throw new Error('자료를 찾을 수 없습니다.');
+  store.run('UPDATE materials SET title = ?, content = ?, source = ? WHERE id = ?', [
+    title ?? cur.title,
+    content ?? cur.content,
+    source !== undefined ? String(source).trim() : cur.source,
+    id,
+  ]);
+  store.persist();
+}
+
 function saveStageOutput(store, { projectId, stage, content }) {
   const prev = store.get(
     'SELECT MAX(version) AS v FROM stage_outputs WHERE project_id = ? AND stage = ?',
@@ -77,13 +98,46 @@ function latestStageOutput(store, projectId, stage) {
   );
 }
 
+// 단계별 버전 이력 (본문 제외한 메타 — 목록용). 최신 버전 우선.
+function listStageVersions(store, projectId, stage) {
+  return store.all(
+    `SELECT id, version, created_at, length(content) AS chars FROM stage_outputs
+     WHERE project_id = ? AND stage = ? ORDER BY version DESC`,
+    [projectId, stage]
+  );
+}
+
+function getStageOutput(store, id) {
+  return store.get('SELECT * FROM stage_outputs WHERE id = ?', [id]);
+}
+
+// 프로젝트 삭제 — 연관 자료·산출물도 함께. (학습 레코드는 별도 거버넌스로 관리)
+function deleteProject(store, id) {
+  store.run('DELETE FROM materials WHERE project_id = ?', [id]);
+  store.run('DELETE FROM stage_outputs WHERE project_id = ?', [id]);
+  store.run('DELETE FROM projects WHERE id = ?', [id]);
+  store.persist();
+}
+
+function renameProject(store, id, title) {
+  if (!title || !title.trim()) throw new Error('제목은 비울 수 없습니다.');
+  store.run('UPDATE projects SET title = ?, updated_at = ? WHERE id = ?', [title.trim(), now(), id]);
+  store.persist();
+}
+
 module.exports = {
   createProject,
   listProjects,
   getProject,
   setStage,
+  renameProject,
+  deleteProject,
   addMaterial,
   listMaterials,
+  deleteMaterial,
+  updateMaterial,
   saveStageOutput,
   latestStageOutput,
+  listStageVersions,
+  getStageOutput,
 };

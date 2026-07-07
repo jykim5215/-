@@ -57,10 +57,16 @@ function makeMockAPI() {
     async projectList() { return [...db.projects]; },
     async projectGet(id) { return db.projects.find((p) => p.id === id) || null; },
     async projectSetStage(id, st) { const p = db.projects.find((x) => x.id === id); if (p) p.current_stage = st; },
+    async projectRename(id, title) { const p = db.projects.find((x) => x.id === id); if (p) p.title = title; },
+    async projectDelete(id) { db.projects = db.projects.filter((x) => x.id !== id); db.materials = db.materials.filter((m) => m.project_id !== id); },
     async materialAdd(d) { if (!d.source || !d.source.trim()) throw new Error('출처(source)가 없는 자료는 저장할 수 없습니다.'); const id = uid(); db.materials.push({ id, project_id: d.projectId, ...d }); return id; },
     async materialList(pid) { return db.materials.filter((m) => m.project_id === pid); },
-    async outputSave(d) { db.outputs.push(d); return { version: db.outputs.length }; },
+    async materialDelete(id) { db.materials = db.materials.filter((m) => m.id !== id); },
+    async materialUpdate(id, d) { if (d.source !== undefined && !String(d.source).trim()) throw new Error('출처는 비울 수 없습니다.'); const m = db.materials.find((x) => x.id === id); if (m) Object.assign(m, d); },
+    async outputSave(d) { db.outputs.push({ ...d, version: db.outputs.filter((o) => o.projectId === d.projectId && o.stage === d.stage).length + 1, id: uid(), created_at: new Date().toISOString(), chars: d.content.length }); return { version: db.outputs.filter((o) => o.projectId === d.projectId && o.stage === d.stage).length }; },
     async outputLatest(pid, st) { return [...db.outputs].reverse().find((o) => o.projectId === pid && o.stage === st) || null; },
+    async outputVersions(pid, st) { return db.outputs.filter((o) => o.projectId === pid && o.stage === st).map((o) => ({ id: o.id, version: o.version, created_at: o.created_at, chars: o.chars })).reverse(); },
+    async outputGet(id) { return db.outputs.find((o) => o.id === id) || null; },
     async recordFinalize() { return 42; },
     async recordFeedback() {},
     async recordMetrics() { return []; },
@@ -174,6 +180,9 @@ const ICON_PATHS = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
   skip: '<path d="M5 4l10 8-10 8V4zM19 5v14"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
 };
 function ic(name) {
   return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
@@ -228,6 +237,9 @@ function renderCrumb() {
 }
 
 const $ = (sel) => document.querySelector(sel);
+
+// 초안 화면 이탈 직전 자동저장 플러시 (렌더링 교체 전에 호출)
+let draftFlush = null;
 
 function setSave(text, ok = false) {
   const el = $('#saveState');
@@ -293,11 +305,47 @@ async function renderMaterials() {
   for (const m of mats) {
     const div = document.createElement('div');
     div.className = 'm';
-    div.innerHTML = `<span class="t"></span><span class="s">출처: <b></b> · ${m.kind}</span>`;
+    div.innerHTML = `
+      <div class="m-top">
+        <span class="t"></span>
+        <span class="m-acts">
+          <button class="m-edit" title="편집">${ic('pen')}</button>
+          <button class="m-del" title="삭제">${ic('trash')}</button>
+        </span>
+      </div>
+      <span class="s">출처: <b></b> · ${esc(m.kind)}</span>`;
     div.querySelector('.t').textContent = m.title;
     div.querySelector('b').textContent = m.source;
+    div.querySelector('.m-del').onclick = async () => {
+      if (!confirm(`자료 "${m.title}"을(를) 삭제할까요?`)) return;
+      await api.materialDelete(m.id);
+      renderMaterials();
+      setSave('자료 삭제됨', true);
+    };
+    div.querySelector('.m-edit').onclick = () => openMaterialEditor(m);
     listEl.appendChild(div);
   }
+}
+
+// 자료 편집 다이얼로그 (출처 필수 유지)
+function openMaterialEditor(m) {
+  const dlg = $('#matEditDlg');
+  $('#meTitle').value = m.title;
+  $('#meSource').value = m.source;
+  $('#meContent').value = m.content;
+  $('#meSaveBtn').onclick = async () => {
+    try {
+      await api.materialUpdate(m.id, {
+        title: $('#meTitle').value,
+        source: $('#meSource').value,
+        content: $('#meContent').value,
+      });
+      dlg.close();
+      renderMaterials();
+      setSave('자료 수정됨', true);
+    } catch (e) { alert(e.message || e); }
+  };
+  dlg.showModal();
 }
 
 // ---------- 검증 패널 ----------
@@ -370,6 +418,8 @@ function renderFeedback() {
 
 // ---------- 작업 영역 ----------
 async function renderWork() {
+  // 이전 화면이 초안이었으면 미저장분 강제 저장 후 이탈
+  if (draftFlush) { try { draftFlush(); } catch { /* 무시 */ } draftFlush = null; }
   const el = $('#workArea');
   el.innerHTML = '';
   el.classList.remove('work-anim');
@@ -949,14 +999,88 @@ async function renderDraftStage(el) {
       <button id="spellBtn" class="btn">${ic('check')} 맞춤법 검사</button>
       <button id="saveDraftBtn" class="btn">${ic('save')} 최종본 저장</button>
       <button id="docxBtn" class="btn">${ic('download')} docx</button>
+      <button id="verBtn" class="btn ghost">${ic('clock')} 버전</button>
     </div>
     <div id="draftNotes"></div>
     <div id="spellPanel" class="spell-panel" hidden></div>
+    <div id="verPanel" class="ver-panel" hidden></div>
     <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
     <div id="draftPreview" class="draft-preview" hidden></div>
+    <div class="editor-foot">
+      <span id="charCount" class="char-count"></span>
+      <span id="autosaveState" class="autosave-state"></span>
+    </div>
   `;
   const prev = await api.outputLatest(state.projectId, 'draft');
   if (prev) $('#draftEditor').value = prev.content;
+
+  const editor = $('#draftEditor');
+  updateCharCount();
+  editor.addEventListener('input', () => { updateCharCount(); scheduleAutosave(); });
+
+  // 글자 수 (공백 포함/제외) + 예상 카드 수(380자 기준)
+  function updateCharCount() {
+    const v = editor.value;
+    const withSpace = v.length;
+    const noSpace = v.replace(/\s/g, '').length;
+    const cards = Math.max(1, Math.ceil(noSpace / 380));
+    $('#charCount').textContent = `${withSpace.toLocaleString()}자 · 공백 제외 ${noSpace.toLocaleString()}자 · 카드뉴스 약 ${cards}장`;
+  }
+
+  // 디바운스 자동 저장 (2초 무입력 시) — 새 버전으로 저장, 학습 레코드도 갱신
+  let autosaveTimer = null;
+  function scheduleAutosave() {
+    $('#autosaveState').textContent = '수정 중…';
+    $('#autosaveState').className = 'autosave-state dirty';
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(doAutosave, 2000);
+  }
+  async function doAutosave() {
+    const text = editor.value;
+    if (!text.trim()) return;
+    try {
+      const { version } = await api.outputSave({ projectId: state.projectId, stage: 'draft', content: text });
+      if (state.currentRecordId) await api.recordFinalize(state.currentRecordId, text);
+      const t = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      $('#autosaveState').textContent = `자동 저장됨 v${version} · ${t}`;
+      $('#autosaveState').className = 'autosave-state saved';
+    } catch (e) {
+      $('#autosaveState').textContent = '자동 저장 실패 — 수동 저장하세요';
+      $('#autosaveState').className = 'autosave-state fail';
+    }
+  }
+  // 화면 이탈 직전 강제 저장 (미저장 유실 방지)
+  draftFlush = () => { clearTimeout(autosaveTimer); if (editor.value.trim() && editor.value !== (prev?.content || '')) doAutosave(); };
+
+  // 버전 이력 패널
+  $('#verBtn').onclick = async () => {
+    const panel = $('#verPanel');
+    if (!panel.hidden) { panel.hidden = true; return; }
+    const versions = await api.outputVersions(state.projectId, 'draft');
+    panel.innerHTML = '';
+    if (!versions.length) { panel.innerHTML = '<div class="ver-empty">저장된 버전이 없습니다. 저장하면 이력이 쌓입니다.</div>'; panel.hidden = false; return; }
+    const head = document.createElement('div');
+    head.className = 'ver-head';
+    head.innerHTML = `<b>버전 이력 ${versions.length}개</b><span class="hint">클릭하면 미리보기 · 복원하면 그 내용이 새 버전으로 저장됩니다</span>`;
+    panel.appendChild(head);
+    for (const v of versions) {
+      const row = document.createElement('div');
+      row.className = 'ver-row';
+      const t = new Date(v.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      row.innerHTML = `<span class="ver-n">v${v.version}</span><span class="ver-t"></span><span class="ver-c">${(v.chars || 0).toLocaleString()}자</span><button class="btn small ver-restore">이 버전으로</button>`;
+      row.querySelector('.ver-t').textContent = t;
+      row.querySelector('.ver-restore').onclick = async () => {
+        const full = await api.outputGet(v.id);
+        if (!full) return;
+        editor.value = full.content;
+        updateCharCount();
+        panel.hidden = true;
+        setSave(`v${v.version} 복원됨 — 저장하면 새 버전이 됩니다`, true);
+      };
+      panel.appendChild(row);
+    }
+    panel.hidden = false;
+  };
 
   $('#genBtn').onclick = async () => {
     const btn = $('#genBtn');
@@ -1246,6 +1370,23 @@ $('#newProjectBtn').onclick = async () => {
   state.projectId = await api.projectCreate({ title, keywords: kw.split(',').map((s) => s.trim()).filter(Boolean) });
   refreshProjects();
 };
+$('#renameProjectBtn').onclick = async () => {
+  if (!state.projectId) return;
+  const title = prompt('새 제목:', state.project?.title || '');
+  if (!title || !title.trim()) return;
+  await api.projectRename(state.projectId, title.trim());
+  refreshProjects();
+  setSave('제목 변경됨', true);
+};
+$('#deleteProjectBtn').onclick = async () => {
+  if (!state.projectId) return;
+  if (!confirm(`프로젝트 "${state.project?.title}"과(와) 모든 자료·산출물을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  await api.projectDelete(state.projectId);
+  state.projectId = null;
+  refreshProjects();
+  setSave('프로젝트 삭제됨', true);
+};
+$('#meCloseBtn').onclick = () => $('#matEditDlg').close();
 $('#matAddBtn').onclick = async () => {
   try {
     await api.materialAdd({

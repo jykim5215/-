@@ -15,7 +15,11 @@
 
       <div class="rail-sec">프로젝트</div>
       <select id="projectSelect" class="proj-select"></select>
-      <button id="newProjectBtn" class="rail-btn">+ 새 프로젝트</button>
+      <div class="proj-acts">
+        <button id="newProjectBtn" class="rail-btn">+ 새 프로젝트</button>
+        <button id="renameProjectBtn" class="rail-mini" title="이름 변경">✎</button>
+        <button id="deleteProjectBtn" class="rail-mini danger" title="프로젝트 삭제">🗑</button>
+      </div>
 
       <div class="rail-sec">워크플로우</div>
       <nav id="stepper" class="nav"></nav>
@@ -75,6 +79,17 @@
       </div>
     </div>
   </div>
+
+  <dialog id="matEditDlg">
+    <h2>자료 편집</h2>
+    <label>제목 <input id="meTitle"></label>
+    <label>출처 (필수) <input id="meSource"></label>
+    <label>본문 <textarea id="meContent" style="width:100%; min-height:140px; font-family:var(--sans); font-size:13.5px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; margin-top:4px"></textarea></label>
+    <div class="row">
+      <button id="meSaveBtn" class="btn primary">저장</button>
+      <button id="meCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
 
   <dialog id="dashDlg">
     <h2>자동화 성숙도 지표</h2>

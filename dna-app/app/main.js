@@ -80,8 +80,14 @@ function registerIpc() {
   h('project:list', (s) => projects.listProjects(s));
   h('project:get', (s, id) => projects.getProject(s, id));
   h('project:setStage', (s, id, stage) => projects.setStage(s, id, stage));
+  h('project:rename', (s, id, title) => projects.renameProject(s, id, title));
+  h('project:delete', (s, id) => projects.deleteProject(s, id));
   h('material:add', (s, data) => projects.addMaterial(s, data));
   h('material:list', (s, projectId) => projects.listMaterials(s, projectId));
+  h('material:delete', (s, id) => projects.deleteMaterial(s, id));
+  h('material:update', (s, id, data) => projects.updateMaterial(s, id, data));
+  h('output:versions', (s, projectId, stage) => projects.listStageVersions(s, projectId, stage));
+  h('output:get', (s, id) => projects.getStageOutput(s, id));
 
   // 산출물 / 학습 레코드
   h('output:save', (s, data) => projects.saveStageOutput(s, data));
