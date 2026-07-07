@@ -59,6 +59,33 @@ test('실제 템플릿: 텍스트 교체 + 슬라이드 복제/삭제', { skip: 
   assert.ok(ct2.includes('theme'));
 });
 
+test('사진 주입 — 도형 이름으로 이미지 교체 (B묶음)', { skip: !hasTemplate }, async () => {
+  const zip = await eng.loadPptx(fs.readFileSync(TEMPLATE));
+  // 1x1 PNG
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000101ff5b8f4b0000000049454e44ae426082', 'hex');
+  // 커버(slide2) 그림 11 교체 — 같은 확장자(png)
+  const r = await eng.replaceImageByShapeName(zip, 2, '그림 11', png, 'png');
+  assert.ok(r.rId.startsWith('rId'));
+  // 교체된 미디어 바이트가 실제로 반영됐는지
+  const mediaPath = 'ppt/' + r.replaced.replace(/^\.\.\//, '');
+  const bytes = await zip.file(mediaPath).async('nodebuffer');
+  assert.equal(bytes.length, png.length);
+  // 재패킹 후에도 유효
+  const buf = await eng.savePptx(zip);
+  const zip2 = await eng.loadPptx(buf);
+  assert.deepEqual(await eng.slideOrder(zip2), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+  // 다른 확장자(jpg) → 새 미디어 파트 + content type default 보장
+  const zipB = await eng.loadPptx(fs.readFileSync(TEMPLATE));
+  const jpg = Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex');
+  await eng.replaceImageByShapeName(zipB, 5, '그림 9', jpg, 'jpg');
+  const ct = await zipB.file('[Content_Types].xml').async('string');
+  assert.ok(/Extension="jpg"/i.test(ct) || /Extension="jpeg"/i.test(ct));
+
+  // 없는 도형은 에러
+  await assert.rejects(eng.replaceImageByShapeName(zip, 2, '없는도형', png, 'png'), /도형/);
+});
+
 test('카드뉴스 end-to-end 생성 — 템플릿 충실성', { skip: !hasTemplate }, async () => {
   const plan = {
     coverTitle: '침체기 딛고\n다시 노를 젓다',

@@ -374,3 +374,45 @@ dialog p.hint { margin-top: 4px; }
 .ver-n { font-weight: 700; color: var(--accent); width: 40px; font-variant-numeric: tabular-nums; }
 .ver-t { flex: 1; color: var(--dim); }
 .ver-c { color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* ---- B묶음: 편집창 인라인 인용 하이라이트 오버레이 ---- */
+.editor-wrap { position: relative; }
+/* backdrop과 textarea는 동일 타이포·박스여야 글자 위치가 1:1로 맞는다 */
+.editor-wrap .editor,
+.editor-backdrop {
+  font-family: var(--sans); font-size: 15.5px; line-height: 1.9;
+  padding: 18px; border: 1px solid var(--line); border-radius: var(--r-md);
+  min-height: 420px; width: 100%;
+  letter-spacing: normal; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;
+}
+.editor-backdrop {
+  position: absolute; inset: 0; margin: 0; z-index: 0;
+  color: transparent; background: #FDFDFC; overflow: auto;
+  pointer-events: none; border-color: transparent;
+}
+.editor-wrap .editor {
+  position: relative; z-index: 1; background: transparent; margin: 0;
+}
+.editor-backdrop mark { color: transparent; border-radius: 3px; padding: 1px 0; }
+.editor-backdrop mark.hl-exact { background: rgba(47,158,99,.22); box-shadow: 0 1px 0 var(--green); }
+.editor-backdrop mark.hl-fuzzy { background: rgba(231,155,19,.24); box-shadow: 0 1px 0 var(--amber); }
+.editor-backdrop mark.hl-missing { background: rgba(229,72,77,.22); box-shadow: 0 1px 0 var(--red); }
+
+/* ---- B묶음: 카드뉴스 사진 업로드 ---- */
+.photo-pick {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  padding: 6px 12px; border: 1px dashed var(--accent); border-radius: 9px;
+  cursor: pointer; transition: background .14s;
+}
+.photo-pick:hover { background: var(--accent-soft); }
+.cn-prev.has-photo { background-size: cover !important; background-position: center; }
+.cn-prev.cover.has-photo { background-blend-mode: normal; }
+.cn-prev.cover.has-photo .photo-hint { display: none; }
+/* 커버는 사진 위에 하단 그라데이션을 덧입혀 글자 가독성 유지 (템플릿과 동일한 느낌) */
+.cn-prev.cover.has-photo::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,.65) 100%);
+}
+.cn-prev.cover .cat, .cn-prev.cover .ttl { position: relative; z-index: 1; }
+.cn-prev.body.has-photo .b { background: rgba(255,251,247,.82); border-radius: 4px; padding: 2px 4px; }

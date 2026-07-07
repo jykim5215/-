@@ -183,6 +183,8 @@ const ICON_PATHS = {
   trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/>',
 };
 function ic(name) {
   return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
@@ -730,6 +732,8 @@ async function renderEmailStage(el) {
       <button id="emGenBtn" class="btn primary">${ic('spark')} AI 이메일 생성</button>
       <button id="emCheckBtn" class="btn">형식 검사</button>
       <button id="emSaveBtn" class="btn">${ic('save')} 최종본 저장</button>
+      <button id="emCopyBtn" class="btn">${ic('copy')} 제목·본문 복사</button>
+      <button id="emMailBtn" class="btn">${ic('mail')} 메일 앱으로 열기</button>
     </div>
     <div id="emNotes"></div>
     <input id="emSubject" style="width:100%; font-family:inherit; font-size:15px; font-weight:700; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px" placeholder="제목">
@@ -766,6 +770,24 @@ async function renderEmailStage(el) {
     finally { setBusy(btn, false); }
   };
   $('#emCheckBtn').onclick = runEmailCheck;
+  // 제목+본문을 클립보드로 (CMS·메일 붙여넣기용)
+  $('#emCopyBtn').onclick = async () => {
+    const text = `${$('#emSubject').value}\n\n${$('#emBody').value}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setSave('제목·본문이 클립보드에 복사됨', true);
+    } catch {
+      // clipboard API 불가 시 폴백: 선택
+      const ta = $('#emBody'); ta.focus(); ta.select();
+      note('#emNotes', 'warn', '복사', '자동 복사가 막혀 본문을 선택했습니다 — Ctrl+C로 복사하세요.');
+    }
+  };
+  // 기본 메일 앱 열기 (mailto — 제목·본문 프리필)
+  $('#emMailBtn').onclick = () => {
+    const url = `mailto:?subject=${encodeURIComponent($('#emSubject').value)}&body=${encodeURIComponent($('#emBody').value)}`;
+    if (api.openExternal) api.openExternal(url); else window.location.href = url;
+    setSave('메일 앱에서 수신자만 넣고 보내세요', true);
+  };
   $('#emSaveBtn').onclick = async () => {
     const content = JSON.stringify({ subject: $('#emSubject').value, body: $('#emBody').value }, null, 2);
     await api.outputSave({ projectId: state.projectId, stage: 'email', content });
@@ -983,6 +1005,32 @@ function buildDraftPreviewHtml(text, quoteResults) {
   ].join('');
 }
 
+// 편집창 backdrop용: 원문 텍스트를 그대로 두되 직접인용만 검증색 <mark>로 감싼다.
+// textarea와 글자 위치가 1:1로 맞아야 하므로 텍스트 외 문자를 추가/삭제하지 않는다.
+function buildHighlightHtml(text, quoteResults) {
+  const statusByQuote = new Map();
+  for (const q of quoteResults) if (q.verdict) statusByQuote.set(q.text, q.verdict.status);
+  // 직접인용 위치를 찾아 마킹 (곡선/직선 큰따옴표 포함)
+  const marks = [];
+  const re = /[“"]([^”"]+)[”"]/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const inner = m[1];
+    const status = statusByQuote.get(inner);
+    if (status) marks.push({ start: m.index, end: m.index + m[0].length, status });
+  }
+  marks.sort((a, b) => a.start - b.start);
+  let out = '';
+  let pos = 0;
+  for (const mk of marks) {
+    out += esc(text.slice(pos, mk.start));
+    out += `<mark class="hl-${mk.status}">${esc(text.slice(mk.start, mk.end))}</mark>`;
+    pos = mk.end;
+  }
+  out += esc(text.slice(pos));
+  return out + '\n'; // 마지막 줄 높이 보정
+}
+
 // HTML 이스케이프 (AI/사용자 텍스트를 innerHTML 조각에 넣을 때 필수)
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1004,7 +1052,10 @@ async function renderDraftStage(el) {
     <div id="draftNotes"></div>
     <div id="spellPanel" class="spell-panel" hidden></div>
     <div id="verPanel" class="ver-panel" hidden></div>
-    <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
+    <div class="editor-wrap">
+      <div id="draftBackdrop" class="editor-backdrop" aria-hidden="true"></div>
+      <textarea id="draftEditor" class="editor" placeholder="AI 초안을 생성하거나 직접 작성하세요. (첫 줄 = 제목)"></textarea>
+    </div>
     <div id="draftPreview" class="draft-preview" hidden></div>
     <div class="editor-foot">
       <span id="charCount" class="char-count"></span>
@@ -1015,8 +1066,22 @@ async function renderDraftStage(el) {
   if (prev) $('#draftEditor').value = prev.content;
 
   const editor = $('#draftEditor');
+  const backdrop = $('#draftBackdrop');
   updateCharCount();
-  editor.addEventListener('input', () => { updateCharCount(); scheduleAutosave(); });
+  editor.addEventListener('input', () => { updateCharCount(); scheduleAutosave(); scheduleHighlight(); });
+  editor.addEventListener('scroll', () => { backdrop.scrollTop = editor.scrollTop; backdrop.scrollLeft = editor.scrollLeft; });
+
+  // 인라인 인용 하이라이트 — 편집창 뒤 backdrop에 검증 결과색으로 직접인용을 칠한다.
+  let hlTimer = null;
+  function scheduleHighlight() { clearTimeout(hlTimer); hlTimer = setTimeout(paintHighlight, 700); }
+  async function paintHighlight() {
+    const text = editor.value;
+    let quotes = [];
+    try { quotes = (await api.validateQuotes(text, state.projectId)).quotes || []; } catch { /* 무시 */ }
+    backdrop.innerHTML = buildHighlightHtml(text, quotes);
+    backdrop.scrollTop = editor.scrollTop;
+  }
+  paintHighlight();
 
   // 글자 수 (공백 포함/제외) + 예상 카드 수(380자 기준)
   function updateCharCount() {
@@ -1087,11 +1152,13 @@ async function renderDraftStage(el) {
     setBusy(btn, true);
     try {
       const { text, recordId } = await api.aiDraft(state.projectId);
-      $('#draftEditor').value = text;
+      editor.value = text;
       state.currentRecordId = recordId;
       state.rating = 0; state.tags = new Set();
       setSave('초안 생성됨 — 검토 후 수정하세요', true);
       renderFeedback();
+      updateCharCount();
+      paintHighlight();
       runCheck();
     } catch (e) {
       note('#draftNotes', 'alert', 'AI 오류', e.message || String(e));
@@ -1274,6 +1341,7 @@ async function renderCardnewsStage(el) {
       <div><h4>커버</h4>
         <textarea id="cpTitle" rows="2" placeholder="커버 제목 (최대 2줄 — 줄바꿈으로 구분)"></textarea>
         <input id="cpCategory" placeholder="카테고리 (대괄호 금지)">
+        <label class="photo-pick">${ic('image')} 커버 사진 선택<input type="file" id="cpPhoto" accept="image/png,image/jpeg" hidden></label>
       </div>
       <div class="cn-prev cover" id="prevCover">
         <span class="photo-hint">📷 사진 영역</span>
@@ -1282,6 +1350,11 @@ async function renderCardnewsStage(el) {
     area.appendChild(cover);
     $('#cpTitle').value = plan.coverTitle || '';
     $('#cpCategory').value = plan.category || '';
+    $('#cpPhoto').onchange = (e) => pickPhoto(e.target, (dataUrl) => {
+      plan.coverPhoto = { dataUrl };
+      $('#prevCover').style.backgroundImage = `url(${dataUrl})`;
+      $('#prevCover').classList.add('has-photo');
+    });
 
     (plan.cards || []).forEach((c, i) => {
       const d = document.createElement('div');
@@ -1291,6 +1364,7 @@ async function renderCardnewsStage(el) {
           <input class="cTitle" placeholder="카드 제목">
           <textarea class="cBody" rows="5" placeholder="카드 본문 (최대 380자 권장)"></textarea>
           <input class="cCredit" placeholder="사진 출처 (퍼온 사진만, 예: 대한민국 국회)">
+          <label class="photo-pick">${ic('image')} 사진 선택<input type="file" class="cPhoto" accept="image/png,image/jpeg" hidden></label>
         </div>
         <div class="cn-prev body">
           <span class="h"></span><span class="b"></span>
@@ -1300,6 +1374,12 @@ async function renderCardnewsStage(el) {
       d.querySelector('.cTitle').value = c.title || '';
       d.querySelector('.cBody').value = c.body || '';
       d.querySelector('.cCredit').value = c.photoCredit || '';
+      d.querySelector('.cPhoto').onchange = (e) => pickPhoto(e.target, (dataUrl) => {
+        c.photo = { dataUrl };
+        const prev = d.querySelector('.cn-prev');
+        prev.style.backgroundImage = `url(${dataUrl})`;
+        prev.classList.add('has-photo');
+      });
     });
 
     // 마무리 장 (고정 양식 미리보기)
@@ -1342,14 +1422,29 @@ async function renderCardnewsStage(el) {
 
   function collectPlanFromEditor() {
     if (!state.cardPlan) return;
-    state.cardPlan.coverTitle = $('#cpTitle').value;
-    state.cardPlan.category = $('#cpCategory').value;
-    state.cardPlan.cards = [...document.querySelectorAll('#planArea .cn-card')].map((d) => ({
+    const plan = state.cardPlan;
+    plan.coverTitle = $('#cpTitle').value;
+    plan.category = $('#cpCategory').value;
+    // 사진(plan.coverPhoto / plan.cards[i].photo)은 pickPhoto가 이미 객체에 심어둠 — 순서 유지하며 보존
+    const prevCards = plan.cards || [];
+    plan.cards = [...document.querySelectorAll('#planArea .cn-card')].map((d, i) => ({
       title: d.querySelector('.cTitle').value,
       body: d.querySelector('.cBody').value,
       photoCredit: d.querySelector('.cCredit').value || undefined,
+      photo: prevCards[i]?.photo,
     }));
   }
+}
+
+// 파일 입력 → data URL (5MB 상한, png/jpeg만). 성공 시 cb(dataUrl).
+function pickPhoto(input, cb) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\/(png|jpe?g)$/i.test(f.type)) { alert('PNG 또는 JPEG만 넣을 수 있습니다.'); return; }
+  if (f.size > 5 * 1024 * 1024) { alert('사진은 5MB 이하만 넣을 수 있습니다. 미리 리사이즈하세요.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => cb(reader.result);
+  reader.readAsDataURL(f);
 }
 
 function note(sel, cls, label, text) {

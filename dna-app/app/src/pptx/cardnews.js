@@ -17,6 +17,12 @@ const MAPPING = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'mapping.json'), 'utf8')
 );
 
+// 사진 주입 (있을 때만). photo = { buffer, ext } — 프레임·잠금 유지, 미디어만 교체.
+async function injectPhoto(zip, slideNum, shapeName, photo) {
+  if (!photo || !photo.buffer || !shapeName) return;
+  await eng.replaceImageByShapeName(zip, slideNum, shapeName, photo.buffer, photo.ext);
+}
+
 async function fillCoverSlide(zip, slideNum, plan, mapping) {
   let xml = await eng.getSlideXml(zip, slideNum);
   const lines = plan.coverTitle.split('\n');
@@ -26,6 +32,7 @@ async function fillCoverSlide(zip, slideNum, plan, mapping) {
   const c = eng.replaceParagraphText(xml, mapping.cover.categoryPlaceholder, plan.category);
   if (c.count === 0) throw new Error('카테고리 플레이스홀더를 찾지 못했습니다.');
   eng.setSlideXml(zip, slideNum, c.xml);
+  await injectPhoto(zip, slideNum, mapping.cover.photoShape, plan.coverPhoto);
 }
 
 async function fillBodySlide(zip, slideNum, card, mapping) {
@@ -51,6 +58,7 @@ async function fillBodySlide(zip, slideNum, card, mapping) {
   xml = eng.replaceParagraphText(xml, m.creditPlaceholder, credit).xml;
 
   eng.setSlideXml(zip, slideNum, xml);
+  await injectPhoto(zip, slideNum, m.photoShape, card.photo);
 }
 
 // templateBuffer → 완성된 pptx Buffer

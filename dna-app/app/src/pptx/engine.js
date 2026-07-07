@@ -253,9 +253,62 @@ async function deleteSlide(zip, num) {
   zip.remove(`ppt/slides/_rels/slide${num}.xml.rels`);
 }
 
+// 슬라이드에서 도형 이름(name)으로 <p:pic>을 찾아 그 이미지를 교체한다.
+// 프레임(위치·크기)·잠금은 그대로 두고 미디어 바이트만 바꾼다 → 템플릿 충실성 유지.
+// ext가 원본과 다르면 새 미디어 파트로 넣고 rId Target·content type을 갱신한다.
+async function replaceImageByShapeName(zip, slideNum, shapeName, imageBuffer, ext) {
+  const slidePath = `ppt/slides/slide${slideNum}.xml`;
+  const xml = await readText(zip, slidePath);
+
+  // 1) 해당 도형의 <p:pic> 블록에서 r:embed 추출
+  const picRe = /<p:pic>[\s\S]*?<\/p:pic>/g;
+  let pic = null;
+  let mm;
+  while ((mm = picRe.exec(xml)) !== null) {
+    if (mm[0].includes(`name="${shapeName}"`)) { pic = mm[0]; break; }
+  }
+  if (!pic) throw new Error(`slide${slideNum}에 도형 "${shapeName}"이(가) 없습니다.`);
+  const embedM = pic.match(/<a:blip[^>]*r:embed="(rId\d+)"/);
+  if (!embedM) throw new Error(`도형 "${shapeName}"에 이미지 blip이 없습니다.`);
+  const rId = embedM[1];
+
+  // 2) 슬라이드 rels에서 rId → 미디어 경로
+  const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+  let rels = await readText(zip, relsPath);
+  const relM = rels.match(new RegExp(`<Relationship[^>]*Id="${rId}"[^>]*Target="([^"]+)"[^>]*/>`));
+  if (!relM) throw new Error(`rels에서 ${rId}를 찾지 못했습니다.`);
+  const curTarget = relM[1]; // 예: ../media/image2.png
+  const curExt = (curTarget.split('.').pop() || '').toLowerCase();
+  const newExt = (ext || curExt).toLowerCase().replace('jpeg', 'jpg') === 'jpg' ? 'jpg' : (ext || curExt).toLowerCase();
+
+  if (newExt === curExt || (newExt === 'jpg' && curExt === 'jpeg')) {
+    // 같은 확장자 → 바이트만 교체
+    const mediaPath = 'ppt/' + curTarget.replace(/^\.\.\//, '');
+    zip.file(mediaPath, imageBuffer);
+  } else {
+    // 다른 확장자 → 새 미디어 파트 + rId Target 갱신 + content type 보장
+    const newName = `dna_${slideNum}_${Date.now()}.${newExt}`;
+    zip.file(`ppt/media/${newName}`, imageBuffer);
+    rels = rels.replace(
+      new RegExp(`(<Relationship[^>]*Id="${rId}"[^>]*Target=")[^"]+("[^>]*/>)`),
+      `$1../media/${newName}$2`
+    );
+    zip.file(relsPath, rels);
+    // [Content_Types].xml에 확장자 Default 보장
+    let ct = await readText(zip, '[Content_Types].xml');
+    if (!new RegExp(`Extension="${newExt}"`, 'i').test(ct)) {
+      const mime = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[newExt] || 'application/octet-stream';
+      ct = ct.replace('</Types>', `<Default Extension="${newExt}" ContentType="${mime}"/></Types>`);
+      zip.file('[Content_Types].xml', ct);
+    }
+  }
+  return { rId, replaced: curTarget };
+}
+
 module.exports = {
   loadPptx,
   savePptx,
+  replaceImageByShapeName,
   listSlideNumbers,
   getSlideXml,
   setSlideXml,

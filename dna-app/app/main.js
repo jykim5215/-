@@ -191,10 +191,10 @@ function registerIpc() {
     return { suggestions: data.suggestions || [], recordId };
   });
 
-  // 외부 링크는 기본 브라우저로 (http/https만 허용)
+  // 외부 링크는 기본 브라우저·메일앱으로 (http/https/mailto만 허용)
   h('shell:openExternal', (_s, url) => {
     const u = new URL(url);
-    if (!/^https?:$/.test(u.protocol)) throw new Error('http/https만 허용됩니다.');
+    if (!/^(https?|mailto):$/.test(u.protocol)) throw new Error('http/https/mailto만 허용됩니다.');
     return shell.openExternal(url);
   });
 
@@ -300,7 +300,19 @@ function registerIpc() {
   // 카드뉴스 pptx 생성
   h('cardnews:generate', async (s, projectId, plan) => {
     const buf = fs.readFileSync(TEMPLATE_PATH());
-    const { buffer, warnings, slideCount } = await generateCardnews(buf, plan);
+    // 렌더러가 data URL로 넘긴 사진을 Buffer로 디코딩 (커버 + 카드별)
+    const decodePhoto = (p) => {
+      if (!p || !p.dataUrl) return undefined;
+      const m = p.dataUrl.match(/^data:image\/(png|jpe?g|gif|webp);base64,(.+)$/i);
+      if (!m) return undefined;
+      return { buffer: Buffer.from(m[2], 'base64'), ext: m[1].toLowerCase() };
+    };
+    const decoded = {
+      ...plan,
+      coverPhoto: decodePhoto(plan.coverPhoto),
+      cards: (plan.cards || []).map((c) => ({ ...c, photo: decodePhoto(c.photo) })),
+    };
+    const { buffer, warnings, slideCount } = await generateCardnews(buf, decoded);
     const outDir = path.join(dataDir(), 'projects', projectId);
     fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, `카드뉴스-${Date.now()}.pptx`);
