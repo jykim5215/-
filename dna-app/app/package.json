@@ -1,6 +1,6 @@
 {
   "name": "dna-desk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "디지스트신문 DNA 편집 지원 데스크톱 앱 — 기획부터 카드뉴스까지 6단계 워크플로우",
   "main": "main.js",
   "type": "commonjs",

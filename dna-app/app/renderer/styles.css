@@ -416,3 +416,26 @@ dialog p.hint { margin-top: 4px; }
 }
 .cn-prev.cover .cat, .cn-prev.cover .ttl { position: relative; z-index: 1; }
 .cn-prev.body.has-photo .b { background: rgba(255,251,247,.82); border-radius: 4px; padding: 2px 4px; }
+
+/* ---- D묶음: 첫 실행 온보딩 ---- */
+.onboard { max-width: 560px; margin: 40px auto; text-align: center; animation: fadeUp .3s var(--ease) both; }
+.ob-logo { width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent), #6B46E5); color: #fff;
+  display: grid; place-items: center; box-shadow: 0 8px 24px var(--glow); }
+.ob-logo svg.ic { width: 26px; height: 26px; }
+.onboard h1 { font-size: 23px; margin-bottom: 8px; }
+.onboard .sub { margin-bottom: 26px; }
+.ob-steps { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.ob-step { display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card);
+  cursor: pointer; font-family: var(--sans); text-align: left; width: 100%;
+  transition: transform .12s var(--ease), box-shadow .16s var(--ease), border-color .15s; }
+.ob-step:not(.muted):hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--accent); }
+.ob-step.muted { cursor: default; opacity: .7; }
+.ob-step .ob-n { width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-weight: 800; font-size: 13px;
+  background: var(--accent-soft); color: var(--accent); }
+.ob-step.done .ob-n { background: var(--green-soft); color: var(--green); }
+.ob-step span:last-child { display: flex; flex-direction: column; }
+.ob-step b { font-size: 14.5px; }
+.ob-step small { font-size: 12.5px; color: var(--dim); }

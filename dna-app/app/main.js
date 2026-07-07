@@ -2,6 +2,7 @@
 //  - contextIsolation: true, nodeIntegration: false, sandbox: true
 //  - API 키는 safeStorage(OS 키체인 연동)로 암호화해 저장. 평문/코드 하드코딩 금지.
 const { app, BrowserWindow, ipcMain, safeStorage, shell } = require('electron');
+const { parseDraft } = require('./src/main/docx');
 const path = require('path');
 const fs = require('fs');
 
@@ -319,6 +320,41 @@ function registerIpc() {
     const outPath = path.join(outDir, `기사초안-${Date.now()}.docx`);
     fs.writeFileSync(outPath, buf);
     return { outPath };
+  });
+
+  // 단계 5: 기사 초안 PDF 내보내기 (Electron 내장 printToPDF — 외부 의존성 없음)
+  h('draft:exportPdf', async (s, projectId, draftText) => {
+    const { title, paragraphs, todos } = parseDraft(draftText);
+    const name = getSetting(s, 'reporterName');
+    const rtitle = getSetting(s, 'reporterTitle') || '기자';
+    const byline = name ? `디지스트신문 DNA ${rtitle} ${name}` : '디지스트신문 DNA';
+    const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      @page { margin: 20mm; }
+      body { font-family: 'Malgun Gothic','Apple SD Gothic Neo',sans-serif; color:#1a1a1a; line-height:1.9; font-size:11pt; }
+      h1 { font-size:20pt; margin:0 0 6px; }
+      .byline { color:#666; font-size:10pt; border-bottom:1px solid #ddd; padding-bottom:10px; margin-bottom:16px; }
+      p { margin:0 0 12px; }
+      .todo { color:#b3261e; font-size:10pt; border-top:1px dashed #ccc; padding-top:10px; margin-top:16px; }
+    </style></head><body>
+      <h1>${esc(title || '(제목 없음)')}</h1>
+      <div class="byline">${esc(byline)}</div>
+      ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
+      ${todos.length ? `<div class="todo">※ 확인 필요<br>${todos.map((t) => '· ' + esc(t)).join('<br>')}</div>` : ''}
+    </body></html>`;
+
+    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+    try {
+      await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+      const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+      const outDir = path.join(dataDir(), 'projects', projectId);
+      fs.mkdirSync(outDir, { recursive: true });
+      const outPath = path.join(outDir, `기사초안-${Date.now()}.pdf`);
+      fs.writeFileSync(outPath, pdf);
+      return { outPath };
+    } finally {
+      win.destroy();
+    }
   });
 
   // 카드뉴스 pptx 생성

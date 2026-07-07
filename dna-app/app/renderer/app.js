@@ -86,6 +86,7 @@ function makeMockAPI() {
     },
     async cardnewsGenerate() { return { outPath: '(데모 모드 — Electron에서만 생성됩니다)', warnings: [], slideCount: 4 }; },
     async draftExportDocx() { return { outPath: '(데모 모드 — Electron 앱에서 docx가 프로젝트 폴더에 저장됩니다)' }; },
+    async draftExportPdf() { return { outPath: '(데모 모드 — Electron 앱에서 PDF가 프로젝트 폴더에 저장됩니다)' }; },
     async spellCheck(text) {
       await sleep(500);
       const items = [];
@@ -220,8 +221,9 @@ const state = {
   sideOpen: null,           // null = 단계별 자동 (브레인스토밍은 숨김)
 };
 
-// 사이드 패널: 브레인스토밍에서는 기본 숨김 — 보드를 넓게 쓴다
+// 사이드 패널: 프로젝트 없음(온보딩)·브레인스토밍에서는 기본 숨김
 function sideVisible() {
+  if (!state.projectId) return false;
   return state.sideOpen ?? (state.stage !== 'brainstorm');
 }
 function applySideVisibility() {
@@ -233,10 +235,10 @@ function applySideVisibility() {
 function renderCrumb() {
   const el = $('#crumb');
   if (!el) return;
+  if (!state.projectId) { el.textContent = '시작하기'; return; }
   const stageName = STAGES.find((s) => s.key === state.stage)?.name || '';
-  const proj = state.project?.title || '프로젝트 없음';
   el.innerHTML = `<span class="cr-dim"></span> › <span></span>`;
-  el.children[0].textContent = proj;
+  el.children[0].textContent = state.project?.title || '프로젝트';
   el.children[1].textContent = stageName;
 }
 
@@ -267,6 +269,8 @@ async function refreshProjects() {
     opt.textContent = '프로젝트 없음 — 새 프로젝트를 만드세요';
     opt.value = '';
     sel.appendChild(opt);
+    state.projectId = null;
+    state.project = null;
   } else {
     if (!state.projectId || !list.some((p) => p.id === state.projectId)) {
       state.projectId = list[0].id;
@@ -430,7 +434,29 @@ async function renderWork() {
   void el.offsetWidth;
   el.classList.add('work-anim');
   if (!state.projectId) {
-    el.innerHTML = `<div class="placeholder"><b>프로젝트가 없습니다.</b><br>상단의 "+ 새 프로젝트"로 시작하세요.</div>`;
+    const hasKey = await api.hasApiKey();
+    el.innerHTML = `
+      <div class="onboard">
+        <div class="ob-logo">${ic('pen')}</div>
+        <h1>DNA 편집 스튜디오에 오신 걸 환영합니다</h1>
+        <p class="sub">기획부터 카드뉴스까지, 기사 하나를 한 곳에서 끝냅니다. 세 단계만 거치면 시작할 수 있어요.</p>
+        <div class="ob-steps">
+          <button class="ob-step ${hasKey ? 'done' : ''}" id="obKey">
+            <span class="ob-n">${hasKey ? '✓' : '1'}</span>
+            <span><b>Claude API 키 등록</b><small>${hasKey ? '등록됨 — 변경하려면 클릭' : 'AI 기능(초안·카드뉴스)에 필요합니다'}</small></span>
+          </button>
+          <button class="ob-step" id="obNew">
+            <span class="ob-n">2</span>
+            <span><b>새 프로젝트 만들기</b><small>기사 제목과 키워드 1~5개를 입력</small></span>
+          </button>
+          <div class="ob-step muted">
+            <span class="ob-n">3</span>
+            <span><b>브레인스토밍으로 시작</b><small>키워드로 기사 각도·질문·자료 목록을 제안받습니다</small></span>
+          </div>
+        </div>
+      </div>`;
+    $('#obKey').onclick = () => $('#settingsBtn').click();
+    $('#obNew').onclick = () => $('#newProjectBtn').click();
     return;
   }
   if (state.stage === 'brainstorm') return renderBrainstormStage(el);
@@ -1089,6 +1115,7 @@ async function renderDraftStage(el) {
       <button id="spellBtn" class="btn">${ic('check')} 맞춤법 검사</button>
       <button id="saveDraftBtn" class="btn">${ic('save')} 최종본 저장</button>
       <button id="docxBtn" class="btn">${ic('download')} docx</button>
+      <button id="pdfBtn" class="btn">${ic('download')} PDF</button>
       <button id="verBtn" class="btn ghost">${ic('clock')} 버전</button>
     </div>
     <div id="draftNotes"></div>
@@ -1304,6 +1331,17 @@ async function renderDraftStage(el) {
       note('#draftNotes', 'ok', 'docx 저장됨', outPath);
       if (api.showFile && !api._demo) api.showFile(outPath);
     } catch (e) { note('#draftNotes', 'alert', 'docx 실패', e.message || String(e)); }
+  };
+  $('#pdfBtn').onclick = async () => {
+    const text = $('#draftEditor').value;
+    if (!text.trim()) return note('#draftNotes', 'alert', '내용 없음', '내보낼 초안이 없습니다.');
+    const btn = $('#pdfBtn'); setBusy(btn, true);
+    try {
+      const { outPath } = await api.draftExportPdf(state.projectId, text);
+      note('#draftNotes', 'ok', 'PDF 저장됨', outPath);
+      if (api.showFile && !api._demo) api.showFile(outPath);
+    } catch (e) { note('#draftNotes', 'alert', 'PDF 실패', e.message || String(e)); }
+    finally { setBusy(btn, false); }
   };
   $('#saveDraftBtn').onclick = async () => {
     const text = $('#draftEditor').value;
@@ -1602,6 +1640,22 @@ $('#setSaveBtn').onclick = async () => {
   setSave('설정 저장됨', true);
 };
 $('#setCloseBtn').onclick = () => $('#settingsDlg').close();
+
+// ---------- 전역 단축키 ----------
+// Ctrl/Cmd+S = 현재 단계 저장, Ctrl/Cmd+Enter = 현재 단계 AI 실행
+document.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+  const saveBtns = { draft: 'saveDraftBtn', email: 'emSaveBtn', brainstorm: 'bsSaveBtn', analyze: 'anSaveBtn' };
+  const aiBtns = { draft: 'genBtn', email: 'emGenBtn', brainstorm: 'bsGenBtn', analyze: 'anGenBtn', cardnews: 'planBtn', collect: 'colSuggestBtn' };
+  if (e.key === 's') {
+    e.preventDefault();
+    document.getElementById(saveBtns[state.stage])?.click();
+  } else if (e.key === 'Enter') {
+    const btn = document.getElementById(aiBtns[state.stage]);
+    if (btn) { e.preventDefault(); btn.click(); }
+  }
+});
 
 function renderAll() {
   renderStepper();
