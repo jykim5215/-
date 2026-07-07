@@ -107,6 +107,12 @@
     <label>직함 <input id="setTitle" placeholder="기자"></label>
     <label>Claude API 키 <input id="setApiKey" type="password" placeholder="sk-ant-…"></label>
     <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
+    <details class="law-d" style="margin:8px 0">
+      <summary>인터뷰 받아쓰기 (whisper.cpp) 설정</summary>
+      <label style="margin-top:8px">whisper 바이너리 경로 <input id="setWhisperBin" placeholder="예: /usr/local/bin/whisper-cli"></label>
+      <label>whisper 모델 경로 (ggml-*.bin) <input id="setWhisperModel" placeholder="예: ~/models/ggml-large-v3.bin"></label>
+      <p class="hint">오디오는 기기 안에서만 처리되어 취재원이 보호됩니다. whisper.cpp 빌드 + 한국어 모델 다운로드가 필요합니다.</p>
+    </details>
     <div class="row">
       <button id="setSaveBtn" class="btn">저장</button>
       <button id="setCloseBtn" class="btn ghost">닫기</button>

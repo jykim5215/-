@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('dnaAPI', {
 
   extractUrl: invoke('extract:url'),
   extractFile: invoke('extract:file'),
+  transcribeDiagnose: invoke('transcribe:diagnose'),
+  transcribeAudio: invoke('transcribe:audio'),
   archiveSearch: invoke('archive:search'),
   archiveCount: invoke('archive:count'),
   backupRun: invoke('backup:run'),

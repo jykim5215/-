@@ -113,6 +113,30 @@ function registerIpc() {
   });
   h('validate:cardplan', (_s, plan) => validateCardPlan(plan));
 
+  // 인터뷰 오디오 → 텍스트 (로컬 whisper.cpp)
+  h('transcribe:diagnose', (s) => {
+    const { diagnose } = require('./src/main/transcribe');
+    return diagnose({
+      whisperBin: getSetting(s, 'whisperBin'),
+      whisperModel: getSetting(s, 'whisperModel'),
+      ffmpeg: getSetting(s, 'ffmpegPath'),
+    });
+  });
+  h('transcribe:audio', async (s, name, arrayBuffer) => {
+    const { transcribeAudio } = require('./src/main/transcribe');
+    const tmp = path.join(app.getPath('temp'), `dna_audio_${Date.now()}_${path.basename(name)}`);
+    fs.writeFileSync(tmp, Buffer.from(arrayBuffer));
+    try {
+      return transcribeAudio(tmp, {
+        whisperBin: getSetting(s, 'whisperBin') || undefined,
+        whisperModel: getSetting(s, 'whisperModel') || undefined,
+        ffmpeg: getSetting(s, 'ffmpegPath') || undefined,
+      });
+    } finally {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    }
+  });
+
   // 단계 3: URL 추출 / 파일 텍스트 추출
   h('extract:url', async (_s, url) => extract.fetchArticle(url));
   h('extract:file', async (_s, name, arrayBuffer) =>

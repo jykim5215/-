@@ -101,6 +101,8 @@ function makeMockAPI() {
       if (!d.subject.startsWith('[디지스트신문 DNA]')) issues.push({ type: 'subject-prefix', message: '제목이 [디지스트신문 DNA] 로 시작해야 합니다.' });
       return { ok: !issues.length, issues };
     },
+    async transcribeDiagnose() { return { whisperBin: null, whisperModel: null, ffmpeg: null }; },
+    async transcribeAudio(name) { await sleep(900); return { text: `(데모) ${name} 받아쓰기 결과 — Electron 앱에서 whisper.cpp로 실제 전사됩니다.\n박성현: 안녕하세요, 조정부 부장 박성현입니다.`, model: 'ggml-large-v3.bin(데모)' }; },
     async extractUrl(url) { await sleep(400); return { title: '(데모) 추출된 기사 제목', author: '기자명', date: '2026-07-01', site: new URL(url).hostname, url, text: '데모 모드 — Electron에서 실제 본문이 추출됩니다.' }; },
     async extractFile(name) { return `(데모) ${name} 파일에서 추출된 텍스트`; },
     async archiveSearch() { return []; },
@@ -825,8 +827,11 @@ async function renderCollectStage(el) {
         <button id="colFileBtn" class="btn" style="margin-top:8px">추출 후 저장</button>
       </div>
       <div class="card-item">
-        <h4>녹취/메모 붙여넣기</h4>
-        <p class="sub" style="margin:0 0 6px">우측 "자료 추가" 패널을 사용하세요. 인터뷰 녹취는 종류를 "인터뷰 녹취"로 선택해야 단계 5 인용 검증에 사용됩니다.</p>
+        <h4>${ic('mic')} 인터뷰 녹음 받아쓰기 <span class="hint">오디오 → 텍스트 (기기 내 처리, 취재원 보호)</span></h4>
+        <input type="file" id="colAudio" accept="audio/*,.m4a,.mp3,.wav,.ogg">
+        <input id="colAudioSource" placeholder="출처 (필수 — 예: ○○ 인터뷰 6.28)">
+        <button id="colAudioBtn" class="btn" style="margin-top:8px">${ic('mic')} 받아쓰기 → 녹취로 저장</button>
+        <div id="colAudioState" class="hint" style="margin-top:6px"></div>
       </div>
     </div>
     <div id="colNotes"></div>
@@ -875,6 +880,43 @@ async function renderCollectStage(el) {
     } catch (e) { note('#colNotes', 'alert', 'AI 추천 실패', e.message || String(e)); }
     finally { setBusy(btn, false); }
   };
+  // 받아쓰기 엔진 상태 표시
+  (async () => {
+    if (!api.transcribeDiagnose) return;
+    try {
+      const d = await api.transcribeDiagnose();
+      const el = $('#colAudioState');
+      if (!el) return;
+      if (d.whisperBin && d.whisperModel) el.textContent = `엔진 준비됨 · 모델 ${d.whisperModel.split(/[\\/]/).pop()}`;
+      else el.innerHTML = '⚠ 받아쓰기 엔진 미설정 — 설정에서 whisper 바이너리·모델 경로를 지정하세요. (whisper.cpp + 한국어 ggml 모델)';
+    } catch { /* 무시 */ }
+  })();
+
+  $('#colAudioBtn').onclick = async () => {
+    const f = $('#colAudio').files[0];
+    if (!f) return note('#colNotes', 'alert', '파일 없음', '오디오 파일을 선택하세요.');
+    const source = $('#colAudioSource').value.trim();
+    if (!source) return note('#colNotes', 'alert', '출처 필수', '출처 없는 자료는 저장할 수 없습니다.');
+    const btn = $('#colAudioBtn');
+    setBusy(btn, true);
+    $('#colAudioState').textContent = '받아쓰는 중… (녹음 길이에 따라 몇 분 걸릴 수 있습니다)';
+    try {
+      const buf = await f.arrayBuffer();
+      const { text, model } = await api.transcribeAudio(f.name, buf);
+      await api.materialAdd({
+        projectId: state.projectId, kind: 'transcript',
+        title: `녹취 — ${f.name}`, content: text, source,
+        meta: { transcribedBy: model || 'whisper', audioFile: f.name },
+      });
+      note('#colNotes', 'ok', '받아쓰기 완료', `${f.name} → ${text.length.toLocaleString()}자 (인터뷰 녹취로 저장됨 — 단계 5 인용 검증에 사용됩니다)`);
+      $('#colAudioState').textContent = '';
+      renderMaterials();
+    } catch (e) {
+      note('#colNotes', 'alert', '받아쓰기 실패', e.message || String(e));
+      $('#colAudioState').textContent = '';
+    } finally { setBusy(btn, false); }
+  };
+
   $('#colUrlBtn').onclick = async () => {
     const url = $('#colUrl').value.trim();
     if (!url) return;
@@ -1544,11 +1586,15 @@ $('#dashBackupBtn').onclick = async () => {
 $('#settingsBtn').onclick = async () => {
   $('#setName').value = await api.settingsGet('reporterName');
   $('#setTitle').value = await api.settingsGet('reporterTitle');
+  $('#setWhisperBin').value = await api.settingsGet('whisperBin');
+  $('#setWhisperModel').value = await api.settingsGet('whisperModel');
   $('#settingsDlg').showModal();
 };
 $('#setSaveBtn').onclick = async () => {
   await api.settingsSet('reporterName', $('#setName').value);
   await api.settingsSet('reporterTitle', $('#setTitle').value);
+  await api.settingsSet('whisperBin', $('#setWhisperBin').value.trim());
+  await api.settingsSet('whisperModel', $('#setWhisperModel').value.trim());
   const key = $('#setApiKey').value.trim();
   if (key) await api.settingsSet('apiKey', key);
   $('#setApiKey').value = '';
