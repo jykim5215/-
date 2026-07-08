@@ -108,6 +108,16 @@
     <label>Claude API 키 <input id="setApiKey" type="password" placeholder="sk-ant-…"></label>
     <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
     <details class="law-d" style="margin:8px 0">
+      <summary>이메일 발송 (DGIST·Gmail SMTP) 설정</summary>
+      <label style="margin-top:8px">보내는 이메일 (DGIST 주소) <input id="setSmtpUser" placeholder="hong@dgist.ac.kr"></label>
+      <label>앱 비밀번호 <input id="setSmtpPass" type="password" placeholder="구글 앱 비밀번호 16자리"></label>
+      <label>SMTP 호스트 <input id="setSmtpHost" placeholder="비우면 smtp.gmail.com"></label>
+      <label>SMTP 포트 <input id="setSmtpPort" placeholder="비우면 465"></label>
+      <p class="hint">DGIST 메일은 구글 워크스페이스라 smtp.gmail.com으로 보냅니다. 구글 계정 2단계 인증 → <b>앱 비밀번호</b>를 발급해 넣으세요(일반 비밀번호 아님). 비밀번호는 OS 키체인으로 암호화 저장됩니다.</p>
+      <button id="setMailTestBtn" class="btn small" type="button">연결 테스트</button>
+      <span id="setMailTestState" class="hint"></span>
+    </details>
+    <details class="law-d" style="margin:8px 0">
       <summary>인터뷰 받아쓰기 (whisper.cpp) 설정</summary>
       <label style="margin-top:8px">whisper 바이너리 경로 <input id="setWhisperBin" placeholder="예: /usr/local/bin/whisper-cli"></label>
       <label>whisper 모델 경로 (ggml-*.bin) <input id="setWhisperModel" placeholder="예: ~/models/ggml-large-v3.bin"></label>

@@ -49,6 +49,34 @@ function setApiKey(s, key) {
   s.persist();
 }
 
+// 범용 비밀값 암호화 저장 (앱 비밀번호 등)
+function setSecret(s, key, value) {
+  if (!value) { s.run('DELETE FROM settings WHERE key = ?', [key + 'Enc']); s.persist(); return; }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('이 환경에서는 OS 암호화 저장을 사용할 수 없습니다.');
+  }
+  const enc = safeStorage.encryptString(value).toString('base64');
+  s.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key + 'Enc', enc]);
+  s.persist();
+}
+function getSecret(s, key) {
+  const row = s.get('SELECT value FROM settings WHERE key = ?', [key + 'Enc']);
+  if (!row) return null;
+  try { return safeStorage.decryptString(Buffer.from(row.value, 'base64')); } catch { return null; }
+}
+function mailConfig(s) {
+  return {
+    user: getSetting(s, 'smtpUser'),
+    pass: getSecret(s, 'smtpPass') || '',
+    host: getSetting(s, 'smtpHost') || undefined,
+    port: getSetting(s, 'smtpPort') ? Number(getSetting(s, 'smtpPort')) : undefined,
+    fromName: (() => {
+      const n = getSetting(s, 'reporterName'); const t = getSetting(s, 'reporterTitle') || '기자';
+      return n ? `디지스트신문 DNA ${t} ${n}` : '디지스트신문 DNA';
+    })(),
+  };
+}
+
 function getApiKey(s) {
   const row = s.get('SELECT value FROM settings WHERE key = ?', ['apiKeyEnc']);
   if (!row) return process.env.ANTHROPIC_API_KEY || null;
@@ -71,10 +99,23 @@ function registerIpc() {
   h('settings:get', (s, key) => getSetting(s, key));
   h('settings:set', (s, key, value) => {
     if (key === 'apiKey') return setApiKey(s, value);
+    if (key === 'smtpPass') return setSecret(s, 'smtpPass', value); // 앱 비밀번호는 암호화 저장
     s.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
     s.persist();
   });
   h('settings:hasApiKey', (s) => Boolean(getApiKey(s)));
+  h('settings:hasSmtpPass', (s) => Boolean(getSecret(s, 'smtpPass')));
+
+  // 이메일 발송 (SMTP)
+  h('mail:verify', async (s) => {
+    const { verify } = require('./src/main/mailer');
+    return verify(mailConfig(s));
+  });
+  h('mail:send', async (s, msg) => {
+    const { sendMail } = require('./src/main/mailer');
+    const res = await sendMail(msg, mailConfig(s));
+    return res;
+  });
 
   // 프로젝트 / 자료
   h('project:create', (s, data) => projects.createProject(s, data));

@@ -439,3 +439,13 @@ dialog p.hint { margin-top: 4px; }
 .ob-step span:last-child { display: flex; flex-direction: column; }
 .ob-step b { font-size: 14.5px; }
 .ob-step small { font-size: 12.5px; color: var(--dim); }
+
+/* ---- 앱 내 이메일 발송 ---- */
+.send-row { display: flex; gap: 8px; margin: 4px 0 6px; }
+.send-row input {
+  flex: 1; font-family: var(--sans); font-size: 14px; padding: 9px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+}
+.send-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.send-row .btn { flex: none; }

@@ -53,6 +53,9 @@ function makeMockAPI() {
     async settingsGet(k) { return db.settings[k] || ''; },
     async settingsSet(k, v) { db.settings[k] = v; },
     async hasApiKey() { return false; },
+    async hasSmtpPass() { return false; },
+    async mailVerify() { return { ok: false, error: '데모 모드 — Electron 앱에서 SMTP 발송이 동작합니다.' }; },
+    async mailSend() { await sleep(600); throw new Error('데모 모드 — Electron 앱에서 실제 발송됩니다. (설정에 DGIST 주소·앱 비밀번호 필요)'); },
     async projectCreate(d) { const id = uid(); db.projects.push({ id, title: d.title, keywords: d.keywords || [], article_type: '', current_stage: 'brainstorm' }); return id; },
     async projectList() { return [...db.projects]; },
     async projectGet(id) { return db.projects.find((p) => p.id === id) || null; },
@@ -188,6 +191,7 @@ const ICON_PATHS = {
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/>',
+  send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
 };
 function ic(name) {
   return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
@@ -760,9 +764,14 @@ async function renderEmailStage(el) {
       <button id="emGenBtn" class="btn primary">${ic('spark')} AI 이메일 생성</button>
       <button id="emCheckBtn" class="btn">형식 검사</button>
       <button id="emSaveBtn" class="btn">${ic('save')} 최종본 저장</button>
-      <button id="emCopyBtn" class="btn">${ic('copy')} 제목·본문 복사</button>
-      <button id="emMailBtn" class="btn">${ic('mail')} 메일 앱으로 열기</button>
+      <button id="emCopyBtn" class="btn">${ic('copy')} 복사</button>
+      <button id="emMailBtn" class="btn">${ic('mail')} 메일 앱으로</button>
     </div>
+    <div class="send-row">
+      <input id="emTo" type="email" placeholder="받는 사람 이메일 (예: council@dgist.ac.kr)">
+      <button id="emSendBtn" class="btn primary">${ic('send')} 앱에서 바로 보내기</button>
+    </div>
+    <div id="emSendState" class="hint" style="margin:-6px 0 8px"></div>
     <div id="emNotes"></div>
     <input id="emSubject" style="width:100%; font-family:inherit; font-size:15px; font-weight:700; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px" placeholder="제목">
     <textarea id="emBody" class="editor" style="min-height:320px" placeholder="본문"></textarea>
@@ -815,6 +824,31 @@ async function renderEmailStage(el) {
     const url = `mailto:?subject=${encodeURIComponent($('#emSubject').value)}&body=${encodeURIComponent($('#emBody').value)}`;
     if (api.openExternal) api.openExternal(url); else window.location.href = url;
     setSave('메일 앱에서 수신자만 넣고 보내세요', true);
+  };
+  // 앱에서 SMTP로 직접 발송 (확인 후) — DGIST·Gmail
+  $('#emSendBtn').onclick = async () => {
+    const to = $('#emTo').value.trim();
+    const subject = $('#emSubject').value.trim();
+    const body = $('#emBody').value;
+    const st = $('#emSendState');
+    if (!/.+@.+\..+/.test(to)) { st.textContent = '받는 사람 이메일 주소를 입력하세요.'; st.style.color = 'var(--red)'; return; }
+    if (api.hasSmtpPass && !(await api.hasSmtpPass())) {
+      st.innerHTML = '먼저 <b>설정 → 이메일 발송</b>에서 DGIST 주소·앱 비밀번호를 등록하세요.';
+      st.style.color = 'var(--red)';
+      return;
+    }
+    if (!confirm(`아래 주소로 지금 발송합니다.\n\n받는 사람: ${to}\n제목: ${subject}\n\n보내시겠습니까?`)) return;
+    const btn = $('#emSendBtn'); setBusy(btn, true);
+    st.textContent = '발송 중…'; st.style.color = 'var(--dim)';
+    try {
+      const r = await api.mailSend({ to, subject, body });
+      st.textContent = `✓ 발송됨 → ${(r.accepted || [to]).join(', ')} (보낸편지함 확인)`;
+      st.style.color = 'var(--green)';
+      setSave('이메일 발송 완료', true);
+    } catch (e) {
+      st.textContent = '✗ ' + (e.message || e);
+      st.style.color = 'var(--red)';
+    } finally { setBusy(btn, false); }
   };
   $('#emSaveBtn').onclick = async () => {
     const content = JSON.stringify({ subject: $('#emSubject').value, body: $('#emBody').value }, null, 2);
@@ -1626,13 +1660,39 @@ $('#settingsBtn').onclick = async () => {
   $('#setTitle').value = await api.settingsGet('reporterTitle');
   $('#setWhisperBin').value = await api.settingsGet('whisperBin');
   $('#setWhisperModel').value = await api.settingsGet('whisperModel');
+  $('#setSmtpUser').value = await api.settingsGet('smtpUser');
+  $('#setSmtpHost').value = await api.settingsGet('smtpHost');
+  $('#setSmtpPort').value = await api.settingsGet('smtpPort');
+  $('#setSmtpPass').value = '';
+  $('#setSmtpPass').placeholder = (await api.hasSmtpPass?.()) ? '저장됨 — 변경하려면 입력' : '구글 앱 비밀번호 16자리';
+  $('#setMailTestState').textContent = '';
   $('#settingsDlg').showModal();
+};
+$('#setMailTestBtn').onclick = async () => {
+  // 테스트 전에 현재 입력값을 저장해야 검증됨
+  await api.settingsSet('smtpUser', $('#setSmtpUser').value.trim());
+  await api.settingsSet('smtpHost', $('#setSmtpHost').value.trim());
+  await api.settingsSet('smtpPort', $('#setSmtpPort').value.trim());
+  const pass = $('#setSmtpPass').value.trim();
+  if (pass) await api.settingsSet('smtpPass', pass);
+  const el = $('#setMailTestState');
+  el.textContent = '연결 확인 중…';
+  try {
+    const r = await api.mailVerify();
+    el.textContent = r.ok ? '✓ 연결 성공 — 발송 준비됨' : '✗ ' + r.error;
+    el.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { el.textContent = '✗ ' + (e.message || e); el.style.color = 'var(--red)'; }
 };
 $('#setSaveBtn').onclick = async () => {
   await api.settingsSet('reporterName', $('#setName').value);
   await api.settingsSet('reporterTitle', $('#setTitle').value);
   await api.settingsSet('whisperBin', $('#setWhisperBin').value.trim());
   await api.settingsSet('whisperModel', $('#setWhisperModel').value.trim());
+  await api.settingsSet('smtpUser', $('#setSmtpUser').value.trim());
+  await api.settingsSet('smtpHost', $('#setSmtpHost').value.trim());
+  await api.settingsSet('smtpPort', $('#setSmtpPort').value.trim());
+  const smtpPass = $('#setSmtpPass').value.trim();
+  if (smtpPass) await api.settingsSet('smtpPass', smtpPass);
   const key = $('#setApiKey').value.trim();
   if (key) await api.settingsSet('apiKey', key);
   $('#setApiKey').value = '';
