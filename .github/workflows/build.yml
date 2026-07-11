@@ -8,6 +8,9 @@ on:
       - "audiobridge/**"
       - ".github/workflows/build.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,7 +44,7 @@ jobs:
           mkdir -p dist/AudioBridge
           cp audiobridge/android/app/build/outputs/apk/release/app-release.apk dist/AudioBridge/AudioBridge.apk
           cp audiobridge/windows/out/AudioBridgeWin.exe dist/AudioBridge/
-          cp audiobridge/README.md audiobridge/PROTOCOL.md dist/AudioBridge/
+          cp audiobridge/README.md audiobridge/PROTOCOL.md audiobridge/HANDOFF.md dist/AudioBridge/
           cd dist && zip -r AudioBridge-dist.zip AudioBridge
 
       - uses: actions/upload-artifact@v4
@@ -53,3 +56,17 @@ jobs:
         with:
           name: AudioBridge-apk
           path: dist/AudioBridge/AudioBridge.apk
+
+      - name: Publish release (download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-build
+          name: "AudioBridge v1.0.0 (자동 빌드)"
+          prerelease: true
+          body: |
+            폰↔PC 양방향 오디오 스트리밍 — 설치·사용법은 zip 안의 README.md 참고.
+            - `AudioBridge.apk`: 안드로이드 앱 (Android 8.0+)
+            - `AudioBridge-dist.zip`: APK + 윈도우 실행파일 + 문서 (배포용 패키지)
+          files: |
+            dist/AudioBridge-dist.zip
+            dist/AudioBridge/AudioBridge.apk
