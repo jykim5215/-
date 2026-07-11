@@ -110,11 +110,18 @@ audiobridge/
 ## 6. 현재 상태
 
 - [x] HANDOFF.md 작성 (설계 완료)
-- [x] UI 스타일 3안 HTML 작성 (`design/ui-styles.html`) — **사용자 선택 대기 중**
-- [ ] PROTOCOL.md 확정
-- [ ] 안드로이드 앱 구현
-- [ ] 윈도우 동반 프로그램 구현
-- [ ] APK 빌드 + exe 빌드 + 배포 zip
-- [ ] README.md
+- [x] UI 스타일 3안 HTML 작성 — **사용자가 C안(레트로 하이파이) 선택, 범위는 양방향 전부**
+- [x] PROTOCOL.md 확정 (컨트롤 TCP 48550 JSON lines / 디스커버리 UDP 48551 / 오디오 UDP 48552·48553, 24B 헤더)
+- [x] 안드로이드 앱 구현 (Kotlin+Compose, 레트로 UI, 모드 A/B, UDP+TCP, FGS, 어댑티브 아이콘)
+- [x] 윈도우 동반 프로그램 구현 (C#/.NET 8 + NAudio, 디스커버리/컨트롤/모드 A·B)
+- [x] README.md
+- [ ] APK 빌드 + exe 빌드 + 배포 zip — CI(`.github/workflows/build.yml`)로 진행 중
 
-**다음 할 일:** 사용자가 UI 스타일(A/B/C)을 고르면 PROTOCOL.md 확정 후 안드로이드 구현 시작.
+**빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
+.NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
+따라서 빌드는 **GitHub Actions**(`.github/workflows/build.yml`)로 수행한다 —
+러너에 Android SDK가 기본 탑재되어 있고 `setup-dotnet`으로 .NET 확보 가능.
+`maven.google.com`, `services.gradle.org`, `repo.maven.apache.org`, `github.com`은 열려 있다.
+Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능.
+
+**다음 할 일:** 안드로이드 앱 코드 완성 → 윈도우 companion → CI 워크플로로 그린 빌드 → 배포 zip.

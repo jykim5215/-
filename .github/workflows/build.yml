@@ -1,0 +1,55 @@
+name: build-audiobridge
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "claude/hangul-characters-bplcwl" ]
+    paths:
+      - "audiobridge/**"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build APK
+        working-directory: audiobridge/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Build Windows exe (win-x64, single file)
+        working-directory: audiobridge/windows
+        run: >
+          dotnet publish -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o out
+
+      - name: Assemble dist package
+        run: |
+          mkdir -p dist/AudioBridge
+          cp audiobridge/android/app/build/outputs/apk/release/app-release.apk dist/AudioBridge/AudioBridge.apk
+          cp audiobridge/windows/out/AudioBridgeWin.exe dist/AudioBridge/
+          cp audiobridge/README.md audiobridge/PROTOCOL.md dist/AudioBridge/
+          cd dist && zip -r AudioBridge-dist.zip AudioBridge
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioBridge-dist
+          path: dist/AudioBridge-dist.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioBridge-apk
+          path: dist/AudioBridge/AudioBridge.apk
