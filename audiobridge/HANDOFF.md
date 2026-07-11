@@ -115,7 +115,10 @@ audiobridge/
 - [x] 안드로이드 앱 구현 (Kotlin+Compose, 레트로 UI, 모드 A/B, UDP+TCP, FGS, 어댑티브 아이콘)
 - [x] 윈도우 동반 프로그램 구현 (C#/.NET 8 + NAudio, 디스커버리/컨트롤/모드 A·B)
 - [x] README.md
-- [ ] APK 빌드 + exe 빌드 + 배포 zip — CI(`.github/workflows/build.yml`)로 진행 중
+- [x] APK 빌드 + exe 빌드 + 배포 zip — CI 성공 (run #3), GitHub Release `v1.0.0-build`로 게시
+  - 다운로드: https://github.com/jykim5215/-/releases/tag/v1.0.0-build
+  - 검증 완료: APK v2 서명 확인, 배포 zip 구성(APK+exe+문서) 확인, 바이너리 개인정보 문자열 스캔 통과
+  - **v1 완료.** 남은 확장 아이디어: Opus 코덱(프로토콜에 codec=1 예약됨), 트레이 GUI(윈도우), 재연결 자동화
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
