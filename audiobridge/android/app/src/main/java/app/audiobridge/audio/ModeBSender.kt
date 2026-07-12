@@ -22,6 +22,9 @@ import kotlin.math.max
 
 enum class CaptureSource { MIC, INTERNAL }
 
+/** 송신 목적지. [channel] 0=양쪽(원본), 1=왼쪽만(모노), 2=오른쪽만(모노) — 스테레오 페어용 */
+data class SendTarget(val addr: InetSocketAddress, val channel: Int = 0)
+
 /**
  * 이 기기 소리(마이크 또는 미디어 캡처)를 상대(들)에게 보낸다.
  * UDP는 [targetsProvider]가 주는 여러 목적지에 같은 패킷을 복제 송신(다대일 스피커),
@@ -29,7 +32,7 @@ enum class CaptureSource { MIC, INTERNAL }
  * 패킷 타임스탬프는 clk 동기와 같은 시계(elapsedRealtimeNanos)를 쓴다.
  */
 class ModeBSender(
-    private val targetsProvider: () -> List<InetSocketAddress>,
+    private val targetsProvider: () -> List<SendTarget>,
     private val tcpTarget: InetSocketAddress?,
     private val source: CaptureSource,
     private val projection: MediaProjection?,
@@ -96,6 +99,20 @@ class ModeBSender(
         }
     }
 
+    /** 스테레오 인터리브 16bit 프레임에서 한 채널만 뽑아 모노 페이로드 생성. */
+    private fun extractChannel(frame: ByteArray, frameBytes: Int, chIdx: Int): ByteArray {
+        val out = ByteArray(frameBytes / 2)
+        var src = chIdx * 2
+        var dst = 0
+        while (src + 1 < frameBytes) {
+            out[dst] = frame[src]
+            out[dst + 1] = frame[src + 1]
+            dst += 2
+            src += 4
+        }
+        return out
+    }
+
     private fun loop(rec: AudioRecord) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         val frameBytes = Protocol.frameBytes(channels)
@@ -134,19 +151,40 @@ class ModeBSender(
                 }
                 if (!running) break
                 val flags = if (seq == 0) Protocol.FLAG_FIRST else 0
-                val len = Protocol.buildPacket(
-                    packet, frame, frameBytes, seq, Protocol.SAMPLE_RATE, channels, flags,
-                    SystemClock.elapsedRealtimeNanos() / 1000
-                )
-                seq++
+                val tsUs = SystemClock.elapsedRealtimeNanos() / 1000
                 if (tcpOut != null) {
+                    val len = Protocol.buildPacket(
+                        packet, frame, frameBytes, seq, Protocol.SAMPLE_RATE, channels, flags, tsUs
+                    )
                     tcpOut.write(packet, 0, len)
                 } else {
-                    val dests = targetsProvider()
-                    for (d in dests) {
-                        runCatching { udp?.send(DatagramPacket(packet, len, d)) }
+                    // 스테레오 페어: 목적지별로 양쪽/왼쪽/오른쪽 변형을 만들어 송신
+                    var monoL: ByteArray? = null
+                    var monoR: ByteArray? = null
+                    for (d in targetsProvider()) {
+                        val wantMono = channels == 2 && d.channel in 1..2
+                        val payload: ByteArray
+                        val payloadCh: Int
+                        if (wantMono) {
+                            if (d.channel == 1) {
+                                if (monoL == null) monoL = extractChannel(frame, frameBytes, 0)
+                                payload = monoL
+                            } else {
+                                if (monoR == null) monoR = extractChannel(frame, frameBytes, 1)
+                                payload = monoR
+                            }
+                            payloadCh = 1
+                        } else {
+                            payload = frame
+                            payloadCh = channels
+                        }
+                        val len = Protocol.buildPacket(
+                            packet, payload, payload.size, seq, Protocol.SAMPLE_RATE, payloadCh, flags, tsUs
+                        )
+                        runCatching { udp?.send(DatagramPacket(packet, len, d.addr)) }
                     }
                 }
+                seq++
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastLevel > 100) {
                     lastLevel = now

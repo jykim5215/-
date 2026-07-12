@@ -109,6 +109,7 @@ class ControlServer(
         @Volatile private var closed = false
         @Volatile private var lastPong = SystemClock.elapsedRealtime()
         @Volatile private var helloDone = false
+        @Volatile private var gain = 1f // 원격 볼륨 (소스가 vol 메시지로 지정)
         private var writer: BufferedWriter? = null
         private var player: ModeAPlayer? = null
 
@@ -163,6 +164,7 @@ class ControlServer(
                     }
                 "bye" -> close()
                 "role" -> callbacks.onPeerRole(m.optString("output", "none"))
+                "vol" -> gain = (m.optInt("gain", 100).coerceIn(0, 100)) / 100f
                 "modeA" -> when (m.optString("action")) {
                     "start" -> callbacks.onModeAStart(
                         m.optInt("udpPort", Protocol.DEFAULT_MODE_A_PORT),
@@ -208,6 +210,7 @@ class ControlServer(
                 offsetUsProvider = { callbacks.playbackOffsetUs() },
                 onStats = { _, level, _ -> callbacks.onLevel(level) },
                 onError = { msg -> callbacks.onError(msg) },
+                gainProvider = { gain },
             )
             val ok = if (tcp) p.startTcpServer(audioPort, peerHost) else p.startUdp(audioPort, peerHost)
             if (!ok) {

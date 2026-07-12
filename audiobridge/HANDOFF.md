@@ -146,6 +146,12 @@ audiobridge/
   (±100ms, nudgeMs) ④ AudioTrack 버퍼 8→4프레임(20ms)으로 지연 감소.
   주의: PC는 수신 재생 시 clk를 쓰지 않으므로(BufferedWaveProvider) 다대일에 PC를 섞으면
   PC만 정렬이 느슨함 — 향후 개선 포인트.
+- [x] v2.2 (아이콘 + 추천 기능): ① 런처 아이콘을 Material 블루 그라데이션+흰 스피커로 교체
+  ② **스테레오 페어** — 소스가 스피커별 채널(양쪽/왼쪽/오른쪽)을 지정, 좌우는 채널 추출
+  모노 스트림으로 송신(규약 변경 없음, ModeBSender SendTarget.channel) ③ **원격 볼륨** —
+  `vol` 컨트롤 메시지(0~100), 폰(ControlServer 세션 게인→ModeAPlayer gainProvider)·
+  PC(ModeBPlayer.SetGain) 모두 수신 적용, 스피커 행에 채널 칩+볼륨 슬라이더.
+  남은 추천 후보: Opus, PC 동기+트레이, 자동 연결, QR 페어링, 스피커측 재생 컨트롤.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.

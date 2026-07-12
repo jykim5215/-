@@ -31,6 +31,7 @@ class ModeAPlayer(
     private val offsetUsProvider: () -> Long?,
     private val onStats: (lossPct: Double, level: Float, bufferedMs: Int) -> Unit,
     private val onError: (String) -> Unit,
+    private val gainProvider: () -> Float = { 1f },
 ) {
     private val jitter = JitterBuffer()
     @Volatile private var running = false
@@ -153,6 +154,20 @@ class ModeAPlayer(
         }
     }
 
+    /** 원격 볼륨: 16bit LE 샘플에 소프트웨어 게인 적용 (1.0이면 무변경). */
+    private fun applyGain(data: ByteArray, gain: Float) {
+        if (gain > 0.99f && gain < 1.01f) return
+        val g = gain.coerceIn(0f, 1f)
+        var i = 0
+        while (i + 1 < data.size) {
+            val s = ((data[i].toInt() and 0xFF) or (data[i + 1].toInt() shl 8))
+            val v = (s * g).toInt().coerceIn(-32768, 32767)
+            data[i] = v.toByte()
+            data[i + 1] = (v shr 8).toByte()
+            i += 2
+        }
+    }
+
     private fun playLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         // 첫 패킷으로 포맷 파악 (상대 준비·동의 시간을 고려해 30초 대기)
@@ -226,6 +241,7 @@ class ModeAPlayer(
                     }
                     else -> {
                         val frame = jitter.poll() ?: continue
+                        applyGain(frame.data, gainProvider())
                         track.write(frame.data, 0, frame.data.size)
                         var peak = 0
                         var i = 0

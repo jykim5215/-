@@ -9,6 +9,7 @@ import android.os.Looper
 import app.audiobridge.audio.CaptureSource
 import app.audiobridge.audio.ModeAPlayer
 import app.audiobridge.audio.ModeBSender
+import app.audiobridge.audio.SendTarget
 import app.audiobridge.net.ClockSync
 import app.audiobridge.net.ControlClient
 import app.audiobridge.net.ControlServer
@@ -45,12 +46,14 @@ object BridgeEngine {
         @Volatile var peerOutput: String? = null
         @Volatile var sendPort: Int = -1
         @Volatile var requested = false
+        @Volatile var channelMode = 0 // 0=양쪽 1=왼쪽 2=오른쪽
+        @Volatile var gain = 100
         val clock = ClockSync({ obj -> client?.send(obj) })
     }
 
     private val links = mutableListOf<Link>()
     private var nextLinkId = 1
-    @Volatile private var sendTargets: List<InetSocketAddress> = emptyList()
+    @Volatile private var sendTargets: List<SendTarget> = emptyList()
 
     // 상시 대기 서버 (상대가 나에게 연결)
     private var server: ControlServer? = null
@@ -439,13 +442,29 @@ object BridgeEngine {
 
     private fun refreshSpeakers() {
         BridgeState.speakers.value = mainLinks().map {
-            SpeakerInfo(it.id, it.name.ifEmpty { it.host }, it.kind, it.sendPort > 0)
+            SpeakerInfo(it.id, it.name.ifEmpty { it.host }, it.kind, it.sendPort > 0, it.channelMode, it.gain)
         }
     }
 
     private fun refreshTargets() {
         sendTargets = mainLinks().filter { it.sendPort > 0 }
-            .map { InetSocketAddress(it.host, it.sendPort) }
+            .map { SendTarget(InetSocketAddress(it.host, it.sendPort), it.channelMode) }
+    }
+
+    /** 스테레오 페어: 스피커별 채널 지정 (0=양쪽 1=왼쪽 2=오른쪽) */
+    fun setSpeakerChannel(id: Int, mode: Int) {
+        val link = mainLinks().firstOrNull { it.id == id } ?: return
+        link.channelMode = mode.coerceIn(0, 2)
+        refreshTargets()
+        refreshSpeakers()
+    }
+
+    /** 원격 볼륨 (0~100) — 해당 스피커에 vol 메시지 전송 */
+    fun setSpeakerGain(id: Int, gain: Int) {
+        val link = mainLinks().firstOrNull { it.id == id } ?: return
+        link.gain = gain.coerceIn(0, 100)
+        link.client?.send(JSONObject().put("type", "vol").put("gain", link.gain))
+        refreshSpeakers()
     }
 
     // ---------- 역할 ----------
@@ -717,14 +736,14 @@ object BridgeEngine {
             }
             SendReason.SERVER -> {
                 val host = BridgeState.peerHost.value ?: run { cancelSend(null); return }
-                val target = InetSocketAddress(host, serverSendPort)
+                val target = SendTarget(InetSocketAddress(host, serverSendPort))
                 scope.launch { startSender(tcpTarget = null, fixedTargets = listOf(target)) }
             }
             null -> {}
         }
     }
 
-    private fun startSender(tcpTarget: InetSocketAddress?, fixedTargets: List<InetSocketAddress>? = null) {
+    private fun startSender(tcpTarget: InetSocketAddress?, fixedTargets: List<SendTarget>? = null) {
         val s = ModeBSender(
             targetsProvider = { fixedTargets ?: sendTargets },
             tcpTarget = tcpTarget,
@@ -815,6 +834,9 @@ object BridgeEngine {
                     link.sendPort = port
                     refreshTargets()
                     refreshSpeakers()
+                    if (link.gain != 100) {
+                        link.client?.send(JSONObject().put("type", "vol").put("gain", link.gain))
+                    }
                     if (awaitingTcpSend && tcp) {
                         awaitingTcpSend = false
                         val t = InetSocketAddress(link.host, port)

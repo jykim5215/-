@@ -8,7 +8,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class ConnState { DISCONNECTED, CONNECTING, CONNECTED }
 
-data class SpeakerInfo(val id: Int, val name: String, val kind: String, val active: Boolean)
+/** [channel] 0=양쪽, 1=왼쪽, 2=오른쪽 · [gain] 0~100 */
+data class SpeakerInfo(
+    val id: Int,
+    val name: String,
+    val kind: String,
+    val active: Boolean,
+    val channel: Int = 0,
+    val gain: Int = 100,
+)
 
 /** UI와 엔진이 공유하는 관찰 가능 상태. */
 object BridgeState {

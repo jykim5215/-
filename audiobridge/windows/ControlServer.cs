@@ -143,6 +143,9 @@ public sealed class ControlServer
                 case "bye":
                     Close();
                     break;
+                case "vol":
+                    _playerB?.SetGain(GetInt(m, "gain", 100));
+                    break;
                 case "modeA":
                     HandleModeA(m);
                     break;

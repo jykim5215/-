@@ -21,6 +21,10 @@ public sealed class ModeBPlayer : IDisposable
 
     private WasapiOut? _output;
     private BufferedWaveProvider? _provider;
+    private volatile float _gain = 1f;
+
+    /// <summary>원격 볼륨 (0~100).</summary>
+    public void SetGain(int percent) => _gain = Math.Clamp(percent, 0, 100) / 100f;
 
     public ModeBPlayer(IPAddress phone, int port, bool useTcp)
     {
@@ -157,7 +161,19 @@ public sealed class ModeBPlayer : IDisposable
                 return;
             }
         }
-        _provider.AddSamples(payload.ToArray(), 0, payload.Length);
+        var buf = payload.ToArray();
+        float g = _gain;
+        if (g < 0.99f)
+        {
+            for (int i = 0; i + 1 < buf.Length; i += 2)
+            {
+                short s = (short)(buf[i] | (buf[i + 1] << 8));
+                int v = Math.Clamp((int)(s * g), short.MinValue, short.MaxValue);
+                buf[i] = (byte)v;
+                buf[i + 1] = (byte)(v >> 8);
+            }
+        }
+        _provider.AddSamples(buf, 0, buf.Length);
     }
 
     public void Dispose()

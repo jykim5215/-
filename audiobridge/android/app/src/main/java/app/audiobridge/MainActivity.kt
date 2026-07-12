@@ -603,29 +603,57 @@ private fun ConnectedCard(
             if (myOutput == "peer" && !isServer) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     speakers.forEach { sp ->
-                        Row(
+                        Column(
                             Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(cs.surface.copy(alpha = 0.6f))
-                                .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(start = 12.dp, top = 4.dp, bottom = 6.dp, end = 4.dp),
                         ) {
-                            Icon(
-                                painterResource(if (sp.kind == "pc") R.drawable.ic_device_pc else R.drawable.ic_device_phone),
-                                contentDescription = null,
-                                tint = cs.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(sp.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            Text(
-                                if (sp.active && sending) "재생 중" else "대기 중",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (sp.active && sending) cs.primary else cs.onSurfaceVariant,
-                            )
-                            IconButton(onClick = { BridgeEngine.removeSpeaker(sp.id) }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Filled.Close, contentDescription = "제거", tint = cs.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painterResource(if (sp.kind == "pc") R.drawable.ic_device_pc else R.drawable.ic_device_phone),
+                                    contentDescription = null,
+                                    tint = cs.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(sp.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                // 스테레오 페어: 탭할 때마다 양쪽 → 왼쪽 → 오른쪽 순환
+                                SelectChip(
+                                    label = when (sp.channel) { 1 -> "왼쪽"; 2 -> "오른쪽"; else -> "양쪽" },
+                                    selected = sp.channel != 0,
+                                ) { BridgeEngine.setSpeakerChannel(sp.id, (sp.channel + 1) % 3) }
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (sp.active && sending) "재생 중" else "대기 중",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (sp.active && sending) cs.primary else cs.onSurfaceVariant,
+                                )
+                                IconButton(onClick = { BridgeEngine.removeSpeaker(sp.id) }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Filled.Close, contentDescription = "제거", tint = cs.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painterResource(R.drawable.ic_speaker),
+                                    contentDescription = "볼륨",
+                                    tint = cs.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Slider(
+                                    value = sp.gain.toFloat(),
+                                    onValueChange = { BridgeEngine.setSpeakerGain(sp.id, it.toInt()) },
+                                    valueRange = 0f..100f,
+                                    modifier = Modifier.weight(1f).height(24.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "${sp.gain}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = cs.onSurfaceVariant,
+                                )
                             }
                         }
                     }
