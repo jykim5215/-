@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class ConnState { DISCONNECTED, CONNECTING, CONNECTED }
 
+data class SpeakerInfo(val id: Int, val name: String, val kind: String, val active: Boolean)
+
 /** UI와 엔진이 공유하는 관찰 가능 상태. */
 object BridgeState {
     // 연결
@@ -37,6 +39,11 @@ object BridgeState {
     val bufferMs = MutableStateFlow(60)
     val transportTcp = MutableStateFlow(false)
     val modeAPort = MutableStateFlow(Protocol.DEFAULT_MODE_A_PORT)
+
+    // 다대일 스피커 (내가 소스일 때 연결된 스피커들)
+    val speakers = MutableStateFlow<List<SpeakerInfo>>(emptyList())
+    // 이 기기 재생 시차 미세 조정 (ms, -100..100)
+    val nudgeMs = MutableStateFlow(0)
 
     // 검색
     val discovering = MutableStateFlow(false)

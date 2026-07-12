@@ -40,7 +40,7 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 | 폰→PC | `{"type":"modeA","action":"start","udpPort":48552,"sampleRate":48000,"channels":2,"codec":0}` | "PC 소리를 내 udpPort로 보내라" |
 | 폰→PC | `{"type":"modeA","action":"stop"}` | 모드 A 중지 |
 | PC→폰 | `{"type":"modeA","status":"ok"}` / `{"type":"modeA","status":"error","message":"..."}` | 시작/중지 응답 |
-| 폰→PC | `{"type":"modeB","action":"start","sampleRate":48000,"channels":1,"codec":0}` | "폰 오디오를 보낼 테니 재생하라" |
+| 폰→PC | `{"type":"modeB","action":"start","sampleRate":48000,"channels":1,"codec":0,"delayMs":60}` | "폰 오디오를 보낼 테니 재생하라". `delayMs`는 소스가 지시하는 동기 재생 지연(§7) — 모든 스피커가 같은 값을 쓰면 시간 정렬됨 |
 | PC→폰 | `{"type":"modeB","status":"ok","udpPort":48553}` | PC의 수신 포트 통지 |
 | 폰→PC | `{"type":"modeB","action":"stop"}` | 모드 B 중지 |
 | 양쪽 | `{"type":"role","output":"self"\|"other"\|"none"}` | "소리가 나올 곳"에 대한 자기 선택 통지 (보내는 쪽 기준). 폰↔폰에서 양쪽 선택이 상보(한쪽 self·한쪽 other)일 때만 스트림 시작. PC는 이 메시지를 보내지 않으며 항상 폰의 선택에 자동 동의 |
@@ -99,7 +99,22 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
   동의가 거부되면 뒤늦게 `{"type":"modeA","status":"error"}`를 보낸다. v1은 UDP만 지원(transport
   tcp 요청은 error).
 
-## 7. 버전 정책
+## 7. 시계 동기와 동기 재생 (다대일 스피커)
+
+- 소스 기기는 여러 수신기에 컨트롤 연결을 만들고 **같은 오디오 패킷(동일 seq/timestamp)을
+  각 수신기의 UDP 포트로 복제 송신**할 수 있다 (다대일, UDP 전용).
+- **clk 메시지**: 수신(재생) 측이 컨트롤 채널로 `{"type":"clk","t0":<내 시계 µs>}`를 보내면
+  상대(소스)는 즉시 `{"type":"clk","t0":<에코>,"t1":<소스 시계 µs>}`로 응답한다.
+  수신측은 왕복시간이 가장 짧은 샘플로 오프셋을 추정한다:
+  `offset = (t0 + t2)/2 − t1`, `toLocal(srcTs) = srcTs + offset`.
+- **소스 시계 = 오디오 패킷 timestampUs와 같은 단조 시계**여야 한다
+  (안드로이드: elapsedRealtimeNanos/1000, 윈도우: 전역 Stopwatch µs).
+- 수신기는 각 프레임을 `toLocal(timestampUs) + delayMs + (기기별 미세 조정)` 시점에 재생한다.
+  이르면 무음 삽입, 60ms 이상 늦으면 폐기. 오프셋이 없으면(clk 미지원 상대) 첫 패킷
+  도착 시각 기준 잠정 오프셋으로 동작한다(단독 재생과 동일).
+- 남는 기기별 오차(출력 하드웨어 지연 차이)는 수신기 설정의 미세 조정(±100ms)으로 보정한다.
+
+## 8. 버전 정책
 
 - `version` 불일치 시 상위 버전 쪽이 하위 호환을 시도하지 않고 명확한 오류 메시지를 표시한다.
 - codec=1(Opus)은 프레임=20ms, payload=Opus 패킷으로 예약. v1에서는 협상 거부.

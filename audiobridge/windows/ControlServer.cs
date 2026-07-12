@@ -130,6 +130,13 @@ public sealed class ControlServer
                 case "ping":
                     Send(new { type = "pong" });
                     break;
+                case "clk":
+                    // 시계 동기 (PROTOCOL.md §7): 수신측 질의를 즉시 에코 + 내 시계 첨부
+                    if (!m.TryGetProperty("t1", out _))
+                    {
+                        Send(new { type = "clk", t0 = GetLong(m, "t0", 0), t1 = Clock.Us });
+                    }
+                    break;
                 case "pong":
                     _lastPongMs = Environment.TickCount64;
                     break;
@@ -266,5 +273,8 @@ public sealed class ControlServer
 
         private static int GetInt(JsonElement m, string key, int def) =>
             m.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : def;
+
+        private static long GetLong(JsonElement m, string key, long def) =>
+            m.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : def;
     }
 }

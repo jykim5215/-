@@ -137,6 +137,15 @@ audiobridge/
   설정(기본 모델명, 검색 목록에 반영) ⑤ 용어 순화(끊김 방지·빠름/안정), 부가설명 축소
   ⑥ UI를 Material You(다이내믹 컬러, API31+)로 재작성 — ui/Theme.kt, Retro.kt 삭제.
   주의: 서버 폰의 modeA 송신은 UDP 전용, 수신측 첫 패킷 대기 30초(동의 시간 확보).
+- [x] v2.1 (사용자 피드백: 다대일 + 레이턴시/동기): ① **다대일 스피커** — 엔진을 다중 링크
+  구조(Link 리스트)로 재작성, ModeBSender가 targetsProvider로 여러 목적지에 UDP 복제 송신
+  (최대 4대, TCP는 1대1 전용), UI에 "+ 스피커 추가"/목록/제거 ② **시간 동기 재생** —
+  clk 시계동기(PROTOCOL §7, NTP식 최소 RTT), ModeAPlayer를 타임스탬프 스케줄 방식으로
+  재작성("소스시각+delayMs+nudge"에 재생, 이르면 무음·늦으면 폐기), modeB start에 delayMs
+  지시값, 윈도우는 전역 Clock.Us로 타임스탬프·clk 통일 ③ 기기별 "소리 시차 미세 조정"
+  (±100ms, nudgeMs) ④ AudioTrack 버퍼 8→4프레임(20ms)으로 지연 감소.
+  주의: PC는 수신 재생 시 clk를 쓰지 않으므로(BufferedWaveProvider) 다대일에 PC를 섞으면
+  PC만 정렬이 느슨함 — 향후 개선 포인트.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.

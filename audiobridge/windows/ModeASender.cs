@@ -193,7 +193,7 @@ public sealed class ModeASender : IDisposable
     {
         int flags = _firstPacket ? Protocol.FlagFirst : 0;
         _firstPacket = false;
-        int len = Protocol.BuildPacket(packet, frame, _seq++, Protocol.SampleRate, 2, flags, _clock.Elapsed.Ticks / 10);
+        int len = Protocol.BuildPacket(packet, frame, _seq++, Protocol.SampleRate, 2, flags, Clock.Us);
         try
         {
             if (_useTcp)

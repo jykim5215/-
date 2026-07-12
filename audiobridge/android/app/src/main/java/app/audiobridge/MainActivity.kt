@@ -119,11 +119,15 @@ fun MainScreen() {
     val peers by BridgeState.peers.collectAsState()
     val update by BridgeState.update.collectAsState()
     val updateProgress by BridgeState.updateProgress.collectAsState()
+    val speakers by BridgeState.speakers.collectAsState()
+    val isServerSession by BridgeState.isServerSession.collectAsState()
+    val nudgeMs by BridgeState.nudgeMs.collectAsState()
 
     val uiScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var showSettings by remember { mutableStateOf(false) }
     var showManual by remember { mutableStateOf(false) }
+    var showAddSpeaker by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { BridgeState.toast.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(Unit) {
@@ -265,6 +269,9 @@ fun MainScreen() {
                     sendPending = sendPending,
                     level = level,
                     source = bSource,
+                    speakers = speakers,
+                    isServer = isServerSession,
+                    onAddSpeaker = { showAddSpeaker = true },
                 )
                 ConnState.CONNECTING -> Surface(shape = RoundedCornerShape(28.dp), color = cs.surface, border = BorderStroke(1.dp, cs.outline)) {
                     Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -292,6 +299,51 @@ fun MainScreen() {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+
+    if (showAddSpeaker) {
+        AlertDialog(
+            onDismissRequest = { showAddSpeaker = false },
+            title = { Text("스피커 추가") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "추가할 폰은 앱을 열어 두세요. 소리는 모든 스피커에서 동시에 나와요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
+                    Button(onClick = { BridgeEngine.discover() }, enabled = !discovering, modifier = Modifier.fillMaxWidth()) {
+                        if (discovering) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("찾는 중…")
+                        } else {
+                            Text("기기 찾기")
+                        }
+                    }
+                    peers.forEach { peer ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(cs.surfaceVariant)
+                                .clickable {
+                                    showAddSpeaker = false
+                                    BridgeEngine.addSpeaker(peer.host, peer.ctlPort)
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(peer.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text("추가", style = MaterialTheme.typography.labelLarge, color = cs.primary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAddSpeaker = false }) { Text("닫기") }
+            },
+        )
     }
 
     if (showManual) {
@@ -351,6 +403,17 @@ fun MainScreen() {
                         SelectChip(label = "빠름 (권장)", selected = !transportTcp) { BridgeEngine.setTransportTcp(false) }
                         SelectChip(label = "안정", selected = transportTcp) { BridgeEngine.setTransportTcp(true) }
                     }
+                    Text("소리 시차 미세 조정 (${nudgeMs}ms)", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = nudgeMs.toFloat(),
+                        onValueChange = { BridgeEngine.setNudgeMs(it.toInt()) },
+                        valueRange = -100f..100f,
+                    )
+                    Text(
+                        "여러 스피커의 소리가 미세하게 어긋나면 이 기기에서 조절해요",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
                     TextButton(onClick = {
                         uiScope.launch {
                             val found = Updater.check(context.applicationContext)
@@ -452,8 +515,12 @@ private fun ConnectedCard(
     sendPending: Boolean,
     level: Float,
     source: CaptureSource,
+    speakers: List<SpeakerInfo>,
+    isServer: Boolean,
+    onAddSpeaker: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val multi = speakers.size > 1
     val peerIcon = painterResource(if (peerKind == "pc") R.drawable.ic_device_pc else R.drawable.ic_device_phone)
     Surface(shape = RoundedCornerShape(28.dp), color = cs.primaryContainer) {
         Column(
@@ -478,9 +545,13 @@ private fun ConnectedCard(
                 DeviceAvatar(peerIcon)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(peerName, style = MaterialTheme.typography.titleMedium, color = cs.onPrimaryContainer)
                     Text(
-                        if (peerKind == "pc") "PC · 연결됨" else "폰 · 연결됨",
+                        if (multi) "스피커 ${speakers.size}대" else peerName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = cs.onPrimaryContainer,
+                    )
+                    Text(
+                        if (multi) "동시에 연결됨" else if (peerKind == "pc") "PC · 연결됨" else "폰 · 연결됨",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onPrimaryContainer.copy(alpha = 0.7f),
                     )
@@ -525,6 +596,42 @@ private fun ConnectedCard(
                         icon = painterResource(R.drawable.ic_mic),
                         selected = source == CaptureSource.MIC,
                     ) { BridgeEngine.setBSource(CaptureSource.MIC) }
+                }
+            }
+
+            // 스피커 목록 + 추가 (내가 소스일 때)
+            if (myOutput == "peer" && !isServer) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    speakers.forEach { sp ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(cs.surface.copy(alpha = 0.6f))
+                                .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                painterResource(if (sp.kind == "pc") R.drawable.ic_device_pc else R.drawable.ic_device_phone),
+                                contentDescription = null,
+                                tint = cs.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(sp.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(
+                                if (sp.active && sending) "재생 중" else "대기 중",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (sp.active && sending) cs.primary else cs.onSurfaceVariant,
+                            )
+                            IconButton(onClick = { BridgeEngine.removeSpeaker(sp.id) }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = "제거", tint = cs.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                    if (speakers.size < 4) {
+                        TextButton(onClick = onAddSpeaker) { Text("+ 스피커 추가") }
+                    }
                 }
             }
 

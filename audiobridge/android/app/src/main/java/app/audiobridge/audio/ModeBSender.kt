@@ -14,7 +14,6 @@ import app.audiobridge.net.Protocol
 import java.io.DataOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
@@ -24,20 +23,20 @@ import kotlin.math.max
 enum class CaptureSource { MIC, INTERNAL }
 
 /**
- * 모드 B: 폰 오디오(마이크 또는 내부 재생 캡처)를 PC로 송신한다 (PC = 폰의 스피커).
- * 마이크 = 모노, 내부 캡처 = 스테레오. UDP 기본, TCP 옵션.
+ * 이 기기 소리(마이크 또는 미디어 캡처)를 상대(들)에게 보낸다.
+ * UDP는 [targetsProvider]가 주는 여러 목적지에 같은 패킷을 복제 송신(다대일 스피커),
+ * TCP(안정)는 단일 목적지 전용.
+ * 패킷 타임스탬프는 clk 동기와 같은 시계(elapsedRealtimeNanos)를 쓴다.
  */
 class ModeBSender(
-    private val host: String,
-    private val port: Int,
-    private val useTcp: Boolean,
+    private val targetsProvider: () -> List<InetSocketAddress>,
+    private val tcpTarget: InetSocketAddress?,
     private val source: CaptureSource,
     private val projection: MediaProjection?,
     private val onLevel: (Float) -> Unit,
     private val onError: (String) -> Unit,
 ) {
     @Volatile private var running = false
-    private var record: AudioRecord? = null
 
     val channels: Int get() = if (source == CaptureSource.INTERNAL) 2 else 1
 
@@ -45,18 +44,17 @@ class ModeBSender(
         val rec = try {
             createRecord()
         } catch (e: Exception) {
-            onError("오디오 캡처 시작 실패: ${e.message}")
+            onError("소리 담기를 시작할 수 없어요: ${e.message}")
             return false
         }
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
             onError(
-                if (source == CaptureSource.MIC) "마이크를 열 수 없습니다 (다른 앱이 사용 중일 수 있음)"
-                else "내부 소리 캡처를 시작할 수 없습니다"
+                if (source == CaptureSource.MIC) "마이크를 열 수 없어요 (다른 앱이 사용 중일 수 있어요)"
+                else "미디어 소리 담기를 시작할 수 없어요"
             )
             return false
         }
-        record = rec
         running = true
         thread(name = "ab-b-tx") { loop(rec) }
         return true
@@ -77,8 +75,8 @@ class ModeBSender(
             .setChannelMask(channelMask)
             .build()
         return if (source == CaptureSource.INTERNAL) {
-            if (Build.VERSION.SDK_INT < 29) throw IllegalStateException("내부 소리 캡처는 Android 10 이상에서만 가능합니다")
-            val proj = projection ?: throw IllegalStateException("화면 녹화 권한이 없습니다")
+            if (Build.VERSION.SDK_INT < 29) throw IllegalStateException("Android 10 이상에서만 가능해요")
+            val proj = projection ?: throw IllegalStateException("화면 소리 공유 동의가 없어요")
             val config = AudioPlaybackCaptureConfiguration.Builder(proj)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
@@ -107,19 +105,18 @@ class ModeBSender(
         var tcpOut: DataOutputStream? = null
         var tcpSocket: Socket? = null
         try {
-            if (useTcp) {
+            if (tcpTarget != null) {
                 tcpSocket = Socket().apply {
                     tcpNoDelay = true
-                    connect(InetSocketAddress(host, port), 4000)
+                    connect(tcpTarget, 4000)
                 }
                 tcpOut = DataOutputStream(tcpSocket.getOutputStream())
             } else {
                 udp = DatagramSocket()
-                udp.connect(InetAddress.getByName(host), port)
             }
             rec.startRecording()
             if (rec.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                onError("캡처가 시작되지 않았습니다 (기기 정책으로 차단되었을 수 있음)")
+                onError("소리 담기가 시작되지 않았어요")
                 return
             }
             var seq = 0
@@ -130,7 +127,7 @@ class ModeBSender(
                 while (off < frameBytes && running) {
                     val n = rec.read(frame, off, frameBytes - off)
                     if (n < 0) {
-                        onError("오디오 캡처 오류 (code $n)")
+                        onError("소리 담기 오류 (code $n)")
                         return
                     }
                     off += n
@@ -145,7 +142,10 @@ class ModeBSender(
                 if (tcpOut != null) {
                     tcpOut.write(packet, 0, len)
                 } else {
-                    udp?.send(DatagramPacket(packet, len))
+                    val dests = targetsProvider()
+                    for (d in dests) {
+                        runCatching { udp?.send(DatagramPacket(packet, len, d)) }
+                    }
                 }
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastLevel > 100) {
@@ -162,7 +162,7 @@ class ModeBSender(
                 }
             }
         } catch (e: Exception) {
-            if (running) onError("전송 실패: ${e.message}")
+            if (running) onError("보내기 실패: ${e.message}")
         } finally {
             runCatching { rec.stop() }
             rec.release()

@@ -64,6 +64,13 @@ class ControlClient(
                         }
                         "ping" -> send(JSONObject().put("type", "pong"))
                         "pong" -> lastPong = SystemClock.elapsedRealtime()
+                        "clk" ->
+                            if (!obj.has("t1")) {
+                                // 시계 동기 질의 — 즉시 내 시계를 붙여 에코
+                                send(obj.put("t1", SystemClock.elapsedRealtimeNanos() / 1000))
+                            } else {
+                                onMessage(obj)
+                            }
                         "bye" -> break
                         else -> onMessage(obj)
                     }

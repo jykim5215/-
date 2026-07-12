@@ -20,7 +20,6 @@ class ControlServer(
     private val nameProvider: () -> String,
     private val port: Int,
     private val audioPort: Int,
-    private val bufferMsProvider: () -> Int,
     private val callbacks: Callbacks,
 ) {
     interface Callbacks {
@@ -38,6 +37,15 @@ class ControlServer(
         fun onPlaying(playing: Boolean)
         fun onLevel(level: Float)
         fun onError(msg: String)
+
+        /** 시계 동기 응답 수신 (내가 보낸 질의의 에코) */
+        fun onClkReply(t0: Long, t1: Long)
+        /** modeB start의 재생 지연 지시값(ms, 없으면 -1) — 재생 시작 전에 호출됨 */
+        fun onPlayDelay(delayMs: Int)
+        /** 재생 스케줄용 파라미터 제공 */
+        fun playbackDelayMs(): Int
+        fun playbackNudgeMs(): Int
+        fun playbackOffsetUs(): Long?
     }
 
     private var serverSocket: ServerSocket? = null
@@ -147,6 +155,12 @@ class ControlServer(
                 }
                 "ping" -> send(JSONObject().put("type", "pong"))
                 "pong" -> lastPong = SystemClock.elapsedRealtime()
+                "clk" ->
+                    if (!m.has("t1")) {
+                        send(m.put("t1", SystemClock.elapsedRealtimeNanos() / 1000))
+                    } else {
+                        callbacks.onClkReply(m.optLong("t0", 0), m.optLong("t1", 0))
+                    }
                 "bye" -> close()
                 "role" -> callbacks.onPeerRole(m.optString("output", "none"))
                 "modeA" -> when (m.optString("action")) {
@@ -186,9 +200,12 @@ class ControlServer(
             }
             val tcp = m.optString("transport", "udp") == "tcp"
             val peerHost = socket.inetAddress.hostAddress ?: return
+            callbacks.onPlayDelay(m.optInt("delayMs", -1))
             player?.stop()
             val p = ModeAPlayer(
-                bufferMsProvider = bufferMsProvider,
+                delayMsProvider = { callbacks.playbackDelayMs() },
+                nudgeMsProvider = { callbacks.playbackNudgeMs() },
+                offsetUsProvider = { callbacks.playbackOffsetUs() },
                 onStats = { _, level, _ -> callbacks.onLevel(level) },
                 onError = { msg -> callbacks.onError(msg) },
             )
