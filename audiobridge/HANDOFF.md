@@ -124,6 +124,11 @@ audiobridge/
   (3초×5회, 모드 A 자동 복원) ③ **앱 내 업데이트**: CI가 릴리스에 `latest.json`
   (versionCode=github.run_number)을 올리고, 앱이 시작 시 확인 → 카드 표시 → APK 다운로드
   → FileProvider+ACTION_VIEW 설치. versionCode는 CI가 `-PversionCode=run_number`로 주입.
+- [x] v1.2 (사용자 피드백: **폰↔폰이 핵심**): 폰에 "스피커 모드" 추가 —
+  폰이 PC companion과 동일한 서버 역할 수행(net/DiscoveryResponder + net/ControlServer,
+  ModeAPlayer.startTcpServer 추가). 프로토콜 변경 없음, `hello.kind`("pc"/"phone")만 추가.
+  폰 스피커는 modeB 수신 전용(모드 A는 error 응답, 클라이언트는 kind=phone이면 자동시작 생략).
+  마이크 소스 + 폰 스피커 = 마이크→확성기 사용례 README에 문서화.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.

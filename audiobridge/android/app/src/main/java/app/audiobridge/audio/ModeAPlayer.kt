@@ -10,6 +10,7 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
 import kotlin.concurrent.thread
 import kotlin.math.abs
@@ -28,6 +29,7 @@ class ModeAPlayer(
     @Volatile private var running = false
     private var udpSocket: DatagramSocket? = null
     private var tcpSocket: Socket? = null
+    private var serverSocket: ServerSocket? = null
 
     /** UDP 수신 시작. 포트 바인드 실패 시 false. */
     fun startUdp(listenPort: Int, allowedHost: String): Boolean {
@@ -67,10 +69,44 @@ class ModeAPlayer(
         return true
     }
 
+    /** TCP 서버 모드 (스피커 모드): 이 기기가 리스너가 되어 상대의 접속을 받는다. */
+    fun startTcpServer(listenPort: Int, allowedHost: String): Boolean {
+        val allowed = runCatching { InetAddress.getByName(allowedHost) }.getOrNull()
+            ?: run { onError("상대 주소를 확인할 수 없습니다"); return false }
+        val server = try {
+            ServerSocket(listenPort)
+        } catch (e: Exception) {
+            onError("포트 ${listenPort}을(를) 사용할 수 없습니다: ${e.message}")
+            return false
+        }
+        serverSocket = server
+        running = true
+        thread(name = "ab-a-rx") {
+            try {
+                while (running) {
+                    val s = server.accept()
+                    if (s.inetAddress != allowed) {
+                        runCatching { s.close() } // 페어링된 상대 외 접속 거부
+                        continue
+                    }
+                    s.tcpNoDelay = true
+                    tcpSocket = s
+                    tcpLoop(s)
+                    break
+                }
+            } catch (_: Exception) {
+                // 리스너 닫힘
+            }
+        }
+        thread(name = "ab-a-play") { playLoop() }
+        return true
+    }
+
     fun stop() {
         running = false
         runCatching { udpSocket?.close() }
         runCatching { tcpSocket?.close() }
+        runCatching { serverSocket?.close() }
         jitter.clear()
     }
 
@@ -116,7 +152,7 @@ class ModeAPlayer(
             Thread.sleep(20)
             waited += 20
             if (waited > 8000) {
-                if (running) onError("PC에서 오디오가 오지 않습니다 (방화벽/포트 확인)")
+                if (running) onError("상대 기기에서 오디오가 오지 않습니다 (같은 Wi-Fi·방화벽 확인)")
                 return
             }
         }

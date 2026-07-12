@@ -20,6 +20,14 @@ object BridgeState {
     val conn = MutableStateFlow(ConnState.DISCONNECTED)
     val peerName = MutableStateFlow<String?>(null)
     val peerHost = MutableStateFlow<String?>(null)
+    /** 연결된 상대 종류: "pc" 또는 "phone" (hello의 kind 필드) */
+    val peerKind = MutableStateFlow("pc")
+
+    // 스피커 모드 (이 폰이 다른 폰/PC의 스피커가 됨)
+    val speakerOn = MutableStateFlow(false)
+    val speakerPeer = MutableStateFlow<String?>(null)
+    val speakerPlaying = MutableStateFlow(false)
+    val speakerLevel = MutableStateFlow(0f)
 
     val modeA = MutableStateFlow(false)
     val modeB = MutableStateFlow(false)

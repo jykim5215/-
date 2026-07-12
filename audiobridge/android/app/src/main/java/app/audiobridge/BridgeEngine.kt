@@ -10,7 +10,9 @@ import app.audiobridge.audio.CaptureSource
 import app.audiobridge.audio.ModeAPlayer
 import app.audiobridge.audio.ModeBSender
 import app.audiobridge.net.ControlClient
+import app.audiobridge.net.ControlServer
 import app.audiobridge.net.Discovery
+import app.audiobridge.net.DiscoveryResponder
 import app.audiobridge.net.Protocol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -119,14 +121,16 @@ object BridgeEngine {
         val client = ControlClient(
             host = host, port = port, phoneName = name,
             onMessage = ::onCtlMessage,
-            onConnected = { peer ->
+            onConnected = { peer, kind ->
                 reconnectAttempts = 0
                 BridgeState.conn.value = ConnState.CONNECTED
                 BridgeState.peerName.value = peer
                 BridgeState.peerHost.value = host
+                BridgeState.peerKind.value = kind
                 startService(BridgeService.ACTION_FOREGROUND)
                 // "그냥 연결하면 소리 나게": PC 소리 듣기를 자동 시작 (사용자가 껐었다면 유지)
-                val autoA = resumeModeA || prefs().getBoolean("autoModeA", true)
+                // 상대가 폰 스피커면 이 방향은 지원되지 않으므로 건너뜀
+                val autoA = (resumeModeA || prefs().getBoolean("autoModeA", true)) && kind != "phone"
                 resumeModeA = false
                 if (autoA) main.post { if (!BridgeState.modeA.value) toggleModeA(true, fromUser = false) }
             },
@@ -196,11 +200,69 @@ object BridgeEngine {
         BridgeState.conn.value = ConnState.DISCONNECTED
         BridgeState.peerName.value = null
         BridgeState.peerHost.value = null
+        BridgeState.peerKind.value = "pc"
         BridgeState.stats.value = Stats()
-        if (::app.isInitialized) {
-            runCatching { app.startService(serviceIntent(BridgeService.ACTION_STOP)) }
-        }
+        maybeStopService()
         message?.let { BridgeState.notify(it) }
+    }
+
+    /** 클라이언트 연결도 없고 스피커 모드도 꺼져 있을 때만 서비스 종료. */
+    private fun maybeStopService() {
+        if (!::app.isInitialized) return
+        if (BridgeState.speakerOn.value) return
+        runCatching { app.startService(serviceIntent(BridgeService.ACTION_STOP)) }
+    }
+
+    // ---------- 스피커 모드 (이 폰이 다른 폰/PC의 스피커) ----------
+
+    private var speakerServer: ControlServer? = null
+    private var speakerDiscovery: DiscoveryResponder? = null
+
+    fun setSpeakerMode(on: Boolean) {
+        if (on == BridgeState.speakerOn.value) return
+        if (on) {
+            BridgeState.speakerOn.value = true
+            scope.launch {
+                val name = (Build.MODEL ?: "Android").take(30)
+                val server = ControlServer(
+                    name = name,
+                    port = Protocol.DEFAULT_CTL_PORT,
+                    audioPort = 48553,
+                    bufferMsProvider = { BridgeState.bufferMs.value },
+                    onStatus = { peer, playing ->
+                        BridgeState.speakerPeer.value = peer
+                        BridgeState.speakerPlaying.value = playing
+                        if (!playing) BridgeState.speakerLevel.value = 0f
+                    },
+                    onLevel = { BridgeState.speakerLevel.value = it },
+                    onError = { BridgeState.notify(it) },
+                )
+                if (!server.start()) {
+                    BridgeState.speakerOn.value = false
+                    return@launch
+                }
+                speakerServer = server
+                val disc = DiscoveryResponder(name, Protocol.DEFAULT_CTL_PORT)
+                if (disc.start()) {
+                    speakerDiscovery = disc
+                } else {
+                    BridgeState.notify("자동 검색 응답을 켤 수 없습니다 — 상대가 이 폰의 IP를 직접 입력해야 합니다")
+                }
+                startService(BridgeService.ACTION_FOREGROUND)
+            }
+        } else {
+            val srv = speakerServer; speakerServer = null
+            val disc = speakerDiscovery; speakerDiscovery = null
+            scope.launch {
+                srv?.stop()
+                disc?.stop()
+            }
+            BridgeState.speakerOn.value = false
+            BridgeState.speakerPeer.value = null
+            BridgeState.speakerPlaying.value = false
+            BridgeState.speakerLevel.value = 0f
+            if (BridgeState.conn.value == ConnState.DISCONNECTED) maybeStopService()
+        }
     }
 
     // ---------- 모드 A ----------
@@ -210,7 +272,11 @@ object BridgeEngine {
         if (on) {
             val c = control
             if (c == null || BridgeState.conn.value != ConnState.CONNECTED) {
-                BridgeState.notify("먼저 PC와 연결하세요")
+                BridgeState.notify("먼저 상대 기기와 연결하세요")
+                return
+            }
+            if (BridgeState.peerKind.value == "phone") {
+                BridgeState.notify("상대가 폰 스피커라 이 방향은 지원되지 않습니다 (PC 연결에서 사용)")
                 return
             }
             if (playerA != null) return
@@ -326,7 +392,7 @@ object BridgeEngine {
 
     private fun ensureConnected(): Boolean {
         if (control == null || BridgeState.conn.value != ConnState.CONNECTED) {
-            BridgeState.notify("먼저 PC와 연결하세요")
+            BridgeState.notify("먼저 상대 기기와 연결하세요")
             return false
         }
         return true

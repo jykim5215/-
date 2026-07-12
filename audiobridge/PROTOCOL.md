@@ -36,7 +36,7 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 
 | 방향 | 메시지 | 설명 |
 |---|---|---|
-| 양쪽 | `{"type":"hello","name":"<표시이름>","version":1}` | 최초 1회 |
+| 양쪽 | `{"type":"hello","name":"<표시이름>","version":1,"kind":"pc"}` | 최초 1회. `kind`는 서버 종류(`"pc"`/`"phone"`, 생략 시 `"pc"`) |
 | 폰→PC | `{"type":"modeA","action":"start","udpPort":48552,"sampleRate":48000,"channels":2,"codec":0}` | "PC 소리를 내 udpPort로 보내라" |
 | 폰→PC | `{"type":"modeA","action":"stop"}` | 모드 A 중지 |
 | PC→폰 | `{"type":"modeA","status":"ok"}` / `{"type":"modeA","status":"error","message":"..."}` | 시작/중지 응답 |
@@ -86,7 +86,15 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
   - 모드 B(tcp): PC가 `{"type":"modeB","status":"ok","tcpPort":48553}` 통지 → 폰이 접속해 오디오를 쓴다.
 - PC는 컨트롤 채널 상대 IP가 아닌 주소에서 온 TCP 접속을 거부한다.
 
-## 6. 버전 정책
+## 6. 폰 스피커 역할 (폰 ↔ 폰)
+
+- 폰도 PC companion과 동일한 서버 역할(디스커버리 응답 + 컨트롤 서버 + modeB 수신 재생)을
+  수행할 수 있다 ("스피커 모드"). 프로토콜은 완전히 동일하며 `hello.kind = "phone"`으로 구분한다.
+- 폰 서버는 `modeA start`(서버 쪽 내부 소리 송신)를 지원하지 않고
+  `{"type":"modeA","status":"error","message":...}`로 거절한다. 클라이언트는 `kind=="phone"`이면
+  modeA UI를 비활성화하고 자동 시작을 건너뛴다.
+
+## 7. 버전 정책
 
 - `version` 불일치 시 상위 버전 쪽이 하위 호환을 시도하지 않고 명확한 오류 메시지를 표시한다.
 - codec=1(Opus)은 프레임=20ms, payload=Opus 패킷으로 예약. v1에서는 협상 거부.

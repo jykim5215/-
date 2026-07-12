@@ -21,7 +21,7 @@ class ControlClient(
     val port: Int,
     private val phoneName: String,
     private val onMessage: (JSONObject) -> Unit,
-    private val onConnected: (peerName: String) -> Unit,
+    private val onConnected: (peerName: String, peerKind: String) -> Unit,
     private val onDisconnected: (reason: String?) -> Unit,
 ) {
     @Volatile private var socket: Socket? = null
@@ -56,7 +56,10 @@ class ControlClient(
                             }
                             if (!gotHello) {
                                 gotHello = true
-                                onConnected(obj.optString("name", "PC").take(40))
+                                onConnected(
+                                    obj.optString("name", "PC").take(40),
+                                    obj.optString("kind", "pc"),
+                                )
                             }
                         }
                         "ping" -> send(JSONObject().put("type", "pong"))

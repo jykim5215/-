@@ -112,6 +112,11 @@ fun MainScreen() {
     val discovering by BridgeState.discovering.collectAsState()
     val peers by BridgeState.peers.collectAsState()
     val stats by BridgeState.stats.collectAsState()
+    val peerKind by BridgeState.peerKind.collectAsState()
+    val speakerOn by BridgeState.speakerOn.collectAsState()
+    val speakerPeer by BridgeState.speakerPeer.collectAsState()
+    val speakerPlaying by BridgeState.speakerPlaying.collectAsState()
+    val speakerLevel by BridgeState.speakerLevel.collectAsState()
 
     val update by BridgeState.update.collectAsState()
     val updateProgress by BridgeState.updateProgress.collectAsState()
@@ -185,7 +190,7 @@ fun MainScreen() {
             return
         }
         if (conn != ConnState.CONNECTED) {
-            BridgeState.notify("먼저 PC와 연결하세요")
+            BridgeState.notify("먼저 상대 기기와 연결하세요")
             return
         }
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -265,6 +270,31 @@ fun MainScreen() {
                 }
             }
 
+            // 스피커 모드 카드 (이 폰이 다른 폰의 스피커가 됨)
+            RetroCard {
+                RetroLabel("SPEAKER · 폰 ↔ 폰")
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("이 폰을 스피커로 쓰기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
+                        Text(
+                            when {
+                                !speakerOn -> "다른 폰의 소리를 이 폰에서 재생"
+                                speakerPlaying -> "재생 중 — ${speakerPeer ?: "상대 기기"}"
+                                speakerPeer != null -> "연결됨: $speakerPeer"
+                                else -> "대기 중 — 상대 폰에서 '${(Build.MODEL ?: "이 폰").take(20)}' 선택"
+                            },
+                            fontSize = 12.sp, color = Sub,
+                        )
+                    }
+                    RetroSwitch(speakerOn) { BridgeEngine.setSpeakerMode(it) }
+                }
+                if (speakerPlaying) LevelMeter(speakerLevel)
+            }
+
             // 연결 카드
             RetroCard {
                 RetroLabel("CONNECT")
@@ -273,7 +303,7 @@ fun MainScreen() {
                     Text(peerHost ?: "", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Sub)
                     RetroButton("연결 해제") { BridgeEngine.disconnect() }
                 } else {
-                    RetroButton(if (discovering) "찾는 중…" else "같은 Wi-Fi에서 PC 찾기", enabled = !discovering) {
+                    RetroButton(if (discovering) "찾는 중…" else "같은 Wi-Fi에서 기기 찾기 (폰·PC)", enabled = !discovering) {
                         BridgeEngine.discover()
                     }
                     peers.forEach { peer ->
@@ -332,7 +362,12 @@ fun MainScreen() {
                     Column(Modifier.weight(1f)) {
                         Text("PC 소리를 폰에서 듣기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
                         Text(
-                            if (modeA) "재생 중" else "연결하면 자동으로 켜져요",
+                            when {
+                                conn == ConnState.CONNECTED && peerKind == "phone" ->
+                                    "상대가 폰이라 이 방향은 사용하지 않아요"
+                                modeA -> "재생 중"
+                                else -> "PC와 연결하면 자동으로 켜져요"
+                            },
                             fontSize = 12.sp, color = Sub,
                         )
                     }
@@ -358,9 +393,14 @@ fun MainScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("폰 소리를 PC에서 듣기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
+                        Text("이 폰 소리를 상대에서 듣기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
                         Text(
-                            if (modeBPending) "시작하는 중…" else "폰의 음악·게임 소리를 PC 스피커로",
+                            when {
+                                modeBPending -> "시작하는 중…"
+                                conn == ConnState.CONNECTED && peerKind == "phone" ->
+                                    "이 폰의 소리를 상대 폰 스피커로"
+                                else -> "이 폰의 음악·게임·마이크를 PC 스피커로"
+                            },
                             fontSize = 12.sp, color = Sub,
                         )
                     }
@@ -380,7 +420,7 @@ fun MainScreen() {
                     if (bSource == CaptureSource.INTERNAL)
                         "내부 소리: Android 10+ 필요, 일부 앱은 캡처를 차단합니다 (그 경우 마이크 사용)"
                     else
-                        "마이크: 주변 소리를 그대로 PC로 보냅니다",
+                        "마이크: 주변 소리를 그대로 상대 기기로 보냅니다 (마이크→스피커처럼 사용)",
                     fontSize = 11.sp, color = Sub,
                 )
                 if (modeB) LevelMeter(stats.levelB)

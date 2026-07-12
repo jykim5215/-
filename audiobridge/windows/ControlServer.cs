@@ -125,7 +125,7 @@ public sealed class ControlServer
                         return;
                     }
                     Console.WriteLine($"[연결] 기기: {GetString(m, "name") ?? "?"}");
-                    Send(new { type = "hello", name = _name, version = Protocol.Version });
+                    Send(new { type = "hello", name = _name, version = Protocol.Version, kind = "pc" });
                     break;
                 case "ping":
                     Send(new { type = "pong" });
