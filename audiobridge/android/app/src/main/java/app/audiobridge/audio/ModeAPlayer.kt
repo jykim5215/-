@@ -151,7 +151,7 @@ class ModeAPlayer(
         while (running && jitter.format == null) {
             Thread.sleep(20)
             waited += 20
-            if (waited > 8000) {
+            if (waited > 30000) {
                 if (running) onError("상대 기기에서 오디오가 오지 않습니다 (같은 Wi-Fi·방화벽 확인)")
                 return
             }

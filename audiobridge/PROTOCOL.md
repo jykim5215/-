@@ -43,6 +43,7 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 | 폰→PC | `{"type":"modeB","action":"start","sampleRate":48000,"channels":1,"codec":0}` | "폰 오디오를 보낼 테니 재생하라" |
 | PC→폰 | `{"type":"modeB","status":"ok","udpPort":48553}` | PC의 수신 포트 통지 |
 | 폰→PC | `{"type":"modeB","action":"stop"}` | 모드 B 중지 |
+| 양쪽 | `{"type":"role","output":"self"\|"other"\|"none"}` | "소리가 나올 곳"에 대한 자기 선택 통지 (보내는 쪽 기준). 폰↔폰에서 양쪽 선택이 상보(한쪽 self·한쪽 other)일 때만 스트림 시작. PC는 이 메시지를 보내지 않으며 항상 폰의 선택에 자동 동의 |
 | 양쪽 | `{"type":"ping"}` → `{"type":"pong"}` | 5초 간격 킵얼라이브, 15초 무응답 시 연결 끊김 처리 |
 | 양쪽 | `{"type":"bye"}` | 정상 종료 통지 |
 | 양쪽 | `{"type":"error","message":"..."}` | 오류 통지 |
@@ -86,13 +87,17 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
   - 모드 B(tcp): PC가 `{"type":"modeB","status":"ok","tcpPort":48553}` 통지 → 폰이 접속해 오디오를 쓴다.
 - PC는 컨트롤 채널 상대 IP가 아닌 주소에서 온 TCP 접속을 거부한다.
 
-## 6. 폰 스피커 역할 (폰 ↔ 폰)
+## 6. 폰 서버 역할 (폰 ↔ 폰)
 
-- 폰도 PC companion과 동일한 서버 역할(디스커버리 응답 + 컨트롤 서버 + modeB 수신 재생)을
-  수행할 수 있다 ("스피커 모드"). 프로토콜은 완전히 동일하며 `hello.kind = "phone"`으로 구분한다.
-- 폰 서버는 `modeA start`(서버 쪽 내부 소리 송신)를 지원하지 않고
-  `{"type":"modeA","status":"error","message":...}`로 거절한다. 클라이언트는 `kind=="phone"`이면
-  modeA UI를 비활성화하고 자동 시작을 건너뛴다.
+- 폰 앱은 실행 중일 때 항상 PC companion과 동일한 서버 역할(디스커버리 응답 + 컨트롤 서버)을
+  수행한다. 프로토콜은 동일하며 `hello.kind = "phone"`으로 구분한다.
+- **modeB start** (클라 소리 → 서버 재생): 서버 폰 사용자의 선택이 "이 기기"(role self 상당)일 때만
+  수락, 아니면 error.
+- **modeA start** (서버 폰 소리 → 클라 재생): 서버 폰 사용자의 선택이 "상대 기기"일 때만 수락.
+  서버 폰이 자체 소리를 마이크 또는 내부 캡처(MediaProjection 동의)로 잡아 클라의 `udpPort`로
+  송신한다. `status:"ok"`는 즉시 회신되고 오디오는 사용자 동의 완료 후 흐른다(수신측은 최대 30초 대기).
+  동의가 거부되면 뒤늦게 `{"type":"modeA","status":"error"}`를 보낸다. v1은 UDP만 지원(transport
+  tcp 요청은 error).
 
 ## 7. 버전 정책
 

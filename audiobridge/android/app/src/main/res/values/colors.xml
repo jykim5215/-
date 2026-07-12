@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 런처 아이콘 배경 -->
     <color name="cream">#EFE6D4</color>
-    <color name="ink">#3A2F22</color>
-    <color name="accent">#C2571F</color>
+    <!-- 앱 창 배경 (Material 라이트) -->
+    <color name="window_bg">#F8FAFD</color>
 </resources>
