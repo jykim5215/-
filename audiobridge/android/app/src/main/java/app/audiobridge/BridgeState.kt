@@ -36,6 +36,9 @@ object BridgeState {
     val stats = MutableStateFlow(Stats())
     val toast = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
+    val update = MutableStateFlow<UpdateInfo?>(null)
+    val updateProgress = MutableStateFlow<Float?>(null)
+
     fun notify(msg: String) {
         toast.tryEmit(msg)
     }

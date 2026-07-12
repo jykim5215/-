@@ -40,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,7 @@ import app.audiobridge.ui.RetroSegmented
 import app.audiobridge.ui.RetroSwitch
 import app.audiobridge.ui.RetroTheme
 import app.audiobridge.ui.Sub
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,9 +113,19 @@ fun MainScreen() {
     val peers by BridgeState.peers.collectAsState()
     val stats by BridgeState.stats.collectAsState()
 
+    val update by BridgeState.update.collectAsState()
+    val updateProgress by BridgeState.updateProgress.collectAsState()
+    val uiScope = rememberCoroutineScope()
+
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
         BridgeState.toast.collect { snackbar.showSnackbar(it) }
+    }
+    LaunchedEffect(Unit) {
+        // 앱 시작 시 조용히 업데이트 확인
+        if (BridgeState.update.value == null) {
+            BridgeState.update.value = Updater.check(context.applicationContext)
+        }
     }
 
     var pendingBAfterMic by remember { mutableStateOf(false) }
@@ -228,6 +240,31 @@ fun MainScreen() {
                 }
             }
 
+            // 업데이트 카드 (새 버전 있을 때만)
+            update?.let { info ->
+                RetroCard {
+                    RetroLabel("UPDATE")
+                    Text(
+                        "새 버전 ${info.versionName}이 나왔습니다",
+                        fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = Ink,
+                    )
+                    updateProgress?.let { LevelMeter(it) }
+                    RetroButton(
+                        text = updateProgress?.let { "받는 중… ${(it * 100).toInt()}%" } ?: "업데이트 설치",
+                        enabled = updateProgress == null,
+                    ) {
+                        uiScope.launch {
+                            BridgeState.updateProgress.value = 0f
+                            val err = Updater.downloadAndInstall(context.applicationContext, info) { p ->
+                                BridgeState.updateProgress.value = p
+                            }
+                            BridgeState.updateProgress.value = null
+                            err?.let { BridgeState.notify(it) }
+                        }
+                    }
+                }
+            }
+
             // 연결 카드
             RetroCard {
                 RetroLabel("CONNECT")
@@ -284,17 +321,20 @@ fun MainScreen() {
                 }
             }
 
-            // 모드 A 카드
+            // PC → 폰 카드 (연결 시 자동 시작)
             RetroCard {
-                RetroLabel("MODE A ▸ PC → PHONE")
+                RetroLabel("PC ▶ 폰")
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("폰을 PC 스피커로", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
-                        Text("PC 소리를 이 폰에서 재생", fontSize = 12.sp, color = Sub)
+                        Text("PC 소리를 폰에서 듣기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
+                        Text(
+                            if (modeA) "재생 중" else "연결하면 자동으로 켜져요",
+                            fontSize = 12.sp, color = Sub,
+                        )
                     }
                     RetroSwitch(modeA) { BridgeEngine.toggleModeA(it) }
                 }
@@ -309,18 +349,18 @@ fun MainScreen() {
                 }
             }
 
-            // 모드 B 카드
+            // 폰 → PC 카드
             RetroCard {
-                RetroLabel("MODE B ▸ PHONE → PC")
+                RetroLabel("폰 ▶ PC")
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("PC를 폰 스피커로", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
+                        Text("폰 소리를 PC에서 듣기", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Ink)
                         Text(
-                            if (modeBPending) "시작하는 중…" else "폰 소리를 PC에서 재생",
+                            if (modeBPending) "시작하는 중…" else "폰의 음악·게임 소리를 PC 스피커로",
                             fontSize = 12.sp, color = Sub,
                         )
                     }
@@ -434,6 +474,17 @@ fun MainScreen() {
                         "컨트롤 포트는 연결 주소에 함께 입력합니다 (예: 192.168.0.10:48550)",
                         fontSize = 11.sp, color = Sub,
                     )
+                    RetroButton("업데이트 확인") {
+                        uiScope.launch {
+                            val found = Updater.check(context.applicationContext)
+                            BridgeState.update.value = found
+                            BridgeState.notify(
+                                if (found != null) "새 버전 ${found.versionName} 발견 — 화면 위 카드에서 설치하세요"
+                                else "이미 최신 버전입니다"
+                            )
+                        }
+                        showAdvanced = false
+                    }
                 }
             },
             confirmButton = {

@@ -118,7 +118,12 @@ audiobridge/
 - [x] APK 빌드 + exe 빌드 + 배포 zip — CI 성공 (run #3), GitHub Release `v1.0.0-build`로 게시
   - 다운로드: https://github.com/jykim5215/-/releases/tag/v1.0.0-build
   - 검증 완료: APK v2 서명 확인, 배포 zip 구성(APK+exe+문서) 확인, 바이너리 개인정보 문자열 스캔 통과
-  - **v1 완료.** 남은 확장 아이디어: Opus 코덱(프로토콜에 codec=1 예약됨), 트레이 GUI(윈도우), 재연결 자동화
+  - **v1 완료.** 남은 확장 아이디어: Opus 코덱(프로토콜에 codec=1 예약됨), 트레이 GUI(윈도우)
+- [x] v1.1 (사용자 피드백 반영): ① 연결 시 "PC 소리 듣기" 자동 시작 + 모드 명칭을
+  쉬운 말로 변경("PC 소리를 폰에서 듣기"/"폰 소리를 PC에서 듣기") ② 끊김 시 자동 재연결
+  (3초×5회, 모드 A 자동 복원) ③ **앱 내 업데이트**: CI가 릴리스에 `latest.json`
+  (versionCode=github.run_number)을 올리고, 앱이 시작 시 확인 → 카드 표시 → APK 다운로드
+  → FileProvider+ACTION_VIEW 설치. versionCode는 CI가 `-PversionCode=run_number`로 주입.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.

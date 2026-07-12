@@ -12,8 +12,9 @@ android {
         applicationId = "app.audiobridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // CI가 -PversionCode=<run_number> -PversionName=1.0.<run_number>로 주입 (앱 내 업데이트 비교 기준)
+        versionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("versionName") as? String) ?: "1.0.0"
     }
 
     signingConfigs {

@@ -33,6 +33,12 @@ object BridgeEngine {
     private var projection: MediaProjection? = null
     @Volatile private var awaitingTcpA = false
 
+    // 자동 재연결 상태
+    private var lastTarget: Pair<String, Int>? = null
+    @Volatile private var userDisconnected = false
+    private var reconnectAttempts = 0
+    private var resumeModeA = false
+
     fun init(context: Context) {
         if (::app.isInitialized) return
         app = context.applicationContext
@@ -95,31 +101,74 @@ object BridgeEngine {
     }
 
     fun connect(host: String, port: Int) {
+        userDisconnected = false
+        reconnectAttempts = 0
+        resumeModeA = false
+        lastTarget = host to port
+        prefs().edit().putString("lastHost", if (port == Protocol.DEFAULT_CTL_PORT) host else "$host:$port").apply()
+        doConnect(host, port)
+    }
+
+    private fun doConnect(host: String, port: Int) {
         val old = control
         control = null
         scope.launch { old?.close() }
         stopStreamsAsync()
         BridgeState.conn.value = ConnState.CONNECTING
-        prefs().edit().putString("lastHost", if (port == Protocol.DEFAULT_CTL_PORT) host else "$host:$port").apply()
         val name = (Build.MODEL ?: "Android").take(30)
         val client = ControlClient(
             host = host, port = port, phoneName = name,
             onMessage = ::onCtlMessage,
             onConnected = { peer ->
+                reconnectAttempts = 0
                 BridgeState.conn.value = ConnState.CONNECTED
                 BridgeState.peerName.value = peer
                 BridgeState.peerHost.value = host
                 startService(BridgeService.ACTION_FOREGROUND)
+                // "그냥 연결하면 소리 나게": PC 소리 듣기를 자동 시작 (사용자가 껐었다면 유지)
+                val autoA = resumeModeA || prefs().getBoolean("autoModeA", true)
+                resumeModeA = false
+                if (autoA) main.post { if (!BridgeState.modeA.value) toggleModeA(true, fromUser = false) }
             },
             onDisconnected = { reason ->
-                main.post { teardown(reason ?: "연결이 끊어졌습니다") }
+                main.post { handleDisconnect(reason) }
             },
         )
         control = client
         client.start()
     }
 
+    /** 예기치 않은 끊김 → 자동 재연결 (3초 간격, 최대 5회). 사용자 끊기면 그대로 종료. */
+    private fun handleDisconnect(reason: String?) {
+        val target = lastTarget
+        val wasA = BridgeState.modeA.value
+        val wasB = BridgeState.modeB.value || BridgeState.modeBPending.value
+        if (userDisconnected || target == null || reconnectAttempts >= 5) {
+            teardown(if (userDisconnected) null else (reason ?: "연결이 끊어졌습니다"))
+            return
+        }
+        stopStreamsAsync()
+        control = null
+        resumeModeA = resumeModeA || wasA
+        BridgeState.modeA.value = false
+        BridgeState.modeB.value = false
+        BridgeState.modeBPending.value = false
+        BridgeState.stats.value = Stats()
+        BridgeState.conn.value = ConnState.CONNECTING
+        reconnectAttempts++
+        BridgeState.notify(
+            "연결이 끊어져 다시 연결합니다 ($reconnectAttempts/5)" +
+                if (wasB) " — 폰 소리 보내기는 재연결 후 다시 켜 주세요" else ""
+        )
+        main.postDelayed({
+            if (!userDisconnected && BridgeState.conn.value == ConnState.CONNECTING) {
+                doConnect(target.first, target.second)
+            }
+        }, 3000)
+    }
+
     fun disconnect() {
+        userDisconnected = true
         val c = control
         control = null
         scope.launch { c?.close() }
@@ -156,7 +205,8 @@ object BridgeEngine {
 
     // ---------- 모드 A ----------
 
-    fun toggleModeA(on: Boolean) {
+    fun toggleModeA(on: Boolean, fromUser: Boolean = true) {
+        if (fromUser) prefs().edit().putBoolean("autoModeA", on).apply()
         if (on) {
             val c = control
             if (c == null || BridgeState.conn.value != ConnState.CONNECTED) {
@@ -171,7 +221,7 @@ object BridgeEngine {
             scope.launch {
                 if (!tcp) {
                     if (!player.startUdp(BridgeState.modeAPort.value, c.host)) {
-                        main.post { if (BridgeState.modeA.value) toggleModeA(false) }
+                        main.post { if (BridgeState.modeA.value) toggleModeA(false, fromUser = false) }
                         return@launch
                     }
                 } else {
@@ -203,7 +253,7 @@ object BridgeEngine {
         },
         onError = { msg ->
             BridgeState.notify(msg)
-            main.post { if (BridgeState.modeA.value) toggleModeA(false) }
+            main.post { if (BridgeState.modeA.value) toggleModeA(false, fromUser = false) }
         },
     )
 
@@ -295,13 +345,13 @@ object BridgeEngine {
                     scope.launch {
                         if (port !in 1..65535 || !player.startTcp(host, port)) {
                             BridgeState.notify("TCP 오디오 스트림을 열 수 없습니다")
-                            main.post { if (BridgeState.modeA.value) toggleModeA(false) }
+                            main.post { if (BridgeState.modeA.value) toggleModeA(false, fromUser = false) }
                         }
                     }
                 }
                 "error" -> {
                     BridgeState.notify("PC: " + obj.optString("message", "모드 A 시작 실패"))
-                    main.post { if (BridgeState.modeA.value) toggleModeA(false) }
+                    main.post { if (BridgeState.modeA.value) toggleModeA(false, fromUser = false) }
                 }
             }
             "modeB" -> when (obj.optString("status")) {
