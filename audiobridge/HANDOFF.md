@@ -30,9 +30,9 @@
      (Android 10 / API 29+). 앱별로 캡처 거부 가능 → **마이크 캡처(`RECORD_AUDIO`)를
      대체/선택 옵션**으로 제공. 모드 B의 소스는 사용자가 ①마이크 ②내부 캡처 중 선택.
 3. **코덱:** 기본 PCM 16-bit 48kHz 스테레오. 대역폭 옵션으로 Opus 압축 선택 가능.
-4. **전송:** 기본 UDP(저지연), 옵션 TCP(안정성). v2.6부터 연구·플랫폼 수치 기반 공통 재생 대기
-   공학 기준선 100ms에 안정성 여유를 더한 400ms를 고정 기본값으로 사용하고, 수신기별 보정은
-   추가 지연 0–300ms 한 방향만 제공.
+4. **전송:** 기본 UDP(저지연), 옵션 TCP(안정성). 연구·플랫폼 수치 기반 공학 기준선 100ms는
+   문서에 보존하되 제품은 공통 재생 대기 600ms로 시작하고 600–2000ms를 200ms 단위로 선택한다.
+   수신기별 보정은 추가 지연 0–300ms 한 방향만 제공하며 물리 음향 자동 맞춤은 선택 기능이다.
 5. **연결:** LAN 자동 검색(NSD/mDNS 또는 UDP 브로드캐스트) + 수동 IP:포트 입력 둘 다.
 6. **안드로이드:** Kotlin, Gradle, `minSdk 26`, 최신 안정 `targetSdk`. 재생 `AudioTrack`,
    캡처 `AudioRecord`/`MediaProjection`. 스트리밍 중 포그라운드 서비스 + 상태바 알림.
@@ -186,6 +186,12 @@ audiobridge/
 - [x] v2.6.16 (안정성 우선 기본값): 사용자 선택에 따라 공통 재생 대기를 100ms에서 **400ms**로
   상향했다. 연구·플랫폼 수치로 산정한 100ms는 공학 기준선으로 문서에 남기고, 제품 기본값은 순간적인
   Wi-Fi 지터·절전·제조사 DSP를 흡수하기 위한 300ms 추가 여유를 포함한다고 명확히 구분했다.
+- [x] v2.7 (단계형 공통 지연 + 물리 음향 자동 맞춤): 공통 재생 대기를 초기 600ms, 사용자 선택
+  600–2000ms/200ms 단위로 바꾸고 영구 저장한다. Android 설정에 시험음 자동 맞춤을 추가했다.
+  시작 기기와 응답 기기가 각각 본체 스피커와 마이크를 모두 사용해 1.8kHz→3kHz 음향 왕복을 재며,
+  고정 응답 대기를 제외한 추정치에 안전 여유를 더해 한 단계를 자동 선택한다. Android↔Android는
+  양쪽 권한 흐름을 처리하고, Android↔Windows는 Windows가 UI 노출 없이 백그라운드로 응답한다.
+  실패·시간초과 시 기존 설정은 유지되며 스트리밍 중과 다중 링크에서는 실행하지 않는다.
 
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
@@ -214,17 +220,21 @@ Actions의 Node.js 20 deprecation 경고는 현재 빌드에는 영향이 없으
 `82fc1f59000898bacd4b3f7057db9432e8a2f3405ae7be1320d42b7f50aa3368`로 `latest.json`과 GitHub asset
 digest에 모두 일치함을 확인했다. 롤링 태그와 release target은 빌드 커밋 `b3f67b1`을 가리킨다.
 
-**빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
-.NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
-따라서 빌드는 **GitHub Actions**(`.github/workflows/build.yml`)로 수행한다 —
-러너에 Android SDK가 기본 탑재되어 있고 `setup-dotnet`으로 .NET 확보 가능.
-`maven.google.com`, `services.gradle.org`, `repo.maven.apache.org`, `github.com`은 열려 있다.
-Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능.
+**v2.7 로컬 검증 상태:** Windows `dotnet build -c Release` 경고/오류 0. Android는 JDK 21과
+Android SDK Platform 35/Build Tools 34를 지정해 `compileDebugKotlin`, `testDebugUnitTest`,
+`assembleDebug`가 성공했고 디버그 APK가 생성됐다. 실제 두 기기 시험음 검출과 GitHub Actions 배포·
+공개 자산 해시 검증은 아직 수행 전이므로 완료로 간주하지 않는다.
 
-**다음 할 일:** 구버전 Android/Windows에서 v2.6 업데이트 배너 및 설치/교체 실기기 확인 → 소스 기기는
-음소거하고 서로 다른 Android 기기 2대와 Windows를 섞어 10분 이상 재생하며 체감 시차/드리프트 측정.
-이후 후보는 마이크 기반 자동 음향 캘리브레이션(테스트 펄스 상호상관)으로, OS 밖의 스피커 DSP 지연까지
-자동 측정해 `extraDelayMs`를 제안하는 기능이다.
+**빌드 환경 특이사항 (중요):** 현재 Windows 작업 환경에서는 셸에 JDK/SDK 변수가 기본 설정되지
+않는다. Android 빌드 전 `JAVA_HOME=C:\Program Files\Android\Android Studio1\jbr`,
+`ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk`를 지정한다. Platform 35와 Build Tools 34는
+설치돼 있다. Windows는 설치된 .NET 8 SDK로 로컬 빌드된다. 최종 배포는 여전히
+**GitHub Actions**(`.github/workflows/build.yml`)가 APK/AAB/단일 EXE를 같은 버전으로 만들고 롤링
+릴리스를 교체하는 유일한 기준이며, 로컬 산출물만으로 배포 완료를 주장하지 않는다.
+
+**다음 할 일:** GitHub Actions v2.7 배포와 공개 APK/EXE 해시 확인 → Android 두 대 및
+Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·실패 보존 동작 확인 → 소스 기기를
+음소거하고 10분 이상 재생하며 선택한 공통 지연과 기기별 추가 지연의 체감 시차/드리프트 측정.
 
 ## 7. 다른 LLM/새 세션 인수 체크리스트
 
@@ -236,7 +246,8 @@ Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능
    `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
 3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
    수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
-4. 지연 정책 불변식: 공통 기본값은 400ms이고 수신기 보정은 0–300ms 추가 지연만 가능하다. 다른 앱이
+4. 지연 정책 불변식: 공통 초기값은 600ms, 사용자 범위는 600–2000ms/200ms 단위이고 수신기 보정은
+   0–300ms 추가 지연만 가능하다. 자동 음향 맞춤 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
 5. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.

@@ -263,7 +263,7 @@ class ModeAPlayer(
                     fallbackOffset!!
                 }
                 val targetUs = head.tsUs + offset +
-                    delayMsProvider().coerceIn(20, 500) * 1000L +
+                    Protocol.normalizePlayoutDelayMs(delayMsProvider()) * 1000L +
                     extraDelayMsProvider().coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS) * 1000L
                 // 핵심: "지금 쓰는 데이터가 실제 스피커에서 나오는 시각"으로 비교한다.
                 // 기기마다 오디오 출력 버퍼 크기가 크게 달라서, 트랙에 쌓여 있는

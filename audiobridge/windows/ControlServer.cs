@@ -67,6 +67,7 @@ public sealed class ControlServer
         private long _lastPongMs = Environment.TickCount64;
         private ModeASender? _senderA;
         private ModeBPlayer? _playerB;
+        private AcousticCalibrationResponder? _calibration;
 
         public Session(TcpClient client, int modeAPort, int modeBPort)
         {
@@ -152,7 +153,31 @@ public sealed class ControlServer
                 case "modeB":
                     HandleModeB(message);
                     break;
+                case "cal":
+                    HandleCalibration(message);
+                    break;
             }
+        }
+
+        private void HandleCalibration(JsonElement message)
+        {
+            string action = GetString(message, "action") ?? "";
+            if (action != "prepare") return;
+            string id = GetString(message, "id") ?? "";
+            if (id.Length is 0 or > 64) return;
+            if (_senderA != null || _playerB != null)
+            {
+                Send(new { type = "cal", action = "error", id, message = "Windows에서 오디오가 재생 중이에요. 먼저 소리를 꺼 주세요." });
+                return;
+            }
+
+            _calibration?.Dispose();
+            var calibration = new AcousticCalibrationResponder(
+                id,
+                GetInt(message, "holdMs", 350),
+                Send);
+            _calibration = calibration;
+            calibration.Start();
         }
 
         private void HandleModeA(JsonElement message)
@@ -166,6 +191,8 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
+            _calibration?.Dispose();
+            _calibration = null;
             if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
                 Send(new { type = "modeA", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
@@ -207,6 +234,8 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
+            _calibration?.Dispose();
+            _calibration = null;
             if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
                 Send(new { type = "modeB", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
@@ -214,7 +243,8 @@ public sealed class ControlServer
             }
 
             bool tcp = GetString(message, "transport") == "tcp";
-            int delayMs = Math.Clamp(GetInt(message, "delayMs", Protocol.DefaultPlayoutDelayMs), 20, 500);
+            int delayMs = Protocol.NormalizePlayoutDelayMs(
+                GetInt(message, "delayMs", Protocol.DefaultPlayoutDelayMs));
             _playerB?.Dispose();
             _playerB = null;
             try
@@ -285,6 +315,8 @@ public sealed class ControlServer
             _senderA = null;
             _playerB?.Dispose();
             _playerB = null;
+            _calibration?.Dispose();
+            _calibration = null;
             try { _client.Close(); } catch { }
         }
 

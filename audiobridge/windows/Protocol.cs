@@ -15,7 +15,17 @@ public static class Protocol
 
     public const int SampleRate = 48000;
     public const int FrameMs = 5;
-    public const int DefaultPlayoutDelayMs = 400;
+    public const int MinPlayoutDelayMs = 600;
+    public const int MaxPlayoutDelayMs = 2000;
+    public const int PlayoutDelayStepMs = 200;
+    public const int DefaultPlayoutDelayMs = MinPlayoutDelayMs;
+
+    public static int NormalizePlayoutDelayMs(int value)
+    {
+        int clamped = Math.Clamp(value, MinPlayoutDelayMs, MaxPlayoutDelayMs);
+        int stepIndex = (clamped - MinPlayoutDelayMs + PlayoutDelayStepMs / 2) / PlayoutDelayStepMs;
+        return MinPlayoutDelayMs + stepIndex * PlayoutDelayStepMs;
+    }
 
     public static int FrameBytes(int channels) => SampleRate / 1000 * FrameMs * 2 * channels;
 

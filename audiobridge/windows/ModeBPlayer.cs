@@ -49,7 +49,7 @@ public sealed class ModeBPlayer : IDisposable
         _phone = phone;
         Port = port;
         _useTcp = useTcp;
-        _delayMs = Math.Clamp(delayMs, 20, 500);
+        _delayMs = Protocol.NormalizePlayoutDelayMs(delayMs);
         _offsetUsProvider = offsetUsProvider;
     }
 

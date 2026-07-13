@@ -113,6 +113,7 @@ fun MainScreen() {
     val sendPending by BridgeState.sendPending.collectAsState()
     val level by BridgeState.level.collectAsState()
     val bSource by BridgeState.bSource.collectAsState()
+    val bufferMs by BridgeState.bufferMs.collectAsState()
     val transportTcp by BridgeState.transportTcp.collectAsState()
     val discovering by BridgeState.discovering.collectAsState()
     val peers by BridgeState.peers.collectAsState()
@@ -121,6 +122,7 @@ fun MainScreen() {
     val speakers by BridgeState.speakers.collectAsState()
     val isServerSession by BridgeState.isServerSession.collectAsState()
     val extraDelayMs by BridgeState.extraDelayMs.collectAsState()
+    val calibrationRunning by BridgeState.calibrationRunning.collectAsState()
 
     val uiScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -163,6 +165,32 @@ fun MainScreen() {
     ) { granted ->
         if (granted) continueSetup()
         else BridgeEngine.cancelSend("마이크 권한이 없어 소리를 보낼 수 없어요")
+    }
+
+    var startCalibrationAfterPermission by remember { mutableStateOf(false) }
+    val calibrationMicLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        BridgeEngine.onCalibrationPermission(granted)
+        if (granted && startCalibrationAfterPermission) BridgeEngine.requestAcousticCalibration()
+        if (!granted && startCalibrationAfterPermission) BridgeState.notify("마이크 권한이 없어 자동 보정을 시작할 수 없어요")
+        startCalibrationAfterPermission = false
+    }
+    LaunchedEffect(Unit) {
+        BridgeState.calibrationPermissionRequest.collect {
+            startCalibrationAfterPermission = false
+            calibrationMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    val requestCalibration: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            BridgeEngine.requestAcousticCalibration()
+        } else {
+            startCalibrationAfterPermission = true
+            calibrationMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
     LaunchedEffect(Unit) {
         BridgeState.sendSetup.collect {
@@ -379,7 +407,10 @@ fun MainScreen() {
             onDismissRequest = { showSettings = false },
             title = { Text("설정") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                     Text("기기 이름", style = MaterialTheme.typography.labelLarge)
                     OutlinedTextField(
                         value = nameField,
@@ -387,16 +418,46 @@ fun MainScreen() {
                         singleLine = true,
                         supportingText = { Text("상대 기기 목록에 이 이름으로 보여요") },
                     )
+                    val canChangeDelay = !listening && !sending && !sendPending
+                    Text("기본 재생 대기 (${bufferMs}ms)", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = bufferMs.toFloat(),
+                        onValueChange = { BridgeEngine.setPlayoutDelayMs(it.toInt()) },
+                        valueRange = Protocol.MIN_PLAYOUT_DELAY_MS.toFloat()..
+                            Protocol.MAX_PLAYOUT_DELAY_MS.toFloat(),
+                        steps = (Protocol.MAX_PLAYOUT_DELAY_MS - Protocol.MIN_PLAYOUT_DELAY_MS) /
+                            Protocol.PLAYOUT_DELAY_STEP_MS - 1,
+                        enabled = canChangeDelay,
+                    )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("기본 재생 대기", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "${Protocol.DEFAULT_PLAYOUT_DELAY_MS}ms",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = cs.primary,
-                        )
+                        Text("600ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        Text("2000ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                     }
                     Text(
-                        "일반 Wi-Fi와 기기별 오디오 출력 지연을 감안한 공통값이에요",
+                        if (canChangeDelay) "200ms 단위로 선택하며 다음 연결에도 유지돼요"
+                        else "소리가 흐르는 중에는 끈 뒤 변경할 수 있어요",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = requestCalibration,
+                        enabled = canChangeDelay && conn == ConnState.CONNECTED && !calibrationRunning,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (calibrationRunning) {
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = cs.onPrimary,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text("시험음 측정 중")
+                        } else {
+                            Text("두 기기의 마이크·스피커로 자동 맞춤")
+                        }
+                    }
+                    Text(
+                        "기기 한 대와 연결한 뒤, 조용한 곳에서 두 기기를 0.5–1.5m 떨어뜨리고 볼륨을 60% 이상으로 올려 주세요. 실패하면 현재 값이 유지돼요.",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant,
                     )

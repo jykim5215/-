@@ -52,6 +52,7 @@ object BridgeState {
     val speakers = MutableStateFlow<List<SpeakerInfo>>(emptyList())
     // 공통 재생 시각보다 이 기기만 더 늦추는 보정 (ms, 0..300)
     val extraDelayMs = MutableStateFlow(0)
+    val calibrationRunning = MutableStateFlow(false)
 
     // 검색
     val discovering = MutableStateFlow(false)
@@ -64,6 +65,8 @@ object BridgeState {
 
     /** 엔진이 "보내기 준비(권한·화면녹화 동의)"를 UI에 요청할 때 발행 */
     val sendSetup = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
+    /** 상대 기기의 물리 보정 요청을 받았으나 마이크 권한이 없을 때 UI가 권한 창을 연다. */
+    val calibrationPermissionRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
 
     fun notify(msg: String) {
         toast.tryEmit(msg)
