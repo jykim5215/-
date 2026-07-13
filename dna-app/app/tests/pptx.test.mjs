@@ -20,6 +20,14 @@ test('XML 이스케이프 빌더 — 유니코드 수동 이스케이프', () =>
   assert.equal(unescapeXmlText(escapeXmlText('조정부 “승격” <완료> & 100%')), '조정부 “승격” <완료> & 100%');
 });
 
+test('PPTX 형광펜 마크업 파싱', () => {
+  assert.deepEqual(eng.parseMarkedText('조정부가 ==기타 학생단체==로 승격'), [
+    { text: '조정부가 ', highlight: false },
+    { text: '기타 학생단체', highlight: true },
+    { text: '로 승격', highlight: false },
+  ]);
+});
+
 test('실제 템플릿: 텍스트 교체 + 슬라이드 복제/삭제', { skip: !hasTemplate }, async () => {
   const zip = await eng.loadPptx(fs.readFileSync(TEMPLATE));
   assert.deepEqual(await eng.slideOrder(zip), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -91,7 +99,7 @@ test('카드뉴스 end-to-end 생성 — 템플릿 충실성', { skip: !hasTempl
     coverTitle: '침체기 딛고\n다시 노를 젓다',
     category: '사회',
     cards: [
-      { title: '다시 노를 젓는 조정부', body: 'DGIST 조정부가 2026년 ‘기타 학생단체’로 승격되었다.\n대회 복귀와 운영 정상화가 근거가 됐다.', photoCredit: 'DGIST 조정부' },
+      { title: '다시 노를 젓는 조정부', body: 'DGIST 조정부가 2026년 ‘==기타 학생단체==’로 승격되었다.\n대회 복귀와 운영 정상화가 근거가 됐다.', photoCredit: 'DGIST 조정부' },
       { title: '기타 학생단체란?', body: '본원 부서가 공식 업무 수행을 위해 직접 조직·관리하는 행정 연계 단체다.' },
       { title: 'Q1. 자기소개', body: '박성현 부장: 2026년도 DGIST 조정부 부장을 맡고 있다.' },
     ],
@@ -134,6 +142,7 @@ test('카드뉴스 end-to-end 생성 — 템플릿 충실성', { skip: !hasTempl
   const c1xml = await eng.getSlideXml(zip, order[1]);
   assert.ok(c1xml.includes('Pretendard'));
   assert.ok(c1xml.includes('3B3838') || c1xml.includes('FFFBF7'));
+  assert.ok(c1xml.includes('<a:highlight>'));
 
   // 규격 위반 시 에러
   await assert.rejects(

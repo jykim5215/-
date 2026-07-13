@@ -17,6 +17,7 @@ const TEXT_EXT = new Set(['.js', '.mjs', '.json', '.md', '.html', '.css', '.sql'
 
 // 잠재적 비밀정보/개인정보 패턴
 const SECRET_PATTERNS = [
+  { re: /AIza[0-9A-Za-z_-]{20,}/, name: 'Google/Gemini API 키' },
   { re: /sk-ant-[a-zA-Z0-9-_]{10,}/, name: 'Anthropic API 키' },
   { re: /(api[_-]?key|token|secret|password)\s*[:=]\s*["'][A-Za-z0-9+/_-]{16,}["']/i, name: '하드코딩된 자격증명' },
   { re: /\/home\/[a-z0-9_-]+\/(?!-\b)/i, name: '로컬 홈 경로' },
@@ -28,7 +29,7 @@ const SECRET_PATTERNS = [
 function* walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
-      if (EXCLUDE_DIRS.has(e.name)) continue;
+      if (EXCLUDE_DIRS.has(e.name) || /^dist-refresh/.test(e.name)) continue;
       yield* walk(path.join(dir, e.name));
     } else {
       yield path.join(dir, e.name);

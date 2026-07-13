@@ -1,5 +1,5 @@
 // LLM-as-judge: 문체 일관성·리드 품질·중립성 등 정성 항목 채점 (rule-based 검사기와 별개)
-const { runJson } = require('../main/claude');
+const { runJson } = require('../main/gemini');
 
 async function judgeText({ apiKey, output, styleReference = '' }) {
   const user = [

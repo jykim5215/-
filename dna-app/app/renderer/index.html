@@ -2,10 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DNA 편집 스튜디오</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=redesign-2026">
 </head>
 <body>
   <div class="shell">
@@ -24,9 +24,21 @@
       <div class="rail-sec">워크플로우</div>
       <nav id="stepper" class="nav"></nav>
 
+      <div class="rail-sec">허브</div>
+      <button id="flowMapBtn" class="rail-btn">진행 노트</button>
+      <button id="mailCenterBtn" class="rail-btn">메일함</button>
+      <button id="devModeBtn" class="rail-btn" hidden aria-hidden="true" tabindex="-1">개발자 모드</button>
+
       <div class="rail-foot">
         <button id="dashBtn" class="rail-btn">지표</button>
-        <button id="settingsBtn" class="rail-btn">설정</button>
+        <button id="settingsBtn" class="profile-btn" aria-label="프로필 열기">
+          <span id="railAvatar" class="profile-avatar">DNA</span>
+          <span class="profile-copy">
+            <b id="railProfileName">프로필</b>
+            <small id="railProfileTitle">이름과 계정 설정</small>
+          </span>
+          <span class="profile-gear" aria-hidden="true"></span>
+        </button>
       </div>
     </aside>
 
@@ -34,6 +46,7 @@
     <div class="main">
       <header class="mainbar">
         <span id="crumb" class="crumb"></span>
+        <span id="greeting" class="greeting"></span>
         <span id="saveState" class="save">대기</span>
         <button id="sideToggle" class="btn small ghost">패널</button>
       </header>
@@ -101,31 +114,25 @@
     </div>
   </dialog>
 
-  <dialog id="settingsDlg">
-    <h2>설정</h2>
-    <label>기자 이름 <input id="setName" placeholder="홍길동"></label>
-    <label>직함 <input id="setTitle" placeholder="기자"></label>
-    <label>Claude API 키 <input id="setApiKey" type="password" placeholder="sk-ant-…"></label>
-    <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
-    <details class="law-d" style="margin:8px 0">
-      <summary>이메일 발송 설정</summary>
-      <label style="margin-top:8px">보내는 이메일 <input id="setSmtpUser" placeholder="dgun_xxx@dgist.ac.kr"></label>
-      <label>비밀번호 <input id="setSmtpPass" type="password" placeholder="DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)"></label>
-      <label>SMTP 호스트 <input id="setSmtpHost" placeholder="예: mail.dgist.ac.kr (비우면 smtp.gmail.com)"></label>
-      <label>SMTP 포트 <input id="setSmtpPort" placeholder="465(SSL) 또는 587(STARTTLS)"></label>
-      <button id="setMailTestBtn" class="btn small" type="button">연결 테스트</button>
-      <span id="setMailTestState" class="hint"></span>
-      <p class="hint" style="margin-top:8px"><b>DGIST 메일 서버로 직접 보내기(권장)</b> — 구글을 안 거칩니다. DGIST는 자체 메일 서버라 <b>DGIST 아이디·비밀번호</b>를 그대로 넣으면 됩니다. 호스트·포트는 <b>Gmail 설정 → 계정 및 가져오기 → "다른 주소에서 메일 보내기"</b>에 입력했던 DGIST SMTP 값(POP 연동 시 쓴 서버)과 같습니다. 모르면 DGIST 웹메일의 POP/SMTP 설정 안내를 참고하세요.<br><br><b>Gmail 경유</b> — 호스트를 비우면 smtp.gmail.com으로 나갑니다. 이땐 구글 <b>앱 비밀번호</b>가 필요합니다.<br><br>비밀번호는 OS 키체인으로 암호화 저장되고 어디로도 전송되지 않습니다.</p>
-    </details>
-    <details class="law-d" style="margin:8px 0">
-      <summary>인터뷰 받아쓰기 (whisper.cpp) 설정</summary>
-      <label style="margin-top:8px">whisper 바이너리 경로 <input id="setWhisperBin" placeholder="예: /usr/local/bin/whisper-cli"></label>
-      <label>whisper 모델 경로 (ggml-*.bin) <input id="setWhisperModel" placeholder="예: ~/models/ggml-large-v3.bin"></label>
-      <p class="hint">오디오는 기기 안에서만 처리되어 취재원이 보호됩니다. whisper.cpp 빌드 + 한국어 모델 다운로드가 필요합니다.</p>
-    </details>
+  <dialog id="projectDlg" class="project-dialog">
+    <div class="dialog-head">
+      <div>
+        <h2 id="projectDlgTitle">새 프로젝트</h2>
+        <p id="projectDlgSub" class="hint">기사 제목과 핵심 키워드로 브레인스토밍을 시작합니다.</p>
+      </div>
+      <button id="projectCloseBtn" class="icon-btn" type="button" aria-label="닫기">×</button>
+    </div>
+    <label>기사 제목
+      <input id="projectTitleInput" placeholder="예: DGIST 조정부, 다시 노를 젓다" maxlength="120">
+    </label>
+    <label id="projectKeywordsLabel">핵심 키워드
+      <input id="projectKeywordsInput" placeholder="조정부, 학생단체, 대회" maxlength="180">
+      <small>쉼표로 구분해 최대 5개까지 입력할 수 있습니다.</small>
+    </label>
+    <p id="projectError" class="form-error" role="alert"></p>
     <div class="row">
-      <button id="setSaveBtn" class="btn">저장</button>
-      <button id="setCloseBtn" class="btn ghost">닫기</button>
+      <button id="projectSaveBtn" class="btn primary" type="button">브레인스토밍 시작</button>
+      <button id="projectCancelBtn" class="btn ghost" type="button">취소</button>
     </div>
   </dialog>
 

@@ -1,23 +1,29 @@
 {
   "name": "dna-desk",
-  "version": "0.3.0",
-  "description": "디지스트신문 DNA 편집 지원 데스크톱 앱 — 기획부터 카드뉴스까지 6단계 워크플로우",
+  "version": "0.5.1",
+  "description": "디지스트신문 DNA 편집 지원 데스크톱 앱 — 기획부터 카드뉴스까지 5단계 워크플로우",
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.mjs",
     "eval": "node scripts/run-eval.mjs",
+    "analyze:references": "node scripts/analyze-reference-bundle.mjs",
+    "analyze:batch": "node scripts/analyze-reference-batch.mjs",
     "dist": "node scripts/make-dist-zip.mjs",
     "shortcut": "node scripts/create-shortcut.mjs",
     "pack": "electron-builder --dir",
-    "installer": "electron-builder"
+    "installer": "electron-builder",
+    "release": "electron-builder --publish always",
+    "release:github": "node scripts/release-github.mjs"
   },
   "author": "디지스트신문 DNA",
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
+    "electron-updater": "^6.8.9",
+    "imapflow": "^1.4.6",
     "jszip": "^3.10.1",
+    "mailparser": "^3.9.14",
     "nodemailer": "^9.0.3",
     "pdf-parse": "^1.1.1",
     "sql.js": "^1.14.1"
@@ -29,6 +35,7 @@
   "build": {
     "appId": "com.dgistdna.desk",
     "productName": "DNA 편집 스튜디오",
+    "artifactName": "dna-desk-setup-${version}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -36,7 +43,8 @@
       "src/**",
       "rules/**",
       "prompts/**",
-      "style_corpus/**",
+      "style_corpus/README.md",
+      "style_corpus/gold/**",
       "assets/**"
     ],
     "extraResources": [
@@ -55,6 +63,14 @@
     },
     "mac": {
       "target": "dmg"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jykim5215",
+        "repo": "-",
+        "releaseType": "release"
+      }
+    ]
   }
 }

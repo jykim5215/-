@@ -107,6 +107,84 @@ function replaceParagraphTextMultiline(xml, oldText, lines) {
   return { xml: newXml, count };
 }
 
+function parseMarkedText(text) {
+  const source = String(text || '');
+  const parts = [];
+  const re = /==([\s\S]+?)==/g;
+  let pos = 0;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    if (match.index > pos) parts.push({ text: source.slice(pos, match.index), highlight: false });
+    if (match[1]) parts.push({ text: match[1], highlight: true });
+    pos = match.index + match[0].length;
+  }
+  if (pos < source.length) parts.push({ text: source.slice(pos), highlight: false });
+  return parts.length ? parts : [{ text: source, highlight: false }];
+}
+
+function setRunText(run, text) {
+  let seen = false;
+  let out = run.replace(/<a:t(\s[^>]*)?>[\s\S]*?<\/a:t>/g, (_full, attrs) => {
+    const hasPreserve = attrs && /xml:space="preserve"/.test(attrs);
+    const attrStr = hasPreserve ? attrs : `${attrs || ''} xml:space="preserve"`;
+    if (seen) return `<a:t${attrStr}></a:t>`;
+    seen = true;
+    return `<a:t${attrStr}>${escapeXmlText(text)}</a:t>`;
+  });
+  if (!seen) out = out.replace('</a:r>', `<a:t xml:space="preserve">${escapeXmlText(text)}</a:t></a:r>`);
+  return out;
+}
+
+function setRunHighlight(run, on, color = 'FFF176') {
+  const cleanInner = (inner) => inner.replace(/<a:highlight>[\s\S]*?<\/a:highlight>/g, '');
+  if (!on) {
+    return run.replace(/<a:rPr\b([^>]*)>([\s\S]*?)<\/a:rPr>/g, (_m, attrs, inner) =>
+      `<a:rPr${attrs}>${cleanInner(inner)}</a:rPr>`
+    );
+  }
+  const tag = `<a:highlight><a:srgbClr val="${color}"/></a:highlight>`;
+  if (/<a:rPr\b[^>]*\/>/.test(run)) {
+    return run.replace(/<a:rPr([^>]*)\/>/, `<a:rPr$1>${tag}</a:rPr>`);
+  }
+  if (/<a:rPr\b[^>]*>/.test(run)) {
+    return run.replace(/<a:rPr\b([^>]*)>([\s\S]*?)<\/a:rPr>/, (_m, attrs, inner) =>
+      `<a:rPr${attrs}>${cleanInner(inner)}${tag}</a:rPr>`
+    );
+  }
+  return run.replace(/(<a:t\b)/, `<a:rPr>${tag}</a:rPr>$1`);
+}
+
+function runsFromTemplate(templateRun, text) {
+  return parseMarkedText(text)
+    .filter((part) => part.text.length > 0)
+    .map((part) => setRunHighlight(setRunText(templateRun, part.text), part.highlight))
+    .join('') || setRunText(templateRun, '');
+}
+
+function replaceParagraphRuns(para, newText) {
+  const firstRun = para.match(/<a:r(?:\s[^>]*)?>[\s\S]*?<\/a:r>/)?.[0];
+  if (!firstRun) return replaceParagraphText(para, extractRunTexts(para).join(''), newText).xml;
+  let inserted = false;
+  return para.replace(/<a:r(?:\s[^>]*)?>[\s\S]*?<\/a:r>/g, (run) => {
+    if (inserted) return '';
+    inserted = true;
+    return runsFromTemplate(run, newText);
+  });
+}
+
+function replaceParagraphTextMultilineMarked(xml, oldText, lines) {
+  const norm = (s) => s.replace(/\s+/g, '');
+  const target = norm(oldText);
+  let count = 0;
+  const newXml = xml.replace(/<a:p(?:\s[^>]*)?>[\s\S]*?<\/a:p>/g, (para) => {
+    if (count > 0) return para;
+    if (norm(extractRunTexts(para).join('')) !== target) return para;
+    count++;
+    return lines.map((line) => replaceParagraphRuns(para, line)).join('');
+  });
+  return { xml: newXml, count };
+}
+
 // run 단위 단순 교체 (플레이스홀더가 run 하나에 온전히 들어있을 때)
 function replaceRunText(xml, oldText, newText) {
   let count = 0;
@@ -316,6 +394,8 @@ module.exports = {
   extractParagraphTexts,
   replaceParagraphText,
   replaceParagraphTextMultiline,
+  replaceParagraphTextMultilineMarked,
+  parseMarkedText,
   replaceRunText,
   cloneSlide,
   deleteSlide,

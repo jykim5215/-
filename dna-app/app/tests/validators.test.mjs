@@ -87,3 +87,50 @@ test('카드뉴스 하드 룰 검증', () => {
   const longBody = validateCardPlan({ coverTitle: 't', category: '사회', cards: [{ title: 'a', body: '가'.repeat(400) }] });
   assert.ok(longBody.warnings.some((w) => w.includes('로고')));
 });
+
+test('카드뉴스 Q&A 답변은 기사 원문의 문장 발췌만 허용', () => {
+  const sourceText = [
+    '박: 조정부를 다시 지속 가능한 팀으로 만들겠다는 선배 부원들의 의지였습니다.',
+    '대회 참가처럼 구체적인 목표를 세웠고 팀으로서 결속력도 생겼습니다.',
+  ].join('\n');
+  const base = { coverTitle: '조정부의 새로운 출발', category: '사회' };
+
+  const exact = validateCardPlan({
+    ...base,
+    cards: [{
+      title: 'Q1. 극복의 계기',
+      body: '박: 조정부를 다시 지속 가능한 팀으로 만들겠다는 선배 부원들의 의지였습니다.',
+    }],
+  }, { sourceText });
+  assert.equal(exact.ok, true);
+  assert.equal(exact.excerptIssues.length, 0);
+
+  const rewritten = validateCardPlan({
+    ...base,
+    cards: [{
+      title: 'Q1. 극복의 계기',
+      body: '박: 선배 부원들의 의지가 팀의 재건을 성공으로 이끌었습니다.',
+    }],
+  }, { sourceText });
+  assert.equal(rewritten.ok, false);
+  assert.equal(rewritten.excerptIssues.length, 1);
+  assert.ok(rewritten.errors.some((e) => e.includes('연속 발췌')));
+
+  // 서면 인터뷰 형식: 화자 표기 없이도 Q 카드 본문은 원문 발췌여야 한다
+  const written = validateCardPlan({
+    ...base,
+    cards: [{
+      title: 'Q1. 목표',
+      body: 'Q. 앞으로의 목표는?\n대회 참가처럼 구체적인 목표를 세웠고 팀으로서 결속력도 생겼습니다.',
+    }],
+  }, { sourceText });
+  assert.equal(written.excerptIssues.length, 0);
+  const writtenRewritten = validateCardPlan({
+    ...base,
+    cards: [{
+      title: 'Q1. 목표',
+      body: 'Q. 앞으로의 목표는?\n구체적 목표 설정이 팀 결속력 강화로 이어졌다고 답했다.',
+    }],
+  }, { sourceText });
+  assert.equal(writtenRewritten.excerptIssues.length, 1);
+});

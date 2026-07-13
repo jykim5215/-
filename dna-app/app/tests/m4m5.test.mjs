@@ -46,10 +46,9 @@ test('RAG 스타일 엔진 — BM25 검색', () => {
   assert.equal(ranked[0].id, 'a');
   assert.ok(ranked[0].score > ranked[1].score);
 
-  // 골드 코퍼스에서 검색 (store 없이)
-  const ex = styleEngine.retrieve(null, '조정부 학생단체 승격 카드뉴스', 2);
-  assert.ok(ex.length >= 1);
-  assert.ok(ex[0].includes('골드 스탠다드'));
+  // 품질 감사에서 review로 격리된 조정부 쌍은 RAG 코퍼스에 들어오지 않아야 한다.
+  const corpus = styleEngine.collectCorpus(null);
+  assert.ok(!corpus.some((doc) => doc.id.includes('조정부_카드뉴스')));
 });
 
 test('HTML 기사 추출 — 메타데이터 + 본문', () => {

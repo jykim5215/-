@@ -17,6 +17,24 @@ const MAPPING = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'mapping.json'), 'utf8')
 );
 
+function stripHighlightMarks(text) {
+  return String(text || '').replace(/==([\s\S]+?)==/g, '$1');
+}
+
+function planForValidation(plan) {
+  return {
+    ...plan,
+    coverTitle: stripHighlightMarks(plan.coverTitle),
+    category: stripHighlightMarks(plan.category),
+    cards: (plan.cards || []).map((card) => ({
+      ...card,
+      title: stripHighlightMarks(card.title),
+      body: stripHighlightMarks(card.body),
+      photoCredit: stripHighlightMarks(card.photoCredit),
+    })),
+  };
+}
+
 // 사진 주입 (있을 때만). photo = { buffer, ext } — 프레임·잠금 유지, 미디어만 교체.
 async function injectPhoto(zip, slideNum, shapeName, photo) {
   if (!photo || !photo.buffer || !shapeName) return;
@@ -46,7 +64,7 @@ async function fillBodySlide(zip, slideNum, card, mapping) {
 
   // 본문: 리드 문단에 여러 문단 주입, 나머지 예시 문단은 비움
   const bodyParas = String(card.body).split(/\n{1,}/).filter((s) => s.trim());
-  r = eng.replaceParagraphTextMultiline(xml, m.leadPlaceholder, bodyParas);
+  r = eng.replaceParagraphTextMultilineMarked(xml, m.leadPlaceholder, bodyParas);
   if (r.count === 0) throw new Error(`본문 플레이스홀더 매칭 실패 (slide${slideNum})`);
   xml = r.xml;
   for (const ph of m.restPlaceholders) {
@@ -62,8 +80,8 @@ async function fillBodySlide(zip, slideNum, card, mapping) {
 }
 
 // templateBuffer → 완성된 pptx Buffer
-async function generateCardnews(templateBuffer, plan) {
-  const check = validateCardPlan(plan);
+async function generateCardnews(templateBuffer, plan, { sourceText = '' } = {}) {
+  const check = validateCardPlan(planForValidation(plan), { sourceText });
   if (!check.ok) {
     const err = new Error('카드뉴스 규격 위반:\n' + check.errors.join('\n'));
     err.validation = check;
@@ -116,4 +134,4 @@ async function generateCardnews(templateBuffer, plan) {
   };
 }
 
-module.exports = { generateCardnews, MAPPING };
+module.exports = { generateCardnews, MAPPING, stripHighlightMarks, planForValidation };

@@ -8,8 +8,31 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   settingsSet: invoke('settings:set'),
   hasApiKey: invoke('settings:hasApiKey'),
   hasSmtpPass: invoke('settings:hasSmtpPass'),
+  updateStatus: invoke('update:status'),
+  updateCheck: invoke('update:check'),
+  updateInstall: invoke('update:install'),
+  onUpdateEvent(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('update:event', listener);
+    return () => ipcRenderer.removeListener('update:event', listener);
+  },
+  googleConfigure: invoke('google:configure'),
+  googleStatus: invoke('google:status'),
+  googleConnect: invoke('google:connect'),
+  googleDisconnect: invoke('google:disconnect'),
+  driveListFiles: invoke('drive:listFiles'),
+  driveDownloadFile: invoke('drive:downloadFile'),
+  driveUploadFile: invoke('drive:uploadFile'),
+  devStatus: invoke('dev:status'),
+  devUploadReference: invoke('dev:uploadReference'),
+  devAnalyzeReferences: invoke('dev:analyzeReferences'),
+  devApplyAutomationProfile: invoke('dev:applyAutomationProfile'),
   mailVerify: invoke('mail:verify'),
   mailSend: invoke('mail:send'),
+  mailImapVerify: invoke('mail:imapVerify'),
+  mailInboxList: invoke('mail:inboxList'),
+  mailInboxRead: invoke('mail:inboxRead'),
+  mailContacts: invoke('mail:contacts'),
 
   projectCreate: invoke('project:create'),
   projectList: invoke('project:list'),
@@ -32,13 +55,23 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   datasetExport: invoke('dataset:export'),
 
   validateQuotes: invoke('validate:quotes'),
+  validateReadiness: invoke('validate:readiness'),
   validateCardplan: invoke('validate:cardplan'),
   validateEmail: invoke('validate:email'),
 
   extractUrl: invoke('extract:url'),
   extractFile: invoke('extract:file'),
+  filePreview: invoke('file:preview'),
+  filePreviewPath: invoke('file:previewPath'),
+  fileStoreLocal: invoke('file:storeLocal'),
   transcribeDiagnose: invoke('transcribe:diagnose'),
   transcribeAudio: invoke('transcribe:audio'),
+  transcribeSetup: invoke('transcribe:setup'),
+  onTranscribeSetupEvent(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('transcribe:setupEvent', listener);
+    return () => ipcRenderer.removeListener('transcribe:setupEvent', listener);
+  },
   archiveSearch: invoke('archive:search'),
   archiveCount: invoke('archive:count'),
   backupRun: invoke('backup:run'),
@@ -56,4 +89,5 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   draftExportPdf: invoke('draft:exportPdf'),
   spellCheck: invoke('spell:check'),
   showFile: invoke('shell:showFile'),
+  openPath: invoke('shell:openPath'),
 });

@@ -30,7 +30,7 @@ test('저장 계층 + 학습 레코드 파이프라인', async () => {
     projectId: pid, stage: 'draft',
     input: { keywords: ['조정부'] },
     aiOutput: '조정부가 승격되었다.',
-    modelVersion: 'claude-opus-4-8+prompts/v1/draft_writer',
+    modelVersion: 'gemini-2.5-flash+gemini/generateContent+prompts/v1/draft_writer',
   });
   const dist = records.finalizeRecord(store, rid, '조정부가 학생단체로 승격되었다.');
   assert.ok(dist > 0);

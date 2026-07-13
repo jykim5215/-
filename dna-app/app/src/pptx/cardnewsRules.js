@@ -9,7 +9,69 @@ const MAX_BODY_CHARS = 380; // 32pt 기준 휴리스틱 — 초과 시 로고 �
 // 허용 문장부호: 곡선/직선 따옴표, 쉼표, 하이픈류. 그 외 문장부호는 경고.
 const COVER_FORBIDDEN_RE = /[.!?:;()[\]{}~·…/\\@#$%^&*+=|<>]/g;
 
-function validateCardPlan(plan) {
+function normalizeExcerpt(text) {
+  return String(text || '')
+    .normalize('NFC')
+    .replace(/[“”"‘’'『』「」\s]/g, '')
+    .replace(/[.,·…!?~\-—()[\]{}:;]/g, '');
+}
+
+function splitAnswerSentences(text) {
+  return String(text || '')
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => normalizeExcerpt(s).length >= 8);
+}
+
+// Q&A 본문에서 "박:", "김서현 차장(이하 김):" 같은 발화자 답변을 찾는다.
+function extractSpeakerAnswers(body) {
+  const lines = String(body || '').split(/\n+/);
+  const answers = [];
+  for (const line of lines) {
+    const m = line.trim().match(/^([^:\n]{1,40}):\s*(.+)$/);
+    if (!m) continue;
+    const speaker = m[1].trim();
+    if (/^Q\d*[.)]?$/i.test(speaker)) continue;
+    answers.push({ speaker, text: m[2].trim() });
+  }
+  return answers;
+}
+
+function verifyCardExcerpts(plan, sourceText) {
+  const source = normalizeExcerpt(sourceText);
+  if (!source) return [];
+
+  const issues = [];
+  (plan.cards || []).forEach((card, cardIndex) => {
+    const speakerAnswers = extractSpeakerAnswers(card.body);
+    const isQa = /^\s*Q\d+[.)]/i.test(card.title || '') || speakerAnswers.length > 0;
+    if (!isQa) return;
+
+    // 대면 인터뷰는 "박:" 화자 답변, 서면 인터뷰는 화자 표기 없이 답변 문단이 이어진다.
+    // 화자 표기가 없으면 본문 전체(선두 Q행 제외)를 발췌 검증 대상으로 삼는다.
+    const answers = speakerAnswers.length
+      ? speakerAnswers
+      : [{
+          speaker: '답변',
+          text: String(card.body || '').replace(/^\s*Q\d*[.)][^\n]*\n?/i, ''),
+        }];
+    for (const answer of answers) {
+      for (const sentence of splitAnswerSentences(answer.text)) {
+        if (!source.includes(normalizeExcerpt(sentence))) {
+          issues.push({
+            cardIndex,
+            cardTitle: card.title || `카드 ${cardIndex + 1}`,
+            speaker: answer.speaker,
+            excerpt: sentence,
+          });
+        }
+      }
+    }
+  });
+  return issues;
+}
+
+function validateCardPlan(plan, { sourceText = '' } = {}) {
   const errors = [];
   const warnings = [];
 
@@ -51,7 +113,21 @@ function validateCardPlan(plan) {
     if (qCount > 1) warnings.push(`${label}: 질문이 ${qCount}개로 보입니다 — 1문항 1카드 원칙.`);
   });
 
-  return { ok: errors.length === 0, errors, warnings, totalSlides };
+  const excerptIssues = verifyCardExcerpts(plan, sourceText);
+  for (const issue of excerptIssues) {
+    errors.push(
+      `${issue.cardTitle} ${issue.speaker}: 기사 원문의 연속 발췌가 아닙니다 — "${issue.excerpt}"`
+    );
+  }
+
+  return { ok: errors.length === 0, errors, warnings, totalSlides, excerptIssues };
 }
 
-module.exports = { validateCardPlan, MAX_SLIDES, MAX_BODY_CHARS };
+module.exports = {
+  validateCardPlan,
+  verifyCardExcerpts,
+  extractSpeakerAnswers,
+  normalizeExcerpt,
+  MAX_SLIDES,
+  MAX_BODY_CHARS,
+};
