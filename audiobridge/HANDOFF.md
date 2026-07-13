@@ -171,8 +171,10 @@ audiobridge/
   함께 게시, Android는 캐시 우회+해시 검증, Windows는 직접 EXE 다운로드+해시 검증+종료 후 안전 교체.
   CI는 `AudioBridgeWin.exe`를 개별 자산으로 올리고 롤링 태그를 실제 빌드 커밋으로 이동한다.
 
-**v2.4 검증 상태:** Windows Release 빌드 경고/오류 0. Android는 로컬 JDK 경로 확인 후 컴파일 또는
-GitHub Actions에서 최종 검증한다. 배포 확인 시 이 줄에 Actions run과 릴리스 자산 검증 결과를 추가할 것.
+**v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
+run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
+배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
+APK/EXE SHA-256이 GitHub 저장 자산 digest와 모두 일치하고, 롤링 태그는 빌드 커밋 `72c5e09`를 가리킨다.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
@@ -181,8 +183,8 @@ GitHub Actions에서 최종 검증한다. 배포 확인 시 이 줄에 Actions r
 `maven.google.com`, `services.gradle.org`, `repo.maven.apache.org`, `github.com`은 열려 있다.
 Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능.
 
-**다음 할 일:** v2.4 GitHub Actions 그린 빌드 확인 → `latest.json`의 두 SHA-256과 실제 APK/EXE 일치 확인 →
-구버전 Android/Windows에서 업데이트 배너 및 설치/교체 실기기 확인. 이후 후보는 마이크 기반 자동 음향
+**다음 할 일:** 구버전 Android/Windows에서 업데이트 배너 및 설치/교체 실기기 확인 → 서로 다른 Android
+기기 2대와 Windows를 섞어 10분 이상 재생하며 체감 시차/드리프트 측정. 이후 후보는 마이크 기반 자동 음향
 캘리브레이션(테스트 펄스 상호상관)으로, OS 밖의 스피커 DSP 지연까지 자동 측정하는 기능이다.
 
 ## 7. 다른 LLM/새 세션 인수 체크리스트
