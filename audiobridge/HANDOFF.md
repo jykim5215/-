@@ -207,6 +207,13 @@ digest와 모두 일치함을 확인했다. 롤링 태그와 release target은 �
 Actions의 Node.js 20 deprecation 경고는 현재 빌드에는 영향이 없으나 추후 action 메이저 버전을 갱신한다.
 소스 음소거 상태의 다기기 실청음은 아직 하지 않았으므로 완료로 간주하지 않는다.
 
+**v2.6.16(400ms) 검증 상태:** 로컬 Windows Release 빌드 경고/오류 0, GitHub Actions run
+`29283052249`에서 Android APK/AAB와 Windows 단일 EXE를 포함한 전 단계가 성공했다. 공개
+`latest.json` 버전은 `2.6.16`이다. 공개 URL에서 APK 6,565,935 bytes와 EXE 162,089,976 bytes를
+다시 내려받아 SHA-256이 각각 `83c53d8fa53772667a143933e03de70bad58f0fdf5b5b051341413d84032f187`,
+`82fc1f59000898bacd4b3f7057db9432e8a2f3405ae7be1320d42b7f50aa3368`로 `latest.json`과 GitHub asset
+digest에 모두 일치함을 확인했다. 롤링 태그와 release target은 빌드 커밋 `b3f67b1`을 가리킨다.
+
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
 따라서 빌드는 **GitHub Actions**(`.github/workflows/build.yml`)로 수행한다 —
