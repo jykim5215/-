@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace AudioBridge.Win;
 
 /// <summary>전역 설정. 이름은 %APPDATA%\AudioBridge\name.txt에 저장.</summary>
