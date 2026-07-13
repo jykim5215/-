@@ -15,6 +15,16 @@ object Protocol {
     const val SAMPLE_RATE = 48000
     const val FRAME_MS = 5
 
+    /**
+     * 모든 수신기가 공유하는 의도적 재생 대기 시간.
+     *
+     * 정상 Wi-Fi 홉(<10ms가 일반적), Android 저지연 출력 보장 상한(45ms),
+     * Windows 공유 모드 기본 오디오 버퍼(약 10ms)에 캡처·스케줄 지터 여유를 더한
+     * 보수적 기본값이다. 자세한 근거는 LATENCY_POLICY.md를 참고한다.
+     */
+    const val DEFAULT_PLAYOUT_DELAY_MS = 100
+    const val MAX_EXTRA_DELAY_MS = 300
+
     /** 5ms 프레임의 페이로드 바이트 수 (PCM16). */
     fun frameBytes(channels: Int): Int = SAMPLE_RATE / 1000 * FRAME_MS * 2 * channels
 

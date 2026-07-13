@@ -113,7 +113,6 @@ fun MainScreen() {
     val sendPending by BridgeState.sendPending.collectAsState()
     val level by BridgeState.level.collectAsState()
     val bSource by BridgeState.bSource.collectAsState()
-    val bufferMs by BridgeState.bufferMs.collectAsState()
     val transportTcp by BridgeState.transportTcp.collectAsState()
     val discovering by BridgeState.discovering.collectAsState()
     val peers by BridgeState.peers.collectAsState()
@@ -121,7 +120,7 @@ fun MainScreen() {
     val updateProgress by BridgeState.updateProgress.collectAsState()
     val speakers by BridgeState.speakers.collectAsState()
     val isServerSession by BridgeState.isServerSession.collectAsState()
-    val nudgeMs by BridgeState.nudgeMs.collectAsState()
+    val extraDelayMs by BridgeState.extraDelayMs.collectAsState()
 
     val uiScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -388,29 +387,37 @@ fun MainScreen() {
                         singleLine = true,
                         supportingText = { Text("상대 기기 목록에 이 이름으로 보여요") },
                     )
-                    Text("소리 안정성", style = MaterialTheme.typography.labelLarge)
-                    Slider(
-                        value = bufferMs.toFloat(),
-                        onValueChange = { BridgeEngine.setBufferMs(it.toInt()) },
-                        valueRange = 20f..300f,
-                    )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("빠른 반응", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                        Text("끊김 없이", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        Text("기본 재생 대기", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "${Protocol.DEFAULT_PLAYOUT_DELAY_MS}ms",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = cs.primary,
+                        )
                     }
+                    Text(
+                        "일반 Wi-Fi와 기기별 오디오 출력 지연을 감안한 공통값이에요",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
                     Text("연결 방식", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SelectChip(label = "빠름 (권장)", selected = !transportTcp) { BridgeEngine.setTransportTcp(false) }
                         SelectChip(label = "안정", selected = transportTcp) { BridgeEngine.setTransportTcp(true) }
                     }
-                    Text("소리 시차 미세 조정 (${nudgeMs}ms)", style = MaterialTheme.typography.labelLarge)
+                    Text("이 기기 추가 지연 (+${extraDelayMs}ms)", style = MaterialTheme.typography.labelLarge)
                     Slider(
-                        value = nudgeMs.toFloat(),
-                        onValueChange = { BridgeEngine.setNudgeMs(it.toInt()) },
-                        valueRange = -300f..300f,
+                        value = extraDelayMs.toFloat(),
+                        onValueChange = { BridgeEngine.setExtraDelayMs(it.toInt()) },
+                        valueRange = 0f..Protocol.MAX_EXTRA_DELAY_MS.toFloat(),
                     )
                     Text(
-                        "여러 스피커의 소리가 미세하게 어긋나면 이 기기에서 조절해요",
+                        "공통 시각보다 이 기기를 더 늦추는 방향으로만 조절해요",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
+                    Text(
+                        "소스 기기의 원음은 앱이 늦출 수 없어요. 함께 들을 때는 소스 기기를 음소거하고 연결된 스피커만 사용하세요.",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant,
                     )

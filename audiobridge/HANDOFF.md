@@ -30,7 +30,8 @@
      (Android 10 / API 29+). 앱별로 캡처 거부 가능 → **마이크 캡처(`RECORD_AUDIO`)를
      대체/선택 옵션**으로 제공. 모드 B의 소스는 사용자가 ①마이크 ②내부 캡처 중 선택.
 3. **코덱:** 기본 PCM 16-bit 48kHz 스테레오. 대역폭 옵션으로 Opus 압축 선택 가능.
-4. **전송:** 기본 UDP(저지연), 옵션 TCP(안정성). 지터 버퍼 + 버퍼 크기 조절 UI.
+4. **전송:** 기본 UDP(저지연), 옵션 TCP(안정성). v2.6부터 연구·플랫폼 수치 기반 공통 재생 대기
+   100ms를 고정 기본값으로 사용하고, 수신기별 보정은 추가 지연 0–300ms 한 방향만 제공.
 5. **연결:** LAN 자동 검색(NSD/mDNS 또는 UDP 브로드캐스트) + 수동 IP:포트 입력 둘 다.
 6. **안드로이드:** Kotlin, Gradle, `minSdk 26`, 최신 안정 `targetSdk`. 재생 `AudioTrack`,
    캡처 `AudioRecord`/`MediaProjection`. 스트리밍 중 포그라운드 서비스 + 상태바 알림.
@@ -175,6 +176,12 @@ audiobridge/
   모든 텍스트를 단일 Segoe UI 계열·ClearType/고정 힌팅으로 통일했다. Android 런처와 같은 블루
   그라데이션+흰 스피커 형태의 Windows 전용 SVG/다중 해상도 ICO(16~256px)를 만들고 EXE 리소스,
   작업표시줄, 창 제목, 화면 헤더에 적용. `tools/GenerateWindowsIcon.ps1`로 ICO/PNG를 재현할 수 있다.
+- [x] v2.6 (물리 지연을 전제로 한 단방향 정책): 정상 단일 Wi-Fi 홉이 보통 10ms 미만이라는 실험
+  문헌, Android 저지연 출력 보장 상한 45ms, Windows 공유 모드 기본 버퍼 약 10ms를 바탕으로 캡처·
+  스케줄 변동 여유를 더한 **공통 재생 대기 100ms**를 고정 기본값으로 채택. 기존 조절식 20–300ms
+  안정성 UI와 ±300ms nudge를 제거하고, 기기별 **추가 지연 0–300ms**만 남겼다. 저장값 마이그레이션은
+  기존 양수 nudge를 보존하고 음수는 0으로 만든다. 근거·계산·소스 로컬 출력은 앱이 늦출 수 없다는
+  구조적 한계를 `LATENCY_POLICY.md`에 기록했다. 소스 기기 원음과 함께 들을 때는 소스를 음소거해야 한다.
 
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
@@ -193,9 +200,10 @@ GitHub Actions run `29266247729` 성공, 배포 버전 `2.5.14`. 실제 릴리�
 `maven.google.com`, `services.gradle.org`, `repo.maven.apache.org`, `github.com`은 열려 있다.
 Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능.
 
-**다음 할 일:** 구버전 Android/Windows에서 업데이트 배너 및 설치/교체 실기기 확인 → 서로 다른 Android
-기기 2대와 Windows를 섞어 10분 이상 재생하며 체감 시차/드리프트 측정. 이후 후보는 마이크 기반 자동 음향
-캘리브레이션(테스트 펄스 상호상관)으로, OS 밖의 스피커 DSP 지연까지 자동 측정하는 기능이다.
+**다음 할 일:** 구버전 Android/Windows에서 v2.6 업데이트 배너 및 설치/교체 실기기 확인 → 소스 기기는
+음소거하고 서로 다른 Android 기기 2대와 Windows를 섞어 10분 이상 재생하며 체감 시차/드리프트 측정.
+이후 후보는 마이크 기반 자동 음향 캘리브레이션(테스트 펄스 상호상관)으로, OS 밖의 스피커 DSP 지연까지
+자동 측정해 `extraDelayMs`를 제안하는 기능이다.
 
 ## 7. 다른 LLM/새 세션 인수 체크리스트
 
@@ -207,7 +215,9 @@ Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능
    `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
 3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
    수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
-4. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
+4. 지연 정책 불변식: 공통 기본값은 100ms이고 수신기 보정은 0–300ms 추가 지연만 가능하다. 다른 앱이
+   소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
+5. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
-5. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
+6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
    완료로 표기하지 않는다.

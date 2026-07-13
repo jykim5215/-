@@ -40,7 +40,7 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 | 폰→PC | `{"type":"modeA","action":"start","udpPort":48552,"sampleRate":48000,"channels":2,"codec":0}` | "PC 소리를 내 udpPort로 보내라" |
 | 폰→PC | `{"type":"modeA","action":"stop"}` | 모드 A 중지 |
 | PC→폰 | `{"type":"modeA","status":"ok"}` / `{"type":"modeA","status":"error","message":"..."}` | 시작/중지 응답 |
-| 폰→PC | `{"type":"modeB","action":"start","sampleRate":48000,"channels":1,"codec":0,"delayMs":60}` | "폰 오디오를 보낼 테니 재생하라". `delayMs`는 소스가 지시하는 동기 재생 지연(§7) — 모든 스피커가 같은 값을 쓰면 시간 정렬됨 |
+| 폰→PC | `{"type":"modeB","action":"start","sampleRate":48000,"channels":1,"codec":0,"delayMs":100}` | "폰 오디오를 보낼 테니 재생하라". `delayMs`는 소스가 지시하는 공통 동기 재생 지연(§7) — v2.6 기본값은 100ms |
 | PC→폰 | `{"type":"modeB","status":"ok","udpPort":48553}` | PC의 수신 포트 통지 |
 | 폰→PC | `{"type":"modeB","action":"stop"}` | 모드 B 중지 |
 | 양쪽 | `{"type":"role","output":"self"\|"other"\|"none"}` | "소리가 나올 곳"에 대한 자기 선택 통지 (보내는 쪽 기준). 폰↔폰에서 양쪽 선택이 상보(한쪽 self·한쪽 other)일 때만 스트림 시작. PC는 이 메시지를 보내지 않으며 항상 폰의 선택에 자동 동의 |
@@ -76,7 +76,9 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 
 ## 4. 지터 버퍼
 
-- 수신측은 목표 버퍼(기본 60 ms, 사용자 조절 20–500 ms)만큼 선버퍼링 후 재생 시작.
+- 수신측은 공통 목표 지연(기본 100ms)만큼 기다린 뒤 타임스탬프에 맞춰 재생한다.
+- 기기별 수동 보정은 공통 목표에 더하는 `extraDelayMs` 0–300ms만 허용한다. 음수 보정은 이미
+  지나간 하드웨어 출력 시각으로 프레임을 보낼 수 없으므로 지원하지 않는다.
 - 언더런 시: 무음 재생 + 다시 목표치까지 재버퍼링. 오버런(목표의 4배 초과) 시: 오래된 데이터 폐기.
 
 ## 5. TCP 오디오 모드 (옵션, 안정성 우선)
@@ -111,13 +113,16 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
   `offset = (t0 + t2)/2 − t1`, `toLocal(srcTs) = srcTs + offset`.
 - **소스 시계 = 오디오 패킷 timestampUs와 같은 단조 시계**여야 한다
   (안드로이드: elapsedRealtimeNanos/1000, 윈도우: 전역 Stopwatch µs).
-- 수신기는 각 프레임을 `toLocal(timestampUs) + delayMs + (기기별 미세 조정)` 시점에 재생한다.
+- 수신기는 각 프레임을 `toLocal(timestampUs) + delayMs + extraDelayMs` 시점에 재생한다.
   Android는 `AudioTrack.getTimestamp(AudioTimestamp)`의 하드웨어 표시 시각, Windows는
   `WasapiOut.GetPosition()`의 장치 재생 헤드를 기준으로 **다음에 쓸 프레임이 실제 출력될 시각**을 계산한다.
   이르면 무음 삽입, 20ms 이상 늦으면 폐기한다. 오프셋이 없으면(clk 미지원 상대) 첫 패킷
   도착 시각 기준 잠정 오프셋으로 동작한다(단독 재생과 동일).
 - 이 방식은 OS 믹서/HAL 버퍼 크기가 달라도 동일한 음향 시각을 목표로 하며, 장시간 재생 중 시계 속도
-  차이도 재동기화한다. 남는 기기별 음향 경로 오차는 수신기 설정의 미세 조정(±300ms)으로 보정한다.
+  차이도 재동기화한다. 남는 기기별 음향 경로 오차는 더 빠르게 들리는 수신기의 단방향 추가 지연
+  (0–300ms)으로 보정한다. 기본 100ms의 산정 근거는 `LATENCY_POLICY.md`에 기록한다.
+- 다른 앱이 소스 기기 자체 스피커로 내는 원음 경로는 AudioBridge가 지연시킬 수 없다. 소스 원음과
+  네트워크 수신음을 동시에 맞추려면 소스 기기를 음소거하고 네트워크 수신기만 사용해야 한다.
 - **스테레오 페어**는 순수 소스 측 기능이다: 소스가 스피커별로 왼쪽/오른쪽 채널만 추출한
   **모노 스트림**(헤더 channels=1)을 보낸다. 규약 변경 없음 — 수신기는 일반 모노 재생.
 

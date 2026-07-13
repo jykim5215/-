@@ -22,13 +22,13 @@ import kotlin.math.max
  * 수신 재생기 — 상대가 보내는 오디오를 이 기기에서 재생한다.
  *
  * 시간 동기 재생: 각 패킷의 소스 타임스탬프를 시계 오프셋([offsetUsProvider],
- * PROTOCOL.md §7)으로 로컬 시각으로 바꾸고, "소스 시각 + 목표 지연 + 미세 조정"
+ * PROTOCOL.md §7)으로 로컬 시각으로 바꾸고, "소스 시각 + 공통 지연 + 추가 지연"
  * 시점에 맞춰 재생한다. 여러 스피커가 같은 소스에 물리면 같은 시점에 소리가 난다.
  * 오프셋이 없으면(구버전 PC 등) 첫 패킷 도착 기준으로 잠정 오프셋을 잡는다.
  */
 class ModeAPlayer(
     private val delayMsProvider: () -> Int,
-    private val nudgeMsProvider: () -> Int,
+    private val extraDelayMsProvider: () -> Int,
     private val offsetUsProvider: () -> Long?,
     private val onStats: (lossPct: Double, level: Float, bufferedMs: Int) -> Unit,
     private val onError: (String) -> Unit,
@@ -264,7 +264,7 @@ class ModeAPlayer(
                 }
                 val targetUs = head.tsUs + offset +
                     delayMsProvider().coerceIn(20, 500) * 1000L +
-                    nudgeMsProvider().coerceIn(-300, 300) * 1000L
+                    extraDelayMsProvider().coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS) * 1000L
                 // 핵심: "지금 쓰는 데이터가 실제 스피커에서 나오는 시각"으로 비교한다.
                 // 기기마다 오디오 출력 버퍼 크기가 크게 달라서, 트랙에 쌓여 있는
                 // 미재생분만큼 미래에 소리가 나온다 — 이걸 반영해야 기기 간이 맞는다.

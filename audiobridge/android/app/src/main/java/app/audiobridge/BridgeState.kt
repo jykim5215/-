@@ -44,14 +44,14 @@ object BridgeState {
 
     // 설정
     val bSource = MutableStateFlow(CaptureSource.MIC)
-    val bufferMs = MutableStateFlow(60)
+    val bufferMs = MutableStateFlow(Protocol.DEFAULT_PLAYOUT_DELAY_MS)
     val transportTcp = MutableStateFlow(false)
     val modeAPort = MutableStateFlow(Protocol.DEFAULT_MODE_A_PORT)
 
     // 다대일 스피커 (내가 소스일 때 연결된 스피커들)
     val speakers = MutableStateFlow<List<SpeakerInfo>>(emptyList())
-    // 이 기기 재생 시차 미세 조정 (ms, -100..100)
-    val nudgeMs = MutableStateFlow(0)
+    // 공통 재생 시각보다 이 기기만 더 늦추는 보정 (ms, 0..300)
+    val extraDelayMs = MutableStateFlow(0)
 
     // 검색
     val discovering = MutableStateFlow(false)

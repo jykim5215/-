@@ -44,7 +44,7 @@ class ControlServer(
         fun onPlayDelay(delayMs: Int)
         /** 재생 스케줄용 파라미터 제공 */
         fun playbackDelayMs(): Int
-        fun playbackNudgeMs(): Int
+        fun playbackExtraDelayMs(): Int
         fun playbackOffsetUs(): Long?
     }
 
@@ -206,7 +206,7 @@ class ControlServer(
             player?.stop()
             val p = ModeAPlayer(
                 delayMsProvider = { callbacks.playbackDelayMs() },
-                nudgeMsProvider = { callbacks.playbackNudgeMs() },
+                extraDelayMsProvider = { callbacks.playbackExtraDelayMs() },
                 offsetUsProvider = { callbacks.playbackOffsetUs() },
                 onStats = { _, level, _ -> callbacks.onLevel(level) },
                 onError = { msg -> callbacks.onError(msg) },

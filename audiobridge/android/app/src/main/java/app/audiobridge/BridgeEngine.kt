@@ -82,10 +82,22 @@ object BridgeEngine {
         if (::app.isInitialized) return
         app = context.applicationContext
         val prefs = prefs()
-        BridgeState.bufferMs.value = prefs.getInt("bufferMs", 60)
+        BridgeState.bufferMs.value = Protocol.DEFAULT_PLAYOUT_DELAY_MS
         BridgeState.transportTcp.value = prefs.getBoolean("tcp", false)
         BridgeState.modeAPort.value = prefs.getInt("modeAPort", Protocol.DEFAULT_MODE_A_PORT)
-        BridgeState.nudgeMs.value = prefs.getInt("nudgeMs", 0)
+        val savedOrLegacyExtraDelay = if (prefs.contains("extraDelayMs")) {
+            prefs.getInt("extraDelayMs", 0)
+        } else {
+            // v2.5까지의 양방향 nudge는 양수만 보존한다. 음수(앞당김)는 새 정책에서 0이다.
+            prefs.getInt("nudgeMs", 0).coerceAtLeast(0)
+        }
+        val storedExtraDelay = savedOrLegacyExtraDelay.coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS)
+        BridgeState.extraDelayMs.value = storedExtraDelay
+        prefs.edit()
+            .putInt("extraDelayMs", storedExtraDelay)
+            .remove("nudgeMs")
+            .remove("bufferMs")
+            .apply()
         BridgeState.bSource.value =
             if (prefs.getString("bSource", "MIC") == "INTERNAL") CaptureSource.INTERNAL else CaptureSource.MIC
         BridgeState.myName.value =
@@ -106,14 +118,9 @@ object BridgeEngine {
         prefs().edit().putString("deviceName", n).apply()
     }
 
-    fun setBufferMs(ms: Int) {
-        BridgeState.bufferMs.value = ms.coerceIn(20, 500)
-        prefs().edit().putInt("bufferMs", BridgeState.bufferMs.value).apply()
-    }
-
-    fun setNudgeMs(ms: Int) {
-        BridgeState.nudgeMs.value = ms.coerceIn(-300, 300)
-        prefs().edit().putInt("nudgeMs", BridgeState.nudgeMs.value).apply()
+    fun setExtraDelayMs(ms: Int) {
+        BridgeState.extraDelayMs.value = ms.coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS)
+        prefs().edit().putInt("extraDelayMs", BridgeState.extraDelayMs.value).apply()
     }
 
     fun setTransportTcp(tcp: Boolean) {
@@ -246,7 +253,7 @@ object BridgeEngine {
         override fun playbackDelayMs(): Int =
             if (serverPlayDelayMs > 0) serverPlayDelayMs else BridgeState.bufferMs.value
 
-        override fun playbackNudgeMs(): Int = BridgeState.nudgeMs.value
+        override fun playbackExtraDelayMs(): Int = BridgeState.extraDelayMs.value
 
         override fun playbackOffsetUs(): Long? = serverClock.offsetUs
     }
@@ -568,7 +575,7 @@ object BridgeEngine {
         link.clock.tick()
         val p = ModeAPlayer(
             delayMsProvider = { BridgeState.bufferMs.value },
-            nudgeMsProvider = { BridgeState.nudgeMs.value },
+            extraDelayMsProvider = { BridgeState.extraDelayMs.value },
             offsetUsProvider = { link.clock.offsetUs },
             onStats = { _, level, _ -> BridgeState.level.value = level },
             onError = { msg ->

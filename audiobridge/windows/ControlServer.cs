@@ -214,7 +214,7 @@ public sealed class ControlServer
             }
 
             bool tcp = GetString(message, "transport") == "tcp";
-            int delayMs = Math.Clamp(GetInt(message, "delayMs", 60), 20, 500);
+            int delayMs = Math.Clamp(GetInt(message, "delayMs", Protocol.DefaultPlayoutDelayMs), 20, 500);
             _playerB?.Dispose();
             _playerB = null;
             try
