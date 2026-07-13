@@ -31,7 +31,8 @@
      대체/선택 옵션**으로 제공. 모드 B의 소스는 사용자가 ①마이크 ②내부 캡처 중 선택.
 3. **코덱:** 기본 PCM 16-bit 48kHz 스테레오. 대역폭 옵션으로 Opus 압축 선택 가능.
 4. **전송:** 기본 UDP(저지연), 옵션 TCP(안정성). v2.6부터 연구·플랫폼 수치 기반 공통 재생 대기
-   100ms를 고정 기본값으로 사용하고, 수신기별 보정은 추가 지연 0–300ms 한 방향만 제공.
+   공학 기준선 100ms에 안정성 여유를 더한 400ms를 고정 기본값으로 사용하고, 수신기별 보정은
+   추가 지연 0–300ms 한 방향만 제공.
 5. **연결:** LAN 자동 검색(NSD/mDNS 또는 UDP 브로드캐스트) + 수동 IP:포트 입력 둘 다.
 6. **안드로이드:** Kotlin, Gradle, `minSdk 26`, 최신 안정 `targetSdk`. 재생 `AudioTrack`,
    캡처 `AudioRecord`/`MediaProjection`. 스트리밍 중 포그라운드 서비스 + 상태바 알림.
@@ -182,6 +183,9 @@ audiobridge/
   안정성 UI와 ±300ms nudge를 제거하고, 기기별 **추가 지연 0–300ms**만 남겼다. 저장값 마이그레이션은
   기존 양수 nudge를 보존하고 음수는 0으로 만든다. 근거·계산·소스 로컬 출력은 앱이 늦출 수 없다는
   구조적 한계를 `LATENCY_POLICY.md`에 기록했다. 소스 기기 원음과 함께 들을 때는 소스를 음소거해야 한다.
+- [x] v2.6.16 (안정성 우선 기본값): 사용자 선택에 따라 공통 재생 대기를 100ms에서 **400ms**로
+  상향했다. 연구·플랫폼 수치로 산정한 100ms는 공학 기준선으로 문서에 남기고, 제품 기본값은 순간적인
+  Wi-Fi 지터·절전·제조사 DSP를 흡수하기 위한 300ms 추가 여유를 포함한다고 명확히 구분했다.
 
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
@@ -225,7 +229,7 @@ Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능
    `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
 3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
    수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
-4. 지연 정책 불변식: 공통 기본값은 100ms이고 수신기 보정은 0–300ms 추가 지연만 가능하다. 다른 앱이
+4. 지연 정책 불변식: 공통 기본값은 400ms이고 수신기 보정은 0–300ms 추가 지연만 가능하다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
 5. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.

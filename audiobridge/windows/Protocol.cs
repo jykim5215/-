@@ -15,7 +15,7 @@ public static class Protocol
 
     public const int SampleRate = 48000;
     public const int FrameMs = 5;
-    public const int DefaultPlayoutDelayMs = 100;
+    public const int DefaultPlayoutDelayMs = 400;
 
     public static int FrameBytes(int channels) => SampleRate / 1000 * FrameMs * 2 * channels;
 

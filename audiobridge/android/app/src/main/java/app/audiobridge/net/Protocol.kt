@@ -19,10 +19,11 @@ object Protocol {
      * 모든 수신기가 공유하는 의도적 재생 대기 시간.
      *
      * 정상 Wi-Fi 홉(<10ms가 일반적), Android 저지연 출력 보장 상한(45ms),
-     * Windows 공유 모드 기본 오디오 버퍼(약 10ms)에 캡처·스케줄 지터 여유를 더한
-     * 보수적 기본값이다. 자세한 근거는 LATENCY_POLICY.md를 참고한다.
+     * Windows 공유 모드 기본 오디오 버퍼(약 10ms)로 계산한 공학 기준선은 100ms지만,
+     * 실제 가정용 Wi-Fi의 순간 지연과 제조사 DSP를 넉넉히 흡수하도록 안정성 우선값을 쓴다.
+     * 자세한 근거와 제품 기본값 결정은 LATENCY_POLICY.md를 참고한다.
      */
-    const val DEFAULT_PLAYOUT_DELAY_MS = 100
+    const val DEFAULT_PLAYOUT_DELAY_MS = 400
     const val MAX_EXTRA_DELAY_MS = 300
 
     /** 5ms 프레임의 페이로드 바이트 수 (PCM16). */
