@@ -181,6 +181,11 @@ run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴�
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
 APK/EXE SHA-256이 GitHub 저장 자산 digest와 모두 일치하고, 롤링 태그는 빌드 커밋 `72c5e09`를 가리킨다.
 
+**v2.5 검증 상태:** 로컬 Windows Release 빌드 경고/오류 0, 단일 EXE에서 연결 아이콘 추출 성공.
+GitHub Actions run `29266247729` 성공, 배포 버전 `2.5.14`. 실제 릴리스의 `AudioBridgeWin.exe`
+(162,089,976 bytes)를 다시 내려받아 `latest.json.windowsSha256`과 일치함을 확인했고 포함 아이콘도 추출
+성공. 롤링 태그는 빌드 커밋 `a4c51c1`을 가리킨다. 전체 창 레이아웃은 실제 Windows 화면에서 최종 눈검사가 필요하다.
+
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
 따라서 빌드는 **GitHub Actions**(`.github/workflows/build.yml`)로 수행한다 —
