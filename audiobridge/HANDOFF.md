@@ -222,8 +222,17 @@ digest에 모두 일치함을 확인했다. 롤링 태그와 release target은 �
 
 **v2.7 로컬 검증 상태:** Windows `dotnet build -c Release` 경고/오류 0. Android는 JDK 21과
 Android SDK Platform 35/Build Tools 34를 지정해 `compileDebugKotlin`, `testDebugUnitTest`,
-`assembleDebug`가 성공했고 디버그 APK가 생성됐다. 실제 두 기기 시험음 검출과 GitHub Actions 배포·
-공개 자산 해시 검증은 아직 수행 전이므로 완료로 간주하지 않는다.
+`assembleDebug`가 성공했고 디버그 APK가 생성됐다. 실제 두 기기 시험음 검출은 별도 실기기 검증이 필요하다.
+
+**v2.7.17 배포 검증 상태:** GitHub Actions run `29290447710`에서 Android APK/AAB, Windows
+단일 EXE, 패키징, 롤링 태그, 릴리스 게시 전 단계가 성공했다. 롤링 태그와 release target은 구현
+커밋 `b736b80`을 가리킨다. 캐시 우회한 공개 URL에서 `latest.json`과 자산을 다시 내려받았고,
+APK 6,582,319 bytes의 SHA-256은
+`b630ea78f0d9c60e749fa872e9c65a988dfeec9965ec91a312b0e8cffef5c9be`, Windows EXE
+162,157,185 bytes의 SHA-256은
+`282f4beb0af5834057604999263c96783c9e5dc55822cc88e277b2ff1891322a`로 메타데이터와 GitHub asset
+digest에 모두 일치했다. 실제 Android↔Android 및 Android↔Windows 음향 왕복 실기기 검출은 아직
+수행하지 않았으므로 자동 맞춤의 현장 성공률은 검증 완료로 표기하지 않는다.
 
 **빌드 환경 특이사항 (중요):** 현재 Windows 작업 환경에서는 셸에 JDK/SDK 변수가 기본 설정되지
 않는다. Android 빌드 전 `JAVA_HOME=C:\Program Files\Android\Android Studio1\jbr`,
