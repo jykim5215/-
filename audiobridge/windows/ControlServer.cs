@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace AudioBridge.Win;
 
-/// <summary>컨트롤 채널 서버 (TCP, JSON Lines — PROTOCOL.md §2). 동시에 한 세션만 유지.</summary>
+/// <summary>TCP JSON-lines control server described in PROTOCOL.md.</summary>
 public sealed class ControlServer
 {
     private readonly int _ctlPort;
@@ -31,10 +31,11 @@ public sealed class ControlServer
         }
         catch (SocketException)
         {
-            Console.WriteLine($"[오류] 컨트롤 포트 {_ctlPort}이(가) 이미 사용 중입니다. --ctl-port 옵션으로 다른 포트를 지정하세요.");
+            Console.WriteLine($"[오류] 제어 포트 {_ctlPort}을(를) 이미 사용 중입니다. --ctl-port 옵션으로 다른 포트를 지정하세요.");
             return;
         }
-        Console.WriteLine($"[컨트롤] TCP {_ctlPort} 대기 중 — 폰 앱에서 이 PC를 선택하세요");
+
+        Console.WriteLine($"[대기] TCP {_ctlPort} · Android의 기기 목록에서 이 PC를 선택하세요.");
         while (true)
         {
             TcpClient client;
@@ -61,9 +62,9 @@ public sealed class ControlServer
         private readonly StreamWriter _writer;
         private readonly StreamReader _reader;
         private readonly object _sendLock = new();
+        private readonly ClockSync _clock = new();
         private volatile bool _closed;
         private long _lastPongMs = Environment.TickCount64;
-
         private ModeASender? _senderA;
         private ModeBPlayer? _playerB;
 
@@ -83,7 +84,8 @@ public sealed class ControlServer
         {
             new Thread(ReadLoop) { IsBackground = true, Name = "ab-ctl-read" }.Start();
             new Thread(PingLoop) { IsBackground = true, Name = "ab-ctl-ping" }.Start();
-            Console.WriteLine($"[연결] 폰 접속: {_phone}");
+            new Thread(ClockLoop) { IsBackground = true, Name = "ab-ctl-clock" }.Start();
+            Console.WriteLine($"[연결] 휴대폰 연결 · {_phone}");
         }
 
         private void ReadLoop()
@@ -95,66 +97,67 @@ public sealed class ControlServer
                     string? line = _reader.ReadLine();
                     if (line == null || line.Length > 4096) break;
                     JsonDocument doc;
-                    try { doc = JsonDocument.Parse(line); } catch { continue; }
-                    using (doc)
-                    {
-                        Handle(doc.RootElement);
-                    }
+                    try { doc = JsonDocument.Parse(line); }
+                    catch { continue; }
+                    using (doc) Handle(doc.RootElement);
                 }
             }
             catch
             {
-                // 연결 끊김
+                // The close path below updates the UI and releases audio resources.
             }
             Close();
-            Console.WriteLine("[연결] 폰 연결 종료");
+            Console.WriteLine("[연결] 휴대폰 연결 종료");
         }
 
-        private void Handle(JsonElement m)
+        private void Handle(JsonElement message)
         {
-            switch (GetString(m, "type"))
+            switch (GetString(message, "type"))
             {
                 case "hello":
-                    if (GetInt(m, "version", -1) != Protocol.Version)
+                    if (GetInt(message, "version", -1) != Protocol.Version)
                     {
-                        Send(new { type = "error", message = "프로토콜 버전이 다릅니다" });
+                        Send(new { type = "error", message = "프로토콜 버전이 다릅니다. 두 기기의 앱을 업데이트하세요." });
                         Close();
                         return;
                     }
-                    Console.WriteLine($"[연결] 기기: {GetString(m, "name") ?? "?"}");
+                    Console.WriteLine($"[연결] 기기 이름 · {GetString(message, "name") ?? "알 수 없음"}");
                     Send(new { type = "hello", name = Config.Name, version = Protocol.Version, kind = "pc" });
                     break;
                 case "ping":
                     Send(new { type = "pong" });
                     break;
-                case "clk":
-                    // 시계 동기 (PROTOCOL.md §7): 수신측 질의를 즉시 에코 + 내 시계 첨부
-                    if (!m.TryGetProperty("t1", out _))
-                    {
-                        Send(new { type = "clk", t0 = GetLong(m, "t0", 0), t1 = Clock.Us });
-                    }
-                    break;
                 case "pong":
                     _lastPongMs = Environment.TickCount64;
+                    break;
+                case "clk":
+                    if (message.TryGetProperty("t1", out _))
+                    {
+                        _clock.OnReply(GetLong(message, "t0", 0), GetLong(message, "t1", 0));
+                    }
+                    else
+                    {
+                        Send(new { type = "clk", t0 = GetLong(message, "t0", 0), t1 = Clock.Us });
+                    }
                     break;
                 case "bye":
                     Close();
                     break;
                 case "vol":
-                    _playerB?.SetGain(GetInt(m, "gain", 100));
+                    _playerB?.SetGain(GetInt(message, "gain", 100));
                     break;
                 case "modeA":
-                    HandleModeA(m);
+                    HandleModeA(message);
                     break;
                 case "modeB":
-                    HandleModeB(m);
+                    HandleModeB(message);
                     break;
             }
         }
 
-        private void HandleModeA(JsonElement m)
+        private void HandleModeA(JsonElement message)
         {
-            string action = GetString(m, "action") ?? "";
+            string action = GetString(message, "action") ?? "";
             if (action == "stop")
             {
                 _senderA?.Dispose();
@@ -163,18 +166,20 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
-            if (GetInt(m, "codec", 0) != Protocol.CodecPcm16)
+            if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
-                Send(new { type = "modeA", status = "error", message = "지원하지 않는 코덱입니다 (PCM16만 지원)" });
+                Send(new { type = "modeA", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
                 return;
             }
-            bool tcp = GetString(m, "transport") == "tcp";
-            int udpPort = GetInt(m, "udpPort", 48552);
+
+            bool tcp = GetString(message, "transport") == "tcp";
+            int udpPort = GetInt(message, "udpPort", 48552);
             if (udpPort is < 1 or > 65535)
             {
-                Send(new { type = "modeA", status = "error", message = "잘못된 포트" });
+                Send(new { type = "modeA", status = "error", message = "잘못된 오디오 포트입니다." });
                 return;
             }
+
             _senderA?.Dispose();
             _senderA = null;
             try
@@ -191,9 +196,9 @@ public sealed class ControlServer
             }
         }
 
-        private void HandleModeB(JsonElement m)
+        private void HandleModeB(JsonElement message)
         {
-            string action = GetString(m, "action") ?? "";
+            string action = GetString(message, "action") ?? "";
             if (action == "stop")
             {
                 _playerB?.Dispose();
@@ -202,17 +207,21 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
-            if (GetInt(m, "codec", 0) != Protocol.CodecPcm16)
+            if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
-                Send(new { type = "modeB", status = "error", message = "지원하지 않는 코덱입니다 (PCM16만 지원)" });
+                Send(new { type = "modeB", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
                 return;
             }
-            bool tcp = GetString(m, "transport") == "tcp";
+
+            bool tcp = GetString(message, "transport") == "tcp";
+            int delayMs = Math.Clamp(GetInt(message, "delayMs", 60), 20, 500);
             _playerB?.Dispose();
             _playerB = null;
             try
             {
-                var player = new ModeBPlayer(_phone, _modeBPort, tcp);
+                // Do not wait for the periodic clock thread when playback starts.
+                Send(new { type = "clk", t0 = Clock.Us });
+                var player = new ModeBPlayer(_phone, _modeBPort, tcp, delayMs, () => _clock.OffsetUs);
                 player.Start();
                 _playerB = player;
                 if (tcp) Send(new { type = "modeB", status = "ok", tcpPort = _modeBPort });
@@ -228,26 +237,37 @@ public sealed class ControlServer
         {
             while (!_closed)
             {
-                Thread.Sleep(5000);
+                Thread.Sleep(5_000);
                 if (_closed) return;
                 Send(new { type = "ping" });
-                if (Environment.TickCount64 - _lastPongMs > 15000)
+                if (Environment.TickCount64 - _lastPongMs > 15_000)
                 {
-                    Console.WriteLine("[연결] 폰 응답 없음 — 연결을 정리합니다");
+                    Console.WriteLine("[연결] 휴대폰 응답이 없어 연결을 정리합니다.");
                     Close();
                     return;
                 }
             }
         }
 
-        private void Send(object obj)
+        private void ClockLoop()
+        {
+            Thread.Sleep(200);
+            while (!_closed)
+            {
+                _clock.AgeBestSample();
+                Send(new { type = "clk", t0 = Clock.Us });
+                Thread.Sleep(_clock.OffsetUs == null ? 400 : 3_000);
+            }
+        }
+
+        private void Send(object value)
         {
             if (_closed) return;
             try
             {
                 lock (_sendLock)
                 {
-                    _writer.WriteLine(JsonSerializer.Serialize(obj));
+                    _writer.WriteLine(JsonSerializer.Serialize(value));
                     _writer.Flush();
                 }
             }
@@ -268,13 +288,19 @@ public sealed class ControlServer
             try { _client.Close(); } catch { }
         }
 
-        private static string? GetString(JsonElement m, string key) =>
-            m.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        private static string? GetString(JsonElement message, string key) =>
+            message.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
 
-        private static int GetInt(JsonElement m, string key, int def) =>
-            m.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : def;
+        private static int GetInt(JsonElement message, string key, int fallback) =>
+            message.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number
+                ? value.GetInt32()
+                : fallback;
 
-        private static long GetLong(JsonElement m, string key, long def) =>
-            m.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : def;
+        private static long GetLong(JsonElement message, string key, long fallback) =>
+            message.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number
+                ? value.GetInt64()
+                : fallback;
     }
 }

@@ -160,6 +160,19 @@ audiobridge/
   전역), Console 출력 가로채기 방식이라 기존 로직 무변경 ④ **스토어 준비**: CI가 AAB
   빌드·릴리스 게시, 시크릿(RELEASE_KEYSTORE_B64 등) 있으면 릴리스 키 서명, STORE.md
   (Play/MS Store 절차)·PRIVACY.md 작성. v2.2 컴파일 오류(SendTarget→InetSocketAddress) 수정.
+- [x] v2.4 (사운드 센터↔복수 스피커 시차 재수정 + UI/업데이트 통합): ① **2단 하드웨어 동기화** —
+  공통 `timestampUs` 예약 시각에 더해 Android는 `AudioTrack.getTimestamp(AudioTimestamp)`, Windows는
+  `WasapiOut.GetPosition()`으로 실제 장치 재생 헤드를 계산. Windows가 버리던 패킷 timestamp를 파싱하고
+  Android와 같은 clk 질의/응답을 400ms 버스트→3초 주기로 수행해 PC도 예약 재생에 참여 ② **장시간
+  드리프트 추적** — 저 RTT 오프셋 표본 변화에서 ±250ppm 범위의 시계 속도 차이를 완만하게 보정,
+  suspend/resume 200ms 이상 점프는 즉시 재잠금. 늦은 프레임 폐기 기준 60→20ms ③ **Windows UI 통합** —
+  Android Material 화면과 같은 둥근 카드, 기기 아바타/연결 상태, 동기화 엔진 설명, 활동 기록,
+  업데이트 배너로 WPF 전면 재작성 ④ **양쪽 안전 업데이트** — `latest.json`에 APK/EXE URL과 SHA-256을
+  함께 게시, Android는 캐시 우회+해시 검증, Windows는 직접 EXE 다운로드+해시 검증+종료 후 안전 교체.
+  CI는 `AudioBridgeWin.exe`를 개별 자산으로 올리고 롤링 태그를 실제 빌드 커밋으로 이동한다.
+
+**v2.4 검증 상태:** Windows Release 빌드 경고/오류 0. Android는 로컬 JDK 경로 확인 후 컴파일 또는
+GitHub Actions에서 최종 검증한다. 배포 확인 시 이 줄에 Actions run과 릴리스 자산 검증 결과를 추가할 것.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
@@ -168,4 +181,21 @@ audiobridge/
 `maven.google.com`, `services.gradle.org`, `repo.maven.apache.org`, `github.com`은 열려 있다.
 Gradle 8.14.3 + JDK 21은 로컬에 있어 wrapper 생성은 로컬에서 가능.
 
-**다음 할 일:** 안드로이드 앱 코드 완성 → 윈도우 companion → CI 워크플로로 그린 빌드 → 배포 zip.
+**다음 할 일:** v2.4 GitHub Actions 그린 빌드 확인 → `latest.json`의 두 SHA-256과 실제 APK/EXE 일치 확인 →
+구버전 Android/Windows에서 업데이트 배너 및 설치/교체 실기기 확인. 이후 후보는 마이크 기반 자동 음향
+캘리브레이션(테스트 펄스 상호상관)으로, OS 밖의 스피커 DSP 지연까지 자동 측정하는 기능이다.
+
+## 7. 다른 LLM/새 세션 인수 체크리스트
+
+1. 이 저장소의 `main`은 AudioBridge가 아닌 예전 웹 프로젝트다. AudioBridge 최신 코드는 오픈 PR #2의
+   `claude/hangul-characters-bplcwl` 브랜치와 그 후속 브랜치에서 이어 왔다. 먼저 `git status -sb`,
+   `git log --oneline -5`, 이 문서의 v2.4 항목을 읽고 기준 커밋을 확인한다.
+2. 롤링 배포는 `.github/workflows/build.yml`이 고정 태그 `v1.0.0-build`의 자산을 교체하는 구조다.
+   `latest.json`만 올리거나 ZIP만 교체하면 업데이트가 완성되지 않는다. APK, AAB, 직접 EXE, ZIP,
+   `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
+3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
+   수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
+4. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
+   `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
+5. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
+   완료로 표기하지 않는다.

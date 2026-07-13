@@ -82,7 +82,7 @@ public sealed class ModeASender : IDisposable
         _sendThread = new Thread(SendLoop) { IsBackground = true, Name = "ab-a-send", Priority = ThreadPriority.Highest };
         _sendThread.Start();
         _capture.StartRecording();
-        Console.WriteLine($"[모드 A] PC 소리 송신 시작 → {_phone} ({(_useTcp ? $"TCP {_tcpPort} 대기" : "UDP")}), 소스 {_srcRate}Hz/{_srcCh}ch");
+        Console.WriteLine($"[송신] PC 소리 전송 시작 · {_phone} · {(_useTcp ? $"TCP {_tcpPort}" : "UDP")} · {_srcRate}Hz/{_srcCh}ch");
     }
 
     private void AcceptLoop()
@@ -100,7 +100,7 @@ public sealed class ModeASender : IDisposable
                 }
                 client.NoDelay = true;
                 _tcpStream = client.GetStream();
-                Console.WriteLine("[모드 A] 폰이 TCP 오디오 스트림에 접속했습니다");
+                Console.WriteLine("[송신] 휴대폰이 TCP 오디오 스트림에 연결됐습니다.");
                 return;
             }
             catch
@@ -220,6 +220,6 @@ public sealed class ModeASender : IDisposable
         _udp?.Dispose();
         try { _tcpStream?.Dispose(); } catch { }
         try { _tcpListener?.Stop(); } catch { }
-        Console.WriteLine("[모드 A] 송신 중지");
+        Console.WriteLine("[송신] 중지");
     }
 }

@@ -7,31 +7,50 @@ using NAudio.Wave;
 namespace AudioBridge.Win;
 
 /// <summary>
-/// 모드 B: 폰이 보내는 오디오를 받아 PC 스피커로 재생한다.
-/// UDP 수신 기본, TCP 옵션(폰이 접속해 옴). 첫 패킷 헤더로 포맷을 정한다.
+/// Receives phone audio and schedules every frame against the shared source clock.
+/// WasapiOut.GetPosition is used as the hardware playout head, so different endpoint
+/// buffer sizes do not turn into different audible start times.
 /// </summary>
 public sealed class ModeBPlayer : IDisposable
 {
+    private sealed record AudioFrame(long TimestampUs, byte[] Data);
+
     private readonly IPAddress _phone;
     private readonly bool _useTcp;
+    private readonly int _delayMs;
+    private readonly Func<long?> _offsetUsProvider;
+    private readonly object _queueGate = new();
+    private readonly object _outputGate = new();
+    private readonly PriorityQueue<AudioFrame, long> _frames = new();
+
     public int Port { get; }
 
     private UdpClient? _udp;
     private TcpListener? _tcp;
     private volatile bool _running;
-
     private WasapiOut? _output;
     private BufferedWaveProvider? _provider;
+    private WaveFormat? _format;
+    private Thread? _playThread;
+    private long _writtenBytes;
+    private long _lastPlayedTimestampUs = -1;
+    private long? _fallbackOffsetUs;
     private volatile float _gain = 1f;
 
-    /// <summary>원격 볼륨 (0~100).</summary>
     public void SetGain(int percent) => _gain = Math.Clamp(percent, 0, 100) / 100f;
 
-    public ModeBPlayer(IPAddress phone, int port, bool useTcp)
+    public ModeBPlayer(
+        IPAddress phone,
+        int port,
+        bool useTcp,
+        int delayMs,
+        Func<long?> offsetUsProvider)
     {
         _phone = phone;
         Port = port;
         _useTcp = useTcp;
+        _delayMs = Math.Clamp(delayMs, 20, 500);
+        _offsetUsProvider = offsetUsProvider;
     }
 
     public void Start()
@@ -45,7 +64,7 @@ public sealed class ModeBPlayer : IDisposable
             }
             catch (SocketException)
             {
-                throw new InvalidOperationException($"PC 포트 {Port}이(가) 이미 사용 중입니다");
+                throw new InvalidOperationException($"PC 포트 {Port}을(를) 이미 사용 중입니다.");
             }
             _running = true;
             new Thread(TcpLoop) { IsBackground = true, Name = "ab-b-rx" }.Start();
@@ -58,12 +77,12 @@ public sealed class ModeBPlayer : IDisposable
             }
             catch (SocketException)
             {
-                throw new InvalidOperationException($"PC 포트 {Port}이(가) 이미 사용 중입니다");
+                throw new InvalidOperationException($"PC 포트 {Port}을(를) 이미 사용 중입니다.");
             }
             _running = true;
             new Thread(UdpLoop) { IsBackground = true, Name = "ab-b-rx" }.Start();
         }
-        Console.WriteLine($"[모드 B] 폰 오디오 수신 대기 ({(_useTcp ? "TCP" : "UDP")} {Port})");
+        Console.WriteLine($"[수신] 휴대폰 오디오 대기 중 · {(_useTcp ? "TCP" : "UDP")} {Port} · 목표 지연 {_delayMs}ms");
     }
 
     private void UdpLoop()
@@ -81,10 +100,10 @@ public sealed class ModeBPlayer : IDisposable
                 if (!_running) return;
                 continue;
             }
-            if (!ep.Address.Equals(_phone)) continue; // 페어링된 폰 외 무시
+            if (!ep.Address.Equals(_phone)) continue;
             var info = Protocol.ParseHeader(data);
             if (info == null || Protocol.HeaderSize + info.PayloadLen != data.Length) continue;
-            Play(info, data.AsSpan(Protocol.HeaderSize, info.PayloadLen));
+            Enqueue(info, data.AsSpan(Protocol.HeaderSize, info.PayloadLen));
         }
     }
 
@@ -115,12 +134,12 @@ public sealed class ModeBPlayer : IDisposable
                 var info = Protocol.ParseHeader(header);
                 if (info == null) return;
                 ReadFully(stream, payload, info.PayloadLen);
-                Play(info, payload.AsSpan(0, info.PayloadLen));
+                Enqueue(info, payload.AsSpan(0, info.PayloadLen));
             }
         }
         catch
         {
-            if (_running) Console.WriteLine("[모드 B] 폰 오디오 스트림이 끊어졌습니다");
+            if (_running) Console.WriteLine("[수신] 휴대폰 오디오 연결이 끊어졌습니다.");
         }
         finally
         {
@@ -128,62 +147,187 @@ public sealed class ModeBPlayer : IDisposable
         }
     }
 
-    private static void ReadFully(NetworkStream s, byte[] buf, int len)
+    private static void ReadFully(NetworkStream stream, byte[] buffer, int length)
     {
-        int off = 0;
-        while (off < len)
+        int offset = 0;
+        while (offset < length)
         {
-            int n = s.Read(buf, off, len - off);
-            if (n <= 0) throw new EndOfStreamException();
-            off += n;
+            int read = stream.Read(buffer, offset, length - offset);
+            if (read <= 0) throw new EndOfStreamException();
+            offset += read;
         }
     }
 
-    private void Play(PacketInfo info, ReadOnlySpan<byte> payload)
+    private void Enqueue(PacketInfo info, ReadOnlySpan<byte> payload)
     {
-        if (_provider == null)
+        if (!EnsureOutput(info)) return;
+        if (_format!.SampleRate != info.SampleRate || _format.Channels != info.Channels) return;
+
+        var data = payload.ToArray();
+        ApplyGain(data, _gain);
+        lock (_queueGate)
         {
-            _provider = new BufferedWaveProvider(new WaveFormat(info.SampleRate, 16, info.Channels))
+            if ((info.Flags & Protocol.FlagFirst) != 0)
             {
-                BufferDuration = TimeSpan.FromSeconds(2),
-                DiscardOnBufferOverflow = true,
-            };
+                _frames.Clear();
+                _lastPlayedTimestampUs = -1;
+                _fallbackOffsetUs = null;
+            }
+            if (info.TimestampUs <= _lastPlayedTimestampUs) return;
+            _frames.Enqueue(new AudioFrame(info.TimestampUs, data), info.TimestampUs);
+            while (_frames.Count > 400) _frames.Dequeue();
+            Monitor.PulseAll(_queueGate);
+        }
+    }
+
+    private bool EnsureOutput(PacketInfo info)
+    {
+        if (_provider != null) return true;
+        lock (_outputGate)
+        {
+            if (_provider != null) return true;
             try
             {
-                _output = new WasapiOut(AudioClientShareMode.Shared, true, 60);
+                _format = new WaveFormat(info.SampleRate, 16, info.Channels);
+                _provider = new BufferedWaveProvider(_format)
+                {
+                    BufferDuration = TimeSpan.FromSeconds(2),
+                    DiscardOnBufferOverflow = true,
+                    ReadFully = true,
+                };
+                _output = new WasapiOut(AudioClientShareMode.Shared, true, 30);
                 _output.Init(_provider);
+
+                // Prime the endpoint before Play so the implicit ReadFully silence is
+                // always represented in _writtenBytes and the hardware-head math stays exact.
+                var silence = new byte[Protocol.FrameBytes(info.Channels)];
+                for (int i = 0; i < 8; i++) WriteToDeviceQueue(silence);
                 _output.Play();
-                Console.WriteLine($"[모드 B] 재생 시작 ({info.SampleRate}Hz/{info.Channels}ch)");
+                _playThread = new Thread(PlayLoop)
+                {
+                    IsBackground = true,
+                    Name = "ab-b-play",
+                    Priority = ThreadPriority.Highest,
+                };
+                _playThread.Start();
+                Console.WriteLine($"[재생] 동기 재생 시작 · {info.SampleRate}Hz/{info.Channels}ch");
+                return true;
             }
             catch (Exception e)
             {
-                Console.WriteLine("[모드 B] 스피커 출력을 열 수 없습니다: " + e.Message);
+                Console.WriteLine("[오류] PC 스피커 출력을 시작하지 못했습니다: " + e.Message);
                 _running = false;
-                return;
+                return false;
             }
         }
-        var buf = payload.ToArray();
-        float g = _gain;
-        if (g < 0.99f)
+    }
+
+    private void PlayLoop()
+    {
+        var format = _format!;
+        int frameBytes = Protocol.FrameBytes(format.Channels);
+        long frameDurationUs = Protocol.FrameMs * 1_000L;
+        var silence = new byte[frameBytes];
+
+        while (_running)
         {
-            for (int i = 0; i + 1 < buf.Length; i += 2)
+            AudioFrame? head;
+            lock (_queueGate)
             {
-                short s = (short)(buf[i] | (buf[i + 1] << 8));
-                int v = Math.Clamp((int)(s * g), short.MinValue, short.MaxValue);
-                buf[i] = (byte)v;
-                buf[i + 1] = (byte)(v >> 8);
+                _frames.TryPeek(out head, out _);
+                if (head == null) Monitor.Wait(_queueGate, 2);
+            }
+
+            if (head == null)
+            {
+                if (PendingDeviceUs(format) < 30_000) WriteToDeviceQueue(silence);
+                else Thread.Sleep(1);
+                continue;
+            }
+
+            long offset = _offsetUsProvider() ?? GetFallbackOffset(head.TimestampUs);
+            long targetUs = head.TimestampUs + offset + _delayMs * 1_000L;
+            long nextWritePlaysAtUs = Clock.Us + PendingDeviceUs(format);
+            long leadUs = targetUs - nextWritePlaysAtUs;
+
+            if (leadUs > frameDurationUs)
+            {
+                WriteToDeviceQueue(silence);
+                continue;
+            }
+            if (leadUs < -20_000)
+            {
+                DequeueHead(head.TimestampUs);
+                continue;
+            }
+
+            var frame = DequeueHead(head.TimestampUs);
+            if (frame != null)
+            {
+                WriteToDeviceQueue(frame.Data);
+                _lastPlayedTimestampUs = frame.TimestampUs;
             }
         }
-        _provider.AddSamples(buf, 0, buf.Length);
+    }
+
+    private AudioFrame? DequeueHead(long expectedTimestamp)
+    {
+        lock (_queueGate)
+        {
+            if (!_frames.TryPeek(out var current, out _) || current.TimestampUs != expectedTimestamp)
+                return null;
+            return _frames.Dequeue();
+        }
+    }
+
+    private long GetFallbackOffset(long sourceTimestampUs)
+    {
+        _fallbackOffsetUs ??= Clock.Us - sourceTimestampUs;
+        return _fallbackOffsetUs.Value;
+    }
+
+    private long PendingDeviceUs(WaveFormat format)
+    {
+        var output = _output;
+        if (output == null) return 0;
+        long playedBytes = (long)output.GetPosition();
+        long writtenBytes = Interlocked.Read(ref _writtenBytes);
+        if (playedBytes > writtenBytes)
+        {
+            Interlocked.Exchange(ref _writtenBytes, playedBytes);
+            writtenBytes = playedBytes;
+        }
+        long pendingBytes = Math.Max(0, writtenBytes - playedBytes);
+        return pendingBytes * 1_000_000L / format.AverageBytesPerSecond;
+    }
+
+    private void WriteToDeviceQueue(byte[] data)
+    {
+        _provider!.AddSamples(data, 0, data.Length);
+        Interlocked.Add(ref _writtenBytes, data.Length);
+    }
+
+    private static void ApplyGain(byte[] data, float gain)
+    {
+        if (gain >= 0.99f) return;
+        float safeGain = Math.Clamp(gain, 0f, 1f);
+        for (int i = 0; i + 1 < data.Length; i += 2)
+        {
+            short sample = (short)(data[i] | (data[i + 1] << 8));
+            int value = Math.Clamp((int)(sample * safeGain), short.MinValue, short.MaxValue);
+            data[i] = (byte)value;
+            data[i + 1] = (byte)(value >> 8);
+        }
     }
 
     public void Dispose()
     {
         _running = false;
+        lock (_queueGate) Monitor.PulseAll(_queueGate);
         _udp?.Dispose();
         try { _tcp?.Stop(); } catch { }
         try { _output?.Stop(); } catch { }
         _output?.Dispose();
-        Console.WriteLine("[모드 B] 수신 중지");
+        Console.WriteLine("[수신] 재생을 중지했습니다.");
     }
 }
