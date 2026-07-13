@@ -193,6 +193,16 @@ GitHub Actions run `29266247729` 성공, 배포 버전 `2.5.14`. 실제 릴리�
 (162,089,976 bytes)를 다시 내려받아 `latest.json.windowsSha256`과 일치함을 확인했고 포함 아이콘도 추출
 성공. 롤링 태그는 빌드 커밋 `a4c51c1`을 가리킨다. 전체 창 레이아웃은 실제 Windows 화면에서 최종 눈검사가 필요하다.
 
+**v2.6 검증 상태:** 로컬 Windows Release 빌드 경고/오류 0. 로컬 Android는 필요한 Gradle 의존성이
+캐시에 없어 오프라인 컴파일할 수 없었지만, GitHub Actions run `29281295734`에서 Kotlin 컴파일,
+APK/AAB, Windows 단일 EXE, 패키징, 릴리스 게시 전 단계가 성공했다. 배포 버전은 `2.6.15`, 자산은
+5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`)다. 공개 업데이트 URL에서 APK 6,565,931 bytes와
+EXE 162,089,976 bytes를 다시 내려받아 각각 SHA-256 `fe2d8c4c795146614dd8ea6415c98fa72e43372c351877c16cfac7bf3aa338e6`,
+`b2cd106735ae987bee3c7abb3c432addb8a238cb267b8697f09026a47fd667fb`가 `latest.json` 및 GitHub asset
+digest와 모두 일치함을 확인했다. 롤링 태그와 release target은 빌드 커밋 `bfefc6f`를 가리킨다.
+Actions의 Node.js 20 deprecation 경고는 현재 빌드에는 영향이 없으나 추후 action 메이저 버전을 갱신한다.
+소스 음소거 상태의 다기기 실청음은 아직 하지 않았으므로 완료로 간주하지 않는다.
+
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.
 따라서 빌드는 **GitHub Actions**(`.github/workflows/build.yml`)로 수행한다 —
