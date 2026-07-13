@@ -26,11 +26,28 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Build APK
+      - name: Release keystore (optional, Play 스토어용 시크릿)
+        env:
+          KS_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            {
+              echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore"
+              echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}"
+              echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}"
+              echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+            echo "릴리스 키로 서명합니다"
+          else
+            echo "공유 디버그 키로 서명합니다 (사이드로딩용)"
+          fi
+
+      - name: Build APK + AAB
         working-directory: audiobridge/android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease \
+          ./gradlew --no-daemon assembleRelease bundleRelease \
             -PversionCode=${{ github.run_number }} \
             -PversionName=1.0.${{ github.run_number }}
 
@@ -45,6 +62,7 @@ jobs:
         run: |
           mkdir -p dist/AudioBridge
           cp audiobridge/android/app/build/outputs/apk/release/app-release.apk dist/AudioBridge/AudioBridge.apk
+          cp audiobridge/android/app/build/outputs/bundle/release/app-release.aab dist/AudioBridge.aab
           cp audiobridge/windows/out/AudioBridgeWin.exe dist/AudioBridge/
           cp audiobridge/README.md audiobridge/PROTOCOL.md audiobridge/HANDOFF.md dist/AudioBridge/
           cat > dist/latest.json <<EOF
@@ -75,4 +93,5 @@ jobs:
           files: |
             dist/AudioBridge-dist.zip
             dist/AudioBridge/AudioBridge.apk
+            dist/AudioBridge.aab
             dist/latest.json

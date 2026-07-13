@@ -210,6 +210,8 @@ class ModeAPlayer(
         track.play()
         val silence = ByteArray(frameBytes)
         val frameDurUs = Protocol.FRAME_MS * 1000L
+        val bytesPerFrameUnit = 2 * fmt.channels // 샘플 프레임(모든 채널) 1개의 바이트
+        var writtenFrames = 0L // 트랙에 쓴 샘플 프레임 수
         var fallbackOffset: Long? = null
         var level = 0f
         var lastStats = 0L
@@ -219,6 +221,7 @@ class ModeAPlayer(
                 if (head == null) {
                     // 데이터 없음 — 무음으로 트랙을 채우며 대기 (write가 실시간 페이스 유지)
                     track.write(silence, 0, silence.size)
+                    writtenFrames += silence.size / bytesPerFrameUnit
                     level = 0f
                     continue
                 }
@@ -228,12 +231,19 @@ class ModeAPlayer(
                 }
                 val targetUs = head.tsUs + offset +
                     delayMsProvider().coerceIn(20, 500) * 1000L +
-                    nudgeMsProvider().coerceIn(-200, 200) * 1000L
-                val lead = targetUs - nowUs()
+                    nudgeMsProvider().coerceIn(-300, 300) * 1000L
+                // 핵심: "지금 쓰는 데이터가 실제 스피커에서 나오는 시각"으로 비교한다.
+                // 기기마다 오디오 출력 버퍼 크기가 크게 달라서, 트랙에 쌓여 있는
+                // 미재생분만큼 미래에 소리가 나온다 — 이걸 반영해야 기기 간이 맞는다.
+                val pending = (writtenFrames - (track.playbackHeadPosition.toLong() and 0xFFFFFFFFL))
+                    .coerceAtLeast(0)
+                val playAtUs = nowUs() + pending * 1_000_000L / fmt.sampleRate
+                val lead = targetUs - playAtUs
                 when {
                     lead > frameDurUs * 2 -> {
                         // 아직 이르다 — 무음 한 프레임으로 시간을 보낸다
                         track.write(silence, 0, silence.size)
+                        writtenFrames += silence.size / bytesPerFrameUnit
                     }
                     lead < -60_000 -> {
                         // 너무 늦었다 — 버린다
@@ -243,6 +253,7 @@ class ModeAPlayer(
                         val frame = jitter.poll() ?: continue
                         applyGain(frame.data, gainProvider())
                         track.write(frame.data, 0, frame.data.size)
+                        writtenFrames += frame.data.size / bytesPerFrameUnit
                         var peak = 0
                         var i = 0
                         while (i + 1 < frame.data.size) {

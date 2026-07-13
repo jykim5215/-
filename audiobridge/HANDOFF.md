@@ -152,6 +152,14 @@ audiobridge/
   `vol` 컨트롤 메시지(0~100), 폰(ControlServer 세션 게인→ModeAPlayer gainProvider)·
   PC(ModeBPlayer.SetGain) 모두 수신 적용, 스피커 행에 채널 칩+볼륨 슬라이더.
   남은 추천 후보: Opus, PC 동기+트레이, 자동 연결, QR 페어링, 스피커측 재생 컨트롤.
+- [x] v2.3 (사용자 피드백: 실사용 동기 오차 큼 + 윈도우 GUI + 스토어): ① **동기 핵심 버그 수정** —
+  기기별 AudioTrack 버퍼 크기 차이를 무시한 재생시각 모델이 원인. playbackHeadPosition으로
+  "지금 쓰는 데이터의 실제 재생 시각"을 계산해 스케줄(ModeAPlayer), clk는 오프셋 확보 전
+  400ms 버스트 ② 미세 조정 ±300ms로 확대 ③ **윈도우 WPF GUI**(net8.0-windows, 코드 구성):
+  블루 헤더+상태 카드+활동 로그, PC 이름 편집(%APPDATA%\AudioBridge\name.txt, Config.Name
+  전역), Console 출력 가로채기 방식이라 기존 로직 무변경 ④ **스토어 준비**: CI가 AAB
+  빌드·릴리스 게시, 시크릿(RELEASE_KEYSTORE_B64 등) 있으면 릴리스 키 서명, STORE.md
+  (Play/MS Store 절차)·PRIVACY.md 작성. v2.2 컴파일 오류(SendTarget→InetSocketAddress) 수정.
 
 **빌드 환경 특이사항 (중요):** 이 원격 컨테이너에서는 `dl.google.com`(Android SDK 배포)과
 .NET 설치 호스트가 네트워크 정책으로 차단되어 **로컬 APK/exe 빌드가 불가**하다.

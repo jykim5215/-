@@ -112,7 +112,7 @@ object BridgeEngine {
     }
 
     fun setNudgeMs(ms: Int) {
-        BridgeState.nudgeMs.value = ms.coerceIn(-100, 100)
+        BridgeState.nudgeMs.value = ms.coerceIn(-300, 300)
         prefs().edit().putInt("nudgeMs", BridgeState.nudgeMs.value).apply()
     }
 
@@ -161,15 +161,18 @@ object BridgeEngine {
         }
     }
 
-    /** 재생 중인 쪽이 주기적으로 시계 동기 질의를 보낸다. */
+    /** 재생 중인 쪽이 주기적으로 시계 동기 질의를 보낸다. 오프셋 확보 전엔 빠르게(버스트). */
     private fun startClockTicker() {
         scope.launch {
             while (true) {
-                delay(3000)
+                var interval = 3000L
                 if (BridgeState.listening.value) {
-                    if (BridgeState.isServerSession.value) serverClock.tick()
-                    else mainLinks().firstOrNull()?.clock?.tick()
+                    val clock = if (BridgeState.isServerSession.value) serverClock
+                    else mainLinks().firstOrNull()?.clock
+                    clock?.tick()
+                    if (clock?.offsetUs == null) interval = 400L
                 }
+                delay(interval)
             }
         }
     }
@@ -728,7 +731,7 @@ object BridgeEngine {
                     if (t == null) {
                         awaitingTcpSend = true // modeB ok 대기
                     } else {
-                        scope.launch { startSender(tcpTarget = t) }
+                        scope.launch { startSender(tcpTarget = t.addr) }
                     }
                 } else {
                     scope.launch { startSender(tcpTarget = null) }

@@ -407,7 +407,7 @@ fun MainScreen() {
                     Slider(
                         value = nudgeMs.toFloat(),
                         onValueChange = { BridgeEngine.setNudgeMs(it.toInt()) },
-                        valueRange = -100f..100f,
+                        valueRange = -300f..300f,
                     )
                     Text(
                         "여러 스피커의 소리가 미세하게 어긋나면 이 기기에서 조절해요",

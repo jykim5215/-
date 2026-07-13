@@ -18,13 +18,21 @@ android {
     }
 
     signingConfigs {
-        // 사이드로딩 전용 공유 디버그 키(공개 저장소 포함, 비밀 아님).
-        // 스토어 배포 시에는 반드시 별도 릴리스 키로 교체할 것.
+        // 기본: 사이드로딩 전용 공유 디버그 키(공개 저장소 포함, 비밀 아님).
+        // 스토어 배포: CI 시크릿(RELEASE_KEYSTORE_B64 등)이 있으면 개인 릴리스 키로 서명 — STORE.md 참고.
         create("shared") {
-            storeFile = rootProject.file("signing/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            val envKeystore = System.getenv("RELEASE_KEYSTORE")
+            if (envKeystore != null) {
+                storeFile = file(envKeystore)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "release"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+            } else {
+                storeFile = rootProject.file("signing/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 

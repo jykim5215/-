@@ -8,15 +8,13 @@ namespace AudioBridge.Win;
 /// <summary>컨트롤 채널 서버 (TCP, JSON Lines — PROTOCOL.md §2). 동시에 한 세션만 유지.</summary>
 public sealed class ControlServer
 {
-    private readonly string _name;
     private readonly int _ctlPort;
     private readonly int _modeAPort;
     private readonly int _modeBPort;
     private Session? _current;
 
-    public ControlServer(string name, int ctlPort, int modeAPort, int modeBPort)
+    public ControlServer(int ctlPort, int modeAPort, int modeBPort)
     {
-        _name = name;
         _ctlPort = ctlPort;
         _modeAPort = modeAPort;
         _modeBPort = modeBPort;
@@ -48,7 +46,7 @@ public sealed class ControlServer
                 return;
             }
             _current?.Close();
-            _current = new Session(client, _name, _modeAPort, _modeBPort);
+            _current = new Session(client, _modeAPort, _modeBPort);
             _current.Start();
         }
     }
@@ -56,7 +54,6 @@ public sealed class ControlServer
     private sealed class Session
     {
         private readonly TcpClient _client;
-        private readonly string _name;
         private readonly int _modeAPort;
         private readonly int _modeBPort;
         private readonly IPAddress _phone;
@@ -69,10 +66,9 @@ public sealed class ControlServer
         private ModeASender? _senderA;
         private ModeBPlayer? _playerB;
 
-        public Session(TcpClient client, string name, int modeAPort, int modeBPort)
+        public Session(TcpClient client, int modeAPort, int modeBPort)
         {
             _client = client;
-            _name = name;
             _modeAPort = modeAPort;
             _modeBPort = modeBPort;
             _client.NoDelay = true;
@@ -125,7 +121,7 @@ public sealed class ControlServer
                         return;
                     }
                     Console.WriteLine($"[연결] 기기: {GetString(m, "name") ?? "?"}");
-                    Send(new { type = "hello", name = _name, version = Protocol.Version, kind = "pc" });
+                    Send(new { type = "hello", name = Config.Name, version = Protocol.Version, kind = "pc" });
                     break;
                 case "ping":
                     Send(new { type = "pong" });

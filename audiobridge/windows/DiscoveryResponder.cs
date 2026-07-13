@@ -8,14 +8,12 @@ namespace AudioBridge.Win;
 /// <summary>UDP 48551에서 "ABDISC?" 질의에 유니캐스트로 응답한다 (PROTOCOL.md §1).</summary>
 public sealed class DiscoveryResponder : IDisposable
 {
-    private readonly string _name;
     private readonly int _ctlPort;
     private UdpClient? _udp;
     private volatile bool _running;
 
-    public DiscoveryResponder(string name, int ctlPort)
+    public DiscoveryResponder(int ctlPort)
     {
-        _name = name;
         _ctlPort = ctlPort;
     }
 
@@ -27,20 +25,18 @@ public sealed class DiscoveryResponder : IDisposable
         }
         catch (SocketException)
         {
-            Console.WriteLine($"[검색] 포트 {Protocol.DiscoveryPort} 사용 중 — 자동 검색이 비활성화됩니다 (수동 IP 입력은 가능).");
+            Console.WriteLine($"[검색] 포트 {Protocol.DiscoveryPort} 사용 중 — 자동 검색이 꺼져요 (폰에서 IP 직접 입력은 가능)");
             return false;
         }
         _running = true;
         var t = new Thread(Loop) { IsBackground = true, Name = "ab-discovery" };
         t.Start();
-        Console.WriteLine($"[검색] UDP {Protocol.DiscoveryPort} 응답 대기 중");
+        Console.WriteLine("[검색] 폰의 검색에 응답할 준비 완료");
         return true;
     }
 
     private void Loop()
     {
-        var reply = Encoding.UTF8.GetBytes(
-            "ABDISC!" + JsonSerializer.Serialize(new { name = _name, version = Protocol.Version, ctlPort = _ctlPort }));
         while (_running)
         {
             try
@@ -50,6 +46,8 @@ public sealed class DiscoveryResponder : IDisposable
                 // 정확한 질의에만, 질의를 보낸 주소로만 응답 (증폭/스캔 방지)
                 if (data.Length == 7 && Encoding.ASCII.GetString(data) == "ABDISC?")
                 {
+                    var reply = Encoding.UTF8.GetBytes(
+                        "ABDISC!" + JsonSerializer.Serialize(new { name = Config.Name, version = Protocol.Version, ctlPort = _ctlPort }));
                     _udp.Send(reply, reply.Length, ep);
                 }
             }
