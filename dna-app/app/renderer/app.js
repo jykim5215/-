@@ -140,7 +140,7 @@ function makeMockAPI() {
         { name: '기획처', email: 'plan@dgist.ac.kr', count: 1 },
       ];
     },
-    async projectCreate(d) { const id = uid(); db.projects.push({ id, title: d.title, keywords: d.keywords || [], article_type: '', current_stage: 'brainstorm' }); return id; },
+    async projectCreate(d) { const id = uid(); db.projects.push({ id, title: d.title, keywords: d.keywords || [], article_type: d.articleType || '', current_stage: 'brainstorm' }); return id; },
     async projectList() { return [...db.projects]; },
     async projectGet(id) { return db.projects.find((p) => p.id === id) || null; },
     async projectSetStage(id, st) { const p = db.projects.find((x) => x.id === id); if (p) p.current_stage = st; },
@@ -353,6 +353,7 @@ function setBusy(btn, on) {
 const state = {
   projectId: null,
   project: null,
+  projects: [],
   stage: 'brainstorm',
   view: 'workflow',
   profile: { name: '', title: '' },
@@ -373,12 +374,14 @@ const state = {
 // 사이드 패널: 프로젝트 없음(온보딩)·브레인스토밍에서는 기본 숨김
 function sideVisible() {
   if (!state.projectId) return false;
-  if (state.view === 'mail' || state.view === 'flow' || state.view === 'profile' || state.view === 'developer') return false;
+  if (state.view !== 'workflow') return false;
   return state.sideOpen ?? (state.stage !== 'brainstorm');
 }
 function applySideVisibility() {
   document.querySelector('.frame').classList.toggle('no-side', !sideVisible());
-  $('#sideToggle').innerHTML = `${ic('panel')} ${sideVisible() ? '패널 접기' : '패널 열기'}`;
+  const toggle = $('#sideToggle');
+  toggle.hidden = !state.projectId || state.view !== 'workflow';
+  toggle.innerHTML = `${ic('panel')} ${sideVisible() ? '패널 접기' : '패널 열기'}`;
 }
 
 // 상단 브레드크럼: 프로젝트 › 현재 단계
@@ -399,6 +402,10 @@ function renderCrumb() {
   }
   if (state.view === 'developer') {
     el.innerHTML = `<span class="cr-dim">개발자</span> › <span>자동화 프로필</span>`;
+    return;
+  }
+  if (state.view === 'new-project') {
+    el.innerHTML = `<span class="cr-dim">프로젝트</span> › <span>새 기사</span>`;
     return;
   }
   if (!state.projectId) { el.textContent = '시작하기'; return; }
@@ -423,6 +430,7 @@ function renderGreeting() {
 function renderHubButtons() {
   $('#mailCenterBtn')?.classList.toggle('active', state.view === 'mail');
   $('#flowMapBtn')?.classList.toggle('active', state.view === 'flow');
+  $('#newProjectBtn')?.classList.toggle('active', state.view === 'new-project');
   const devBtn = $('#devModeBtn');
   if (devBtn) {
     const visible = state.developerMode === true;
@@ -450,26 +458,14 @@ function setSave(text, ok = false) {
 async function refreshProjects() {
   await refreshProfile();
   const list = await api.projectList();
-  const sel = $('#projectSelect');
-  sel.innerHTML = '';
-  for (const p of list) {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.title;
-    sel.appendChild(opt);
-  }
+  state.projects = list;
   if (!list.length) {
-    const opt = document.createElement('option');
-    opt.textContent = '프로젝트 없음 — 새 프로젝트를 만드세요';
-    opt.value = '';
-    sel.appendChild(opt);
     state.projectId = null;
     state.project = null;
   } else {
     if (!state.projectId || !list.some((p) => p.id === state.projectId)) {
       state.projectId = list[0].id;
     }
-    sel.value = state.projectId;
     state.project = list.find((p) => p.id === state.projectId);
     state.stage = state.project.current_stage || 'brainstorm';
     if (!STAGE_ORDER.includes(state.stage)) state.stage = 'collect';
@@ -477,6 +473,40 @@ async function refreshProjects() {
   $('#renameProjectBtn').disabled = !state.projectId;
   $('#deleteProjectBtn').disabled = !state.projectId;
   renderAll();
+}
+
+function renderProjectList() {
+  const host = $('#projectList');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!state.projects.length) {
+    const empty = document.createElement('div');
+    empty.className = 'project-empty';
+    empty.textContent = '진행 중인 프로젝트가 없습니다.';
+    host.appendChild(empty);
+    return;
+  }
+  for (const project of state.projects) {
+    const row = document.createElement('button');
+    const stageKey = project.id === state.projectId ? state.stage : project.current_stage;
+    const stage = STAGES.find((item) => item.key === stageKey) || STAGES[0];
+    row.type = 'button';
+    row.className = `project-row${project.id === state.projectId ? ' active' : ''}`;
+    row.innerHTML = `
+      <span class="project-state" aria-hidden="true"></span>
+      <span class="project-copy"><b></b><small></small></span>`;
+    row.querySelector('b').textContent = project.title || '제목 없는 프로젝트';
+    row.querySelector('small').textContent = stage.name;
+    row.onclick = () => {
+      state.projectId = project.id;
+      state.project = project;
+      state.stage = STAGE_ORDER.includes(project.current_stage) ? project.current_stage : 'brainstorm';
+      state.view = 'workflow';
+      state.sideOpen = null;
+      renderAll();
+    };
+    host.appendChild(row);
+  }
 }
 
 async function refreshProfile() {
@@ -543,6 +573,7 @@ function renderStepper() {
       if (!state.projectId) return;
       state.view = 'workflow';
       state.stage = s.key;
+      if (state.project) state.project.current_stage = s.key;
       if (state.projectId) api.projectSetStage(state.projectId, s.key);
       renderAll();
     };
@@ -688,6 +719,7 @@ async function renderWork() {
   if (state.view === 'flow') return renderFlowMap(el);
   if (state.view === 'profile') return renderProfileView(el);
   if (state.view === 'developer') return renderDeveloperMode(el);
+  if (state.view === 'new-project') return renderNewProjectView(el);
   if (!state.projectId) {
     const hasKey = await api.hasApiKey();
     const displayName = state.profile.name?.trim() || state.google.profile?.givenName || state.google.profile?.name || '';
@@ -721,6 +753,97 @@ async function renderWork() {
   if (state.stage === 'analyze') return renderAnalyzeStage(el);
   if (state.stage === 'draft') return renderDraftStage(el);
   if (state.stage === 'cardnews') return renderCardnewsStage(el);
+}
+
+function openNewProjectView() {
+  state.view = 'new-project';
+  state.sideOpen = false;
+  renderAll();
+}
+
+function renderNewProjectView(el) {
+  const articleTypes = ['스트레이트', '인터뷰', '기획', '사설'];
+  el.innerHTML = `
+    <article class="project-create-page">
+      <header class="project-create-header">
+        <span class="flow-page-label">새 프로젝트</span>
+        <h1>새 기사 시작</h1>
+      </header>
+
+      <form id="newProjectForm" class="project-create-form">
+        <label class="project-field">
+          <span>기사 제목</span>
+          <input id="newProjectTitle" type="text" maxlength="120" placeholder="DGIST 조정부, 다시 노를 젓다" autocomplete="off">
+        </label>
+
+        <fieldset class="project-field">
+          <legend>기사 유형</legend>
+          <div class="project-type-options">
+            ${articleTypes.map((type, index) => `
+              <label>
+                <input type="radio" name="newProjectType" value="${type}" ${index === 0 ? 'checked' : ''}>
+                <span>${type}</span>
+              </label>`).join('')}
+          </div>
+        </fieldset>
+
+        <label class="project-field">
+          <span>핵심 키워드</span>
+          <input id="newProjectKeywords" type="text" maxlength="180" placeholder="조정부, 학생단체, 대회" autocomplete="off">
+          <small>쉼표로 구분해 5개까지 저장합니다.</small>
+        </label>
+
+        <label class="project-field">
+          <span>마감</span>
+          <input id="newProjectDeadline" type="datetime-local">
+        </label>
+
+        <p id="newProjectError" class="form-error" role="alert"></p>
+        <div class="project-create-actions">
+          <button id="newProjectCreateBtn" class="btn primary" type="submit">${ic('plus')} 프로젝트 만들기</button>
+          <button id="newProjectCancelBtn" class="btn ghost" type="button">취소</button>
+        </div>
+      </form>
+    </article>`;
+
+  const titleInput = $('#newProjectTitle');
+  const form = $('#newProjectForm');
+  const cancel = () => {
+    state.view = 'workflow';
+    renderAll();
+  };
+  $('#newProjectCancelBtn').onclick = cancel;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const title = titleInput.value.trim();
+    if (!title) {
+      $('#newProjectError').textContent = '기사 제목을 입력하세요.';
+      titleInput.focus();
+      return;
+    }
+    const keywords = $('#newProjectKeywords').value
+      .split(',')
+      .map((keyword) => keyword.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    const articleType = form.elements.newProjectType.value;
+    const deadline = $('#newProjectDeadline').value;
+    const button = $('#newProjectCreateBtn');
+    setBusy(button, true);
+    try {
+      state.projectId = await api.projectCreate({ title, keywords, articleType });
+      if (deadline) await api.settingsSet(`deadline:${state.projectId}`, deadline);
+      state.stage = 'brainstorm';
+      state.view = 'workflow';
+      state.sideOpen = false;
+      await refreshProjects();
+      setSave('프로젝트 생성됨', true);
+    } catch (error) {
+      $('#newProjectError').textContent = error.message || String(error);
+      if (document.body.contains(button)) setBusy(button, false);
+    }
+  };
+  requestAnimationFrame(() => titleInput.focus());
 }
 
 // ---------- 단계 1: 브레인스토밍 (노션식 문서 에디터) ----------
@@ -3884,42 +4007,25 @@ async function renderProfileView(el) {
 }
 
 // ---------- 이벤트 ----------
-$('#projectSelect').onchange = (e) => { state.projectId = e.target.value || null; refreshProjects(); };
-let projectDialogMode = 'create';
 function closeProjectDialog() {
   $('#projectDlg').close();
   $('#projectError').textContent = '';
 }
-function openProjectDialog(mode = 'create') {
-  projectDialogMode = mode;
-  const create = mode === 'create';
-  $('#projectDlgTitle').textContent = create ? '새 기사 프로젝트' : '프로젝트 이름 변경';
-  $('#projectDlgSub').textContent = create
-    ? '저장하면 브레인스토밍 문서가 바로 열립니다.'
-    : '기사 내용과 자료는 그대로 유지됩니다.';
-  $('#projectKeywordsLabel').hidden = !create;
-  $('#projectTitleInput').value = create ? '' : (state.project?.title || '');
-  $('#projectKeywordsInput').value = '';
-  $('#projectSaveBtn').innerHTML = create
-    ? `${ic('plus')} 브레인스토밍 시작`
-    : `${ic('save')} 이름 저장`;
+function openProjectDialog() {
+  $('#projectTitleInput').value = state.project?.title || '';
+  $('#projectSaveBtn').innerHTML = `${ic('save')} 이름 저장`;
   $('#projectError').textContent = '';
   $('#projectDlg').showModal();
   $('#projectTitleInput').focus();
 }
-$('#newProjectBtn').onclick = () => openProjectDialog('create');
+$('#newProjectBtn').onclick = openNewProjectView;
 $('#renameProjectBtn').onclick = () => {
-  if (state.projectId) openProjectDialog('rename');
+  if (state.projectId) openProjectDialog();
 };
 $('#projectCloseBtn').onclick = closeProjectDialog;
 $('#projectCancelBtn').onclick = closeProjectDialog;
 $('#projectSaveBtn').onclick = async () => {
   const title = $('#projectTitleInput').value.trim();
-  const keywords = $('#projectKeywordsInput').value
-    .split(',')
-    .map((keyword) => keyword.trim())
-    .filter(Boolean)
-    .slice(0, 5);
   if (!title) {
     $('#projectError').textContent = '기사 제목을 입력하세요.';
     $('#projectTitleInput').focus();
@@ -3928,20 +4034,10 @@ $('#projectSaveBtn').onclick = async () => {
   const btn = $('#projectSaveBtn');
   setBusy(btn, true);
   try {
-    if (projectDialogMode === 'create') {
-      state.projectId = await api.projectCreate({ title, keywords });
-      state.stage = 'brainstorm';
-      state.view = 'workflow';
-      state.sideOpen = false;
-      closeProjectDialog();
-      await refreshProjects();
-      setSave('프로젝트 생성됨', true);
-    } else {
-      await api.projectRename(state.projectId, title);
-      closeProjectDialog();
-      await refreshProjects();
-      setSave('제목 변경됨', true);
-    }
+    await api.projectRename(state.projectId, title);
+    closeProjectDialog();
+    await refreshProjects();
+    setSave('제목 변경됨', true);
   } catch (error) {
     $('#projectError').textContent = error.message || String(error);
   } finally {
@@ -4057,6 +4153,7 @@ document.addEventListener('keydown', (e) => {
 function renderAll() {
   renderGreeting();
   renderHubButtons();
+  renderProjectList();
   renderStepper();
   renderCrumb();
   renderWork();
@@ -4066,7 +4163,10 @@ function renderAll() {
 }
 
 // 레일 아이콘
-$('#dashBtn').innerHTML = `${ic('gauge')} 지표`;
+$('#newProjectBtn').innerHTML = ic('plus');
+$('#renameProjectBtn').innerHTML = ic('pen');
+$('#deleteProjectBtn').innerHTML = ic('trash');
+$('#dashBtn').innerHTML = `${ic('gauge')} 지표와 백업`;
 $('#sideToggle').innerHTML = `${ic('panel')} 패널`;
 $('#flowMapBtn').innerHTML = `${ic('map')} 진행 노트`;
 $('#mailCenterBtn').innerHTML = `${ic('inbox')} 메일함`;

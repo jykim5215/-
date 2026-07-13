@@ -13,24 +13,38 @@
     <aside class="rail">
       <div class="rail-logo"><span class="badge">DNA</span><span class="rail-title">편집 스튜디오</span></div>
 
-      <div class="rail-sec">프로젝트</div>
-      <select id="projectSelect" class="proj-select"></select>
-      <div class="proj-acts">
-        <button id="newProjectBtn" class="rail-btn">+ 새 프로젝트</button>
-        <button id="renameProjectBtn" class="rail-mini" title="이름 변경">✎</button>
-        <button id="deleteProjectBtn" class="rail-mini danger" title="프로젝트 삭제">🗑</button>
+      <section class="rail-group project-group" aria-labelledby="projectGroupLabel">
+        <div class="rail-group-head">
+          <span id="projectGroupLabel">프로젝트</span>
+          <span class="rail-group-actions">
+            <button id="newProjectBtn" class="rail-add" type="button" title="새 프로젝트" aria-label="새 프로젝트">+</button>
+            <button id="renameProjectBtn" class="rail-add" type="button" title="프로젝트 이름 변경" aria-label="프로젝트 이름 변경">✎</button>
+            <button id="deleteProjectBtn" class="rail-add danger" type="button" title="프로젝트 삭제" aria-label="프로젝트 삭제">×</button>
+          </span>
+        </div>
+        <div id="projectList" class="project-list" aria-label="프로젝트 목록"></div>
+      </section>
+
+      <div class="rail-menu-groups">
+        <section class="rail-group" aria-labelledby="createGroupLabel">
+          <div class="rail-group-head"><span id="createGroupLabel">기사 제작</span></div>
+          <button id="flowMapBtn" class="rail-btn">진행 노트</button>
+          <nav id="stepper" class="nav" aria-label="기사 제작 단계"></nav>
+        </section>
+
+        <section class="rail-group" aria-labelledby="communicationGroupLabel">
+          <div class="rail-group-head"><span id="communicationGroupLabel">소통</span></div>
+          <button id="mailCenterBtn" class="rail-btn">메일함</button>
+        </section>
+
+        <section class="rail-group" aria-labelledby="manageGroupLabel">
+          <div class="rail-group-head"><span id="manageGroupLabel">관리</span></div>
+          <button id="dashBtn" class="rail-btn">지표와 백업</button>
+          <button id="devModeBtn" class="rail-btn" hidden aria-hidden="true" tabindex="-1">개발자 모드</button>
+        </section>
       </div>
 
-      <div class="rail-sec">워크플로우</div>
-      <nav id="stepper" class="nav"></nav>
-
-      <div class="rail-sec">허브</div>
-      <button id="flowMapBtn" class="rail-btn">진행 노트</button>
-      <button id="mailCenterBtn" class="rail-btn">메일함</button>
-      <button id="devModeBtn" class="rail-btn" hidden aria-hidden="true" tabindex="-1">개발자 모드</button>
-
       <div class="rail-foot">
-        <button id="dashBtn" class="rail-btn">지표</button>
         <button id="settingsBtn" class="profile-btn" aria-label="프로필 열기">
           <span id="railAvatar" class="profile-avatar">DNA</span>
           <span class="profile-copy">
@@ -117,21 +131,17 @@
   <dialog id="projectDlg" class="project-dialog">
     <div class="dialog-head">
       <div>
-        <h2 id="projectDlgTitle">새 프로젝트</h2>
-        <p id="projectDlgSub" class="hint">기사 제목과 핵심 키워드로 브레인스토밍을 시작합니다.</p>
+        <h2 id="projectDlgTitle">프로젝트 이름 변경</h2>
+        <p id="projectDlgSub" class="hint">기사 내용과 자료는 그대로 유지됩니다.</p>
       </div>
       <button id="projectCloseBtn" class="icon-btn" type="button" aria-label="닫기">×</button>
     </div>
     <label>기사 제목
       <input id="projectTitleInput" placeholder="예: DGIST 조정부, 다시 노를 젓다" maxlength="120">
     </label>
-    <label id="projectKeywordsLabel">핵심 키워드
-      <input id="projectKeywordsInput" placeholder="조정부, 학생단체, 대회" maxlength="180">
-      <small>쉼표로 구분해 최대 5개까지 입력할 수 있습니다.</small>
-    </label>
     <p id="projectError" class="form-error" role="alert"></p>
     <div class="row">
-      <button id="projectSaveBtn" class="btn primary" type="button">브레인스토밍 시작</button>
+      <button id="projectSaveBtn" class="btn primary" type="button">이름 저장</button>
       <button id="projectCancelBtn" class="btn ghost" type="button">취소</button>
     </div>
   </dialog>
