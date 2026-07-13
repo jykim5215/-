@@ -170,6 +170,11 @@ audiobridge/
   업데이트 배너로 WPF 전면 재작성 ④ **양쪽 안전 업데이트** — `latest.json`에 APK/EXE URL과 SHA-256을
   함께 게시, Android는 캐시 우회+해시 검증, Windows는 직접 EXE 다운로드+해시 검증+종료 후 안전 교체.
   CI는 `AudioBridgeWin.exe`를 개별 자산으로 올리고 롤링 태그를 실제 빌드 커밋으로 이동한다.
+- [x] v2.5 (Windows 시각 정리): 사용자 피드백에 따라 내부 구현 설명인 `가상 지휘자·동기화 엔진`
+  카드와 활동 기록을 화면에서 제거. 연결 상태·PC 이름·업데이트만 남기고 창 높이와 간격을 축소했으며,
+  모든 텍스트를 단일 Segoe UI 계열·ClearType/고정 힌팅으로 통일했다. Android 런처와 같은 블루
+  그라데이션+흰 스피커 형태의 Windows 전용 SVG/다중 해상도 ICO(16~256px)를 만들고 EXE 리소스,
+  작업표시줄, 창 제목, 화면 헤더에 적용. `tools/GenerateWindowsIcon.ps1`로 ICO/PNG를 재현할 수 있다.
 
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
