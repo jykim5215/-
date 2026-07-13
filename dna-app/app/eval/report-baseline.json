@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-07-05T05:41:27.332Z",
+  "totalChecks": 10,
+  "passedChecks": 10,
+  "passRate": 1,
+  "cases": [
+    {
+      "id": "draft-quotes-ok",
+      "type": "draft",
+      "checks": [
+        {
+          "name": "인용 검증 (없는 인용 0건)",
+          "pass": true,
+          "detail": "직접인용 1건 모두 근거 있음"
+        },
+        {
+          "name": "따옴표 방향·혼용",
+          "pass": true,
+          "detail": "통과"
+        },
+        {
+          "name": "작은따옴표 남용",
+          "pass": true,
+          "detail": "0회 — 정상"
+        }
+      ]
+    },
+    {
+      "id": "draft-quotes-fabricated",
+      "type": "draft",
+      "checks": [
+        {
+          "name": "[음성] 인용 검증 (없는 인용 0건)",
+          "pass": true,
+          "detail": "우리는 무조건 승격되어야 마땅하다"
+        },
+        {
+          "name": "[음성] 따옴표 방향·혼용",
+          "pass": true,
+          "detail": "통과"
+        },
+        {
+          "name": "[음성] 작은따옴표 남용",
+          "pass": true,
+          "detail": "0회 — 정상"
+        }
+      ]
+    },
+    {
+      "id": "email-format-ok",
+      "type": "email",
+      "checks": [
+        {
+          "name": "DNA 이메일 형식",
+          "pass": true,
+          "detail": "통과"
+        }
+      ]
+    },
+    {
+      "id": "cardnews-jjb",
+      "type": "cardnews",
+      "checks": [
+        {
+          "name": "카드뉴스 규격 (12장 제한·커버 규칙·카드당 380자)",
+          "pass": true,
+          "detail": "통과"
+        },
+        {
+          "name": "Q&A 1문항 1카드",
+          "pass": true,
+          "detail": "통과"
+        },
+        {
+          "name": "pptx 폰트·색 템플릿 일치 (XML diff)",
+          "pass": true,
+          "detail": "템플릿과 완전 일치"
+        }
+      ]
+    }
+  ]
+}

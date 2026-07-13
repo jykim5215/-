@@ -1,0 +1,7 @@
+app/node_modules/
+dist/
+app/data/
+app/datasets/
+app/eval/report-latest.json
+app/finetune/out/
+*.log

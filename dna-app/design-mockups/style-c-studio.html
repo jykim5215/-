@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시안 C — 파이프라인 스튜디오 · DNA 편집실</title>
+<style>
+  :root {
+    --bg: #F2F4F8;
+    --card: #FFFFFF;
+    --line: #E1E5EC;
+    --ink: #23293A;
+    --dim: #6B7385;
+    --navy: #234B9A;
+    --navy-soft: #E8EEFA;
+    --red: #D64541;
+    --red-soft: #FBEAE9;
+    --green: #2F8F53;
+    --green-soft: #E7F4EC;
+    --sans: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+
+  .top { display: flex; align-items: center; gap: 16px; padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; }
+  .logo .badge { width: 28px; height: 28px; border-radius: 8px; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+  .proj { font-size: 14px; color: var(--dim); }
+  .proj b { color: var(--ink); }
+  .save { margin-left: auto; font-size: 12.5px; color: var(--green); background: var(--green-soft); border-radius: 99px; padding: 4px 12px; font-weight: 600; }
+
+  /* 상단 필 스테퍼 */
+  .stepper { display: flex; gap: 8px; padding: 16px 24px 0; flex-wrap: wrap; }
+  .pill { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); font-size: 13.5px; color: var(--dim); cursor: pointer; }
+  .pill .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--bg); }
+  .pill.done { color: var(--ink); }
+  .pill.done .n { background: var(--green-soft); color: var(--green); }
+  .pill.cur { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 700; box-shadow: 0 4px 12px rgba(35,75,154,.25); }
+  .pill.cur .n { background: rgba(255,255,255,.2); color: #fff; }
+  .pill.lock { opacity: .5; }
+
+  .frame { display: grid; grid-template-columns: 1fr 312px; gap: 16px; padding: 16px 24px 40px; align-items: start; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+
+  .work { padding: 26px 32px; }
+  .chiprow { display: flex; gap: 8px; margin-bottom: 10px; }
+  .chip { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 3px 10px; background: var(--navy-soft); color: var(--navy); }
+  .work h1 { font-size: 24px; line-height: 1.4; font-weight: 800; max-width: 620px; text-wrap: balance; }
+  .byline { font-size: 13px; color: var(--dim); margin: 6px 0 18px; }
+
+  .toolrow { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .btn { font-size: 13px; padding: 8px 15px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; font-weight: 600; }
+  .btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn.alert { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+
+  .draft { max-width: 620px; font-size: 16px; line-height: 1.9; }
+  .draft p { margin-bottom: 1.1em; }
+  .qok { border-bottom: 2px solid var(--green); }
+  .qbad { background: var(--red-soft); border-bottom: 2px solid var(--red); border-radius: 3px; }
+
+  .note { max-width: 620px; border-radius: 12px; padding: 14px 16px; margin: 6px 0 20px; font-size: 13.5px; border: 1px solid var(--line); }
+  .note.alert { background: var(--red-soft); border-color: #F0C7C5; }
+  .note.ai { background: var(--navy-soft); border-color: #CBD9F2; }
+  .note .lab { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; }
+  .note.alert .lab { color: var(--red); }
+  .note.ai .lab { color: var(--navy); }
+  .note p { margin: 5px 0 0; }
+  .note ins { text-decoration: none; background: var(--green-soft); color: var(--green); padding: 1px 4px; border-radius: 4px; }
+  .note .acts { display: flex; gap: 8px; margin-top: 10px; }
+  .note .acts button { font-size: 12.5px; padding: 5px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-weight: 600; }
+
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .box { padding: 18px; }
+  .box h3 { font-size: 12px; letter-spacing: .1em; color: var(--dim); font-weight: 700; margin-bottom: 12px; }
+  .m { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg); margin-bottom: 8px; }
+  .m .t { font-size: 13.5px; font-weight: 600; }
+  .m .s { font-size: 12px; color: var(--dim); }
+  .m .s b { color: var(--navy); }
+  .law { font-size: 11.5px; color: var(--dim); background: var(--navy-soft); border-radius: 10px; padding: 10px 12px; }
+  .chk { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .chk:last-child { border-bottom: 0; }
+  .b-ok { font-size: 11.5px; font-weight: 700; color: var(--green); background: var(--green-soft); padding: 2px 9px; border-radius: 99px; }
+  .b-bad { font-size: 11.5px; font-weight: 700; color: var(--red); background: var(--red-soft); padding: 2px 9px; border-radius: 99px; }
+  .stars { font-size: 20px; letter-spacing: 3px; color: #F0A500; }
+  .stars .off { color: var(--line); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tags span { font-size: 12px; padding: 4px 11px; border-radius: 99px; background: var(--bg); color: var(--dim); cursor: pointer; font-weight: 600; }
+  .tags span.on { background: var(--navy); color: #fff; }
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="logo"><span class="badge">DNA</span> 편집 스튜디오</div>
+    <div class="proj">프로젝트 / <b>조정부, 학생단체 승격의 갈림길</b></div>
+    <span class="save">✓ 자동 저장 · v7</span>
+  </header>
+
+  <nav class="stepper">
+    <div class="pill done"><span class="n">✓</span>브레인스토밍</div>
+    <div class="pill done"><span class="n">✓</span>취재 이메일</div>
+    <div class="pill done"><span class="n">✓</span>자료 수집 (5)</div>
+    <div class="pill done"><span class="n">✓</span>분석·제언</div>
+    <div class="pill cur"><span class="n">5</span>기사 초안</div>
+    <div class="pill lock"><span class="n">6</span>카드뉴스</div>
+  </nav>
+
+  <div class="frame">
+    <main class="panel work">
+      <div class="chiprow"><span class="chip">스트레이트</span><span class="chip">학내</span></div>
+      <h1>조정부, 학생단체 승격 심의 앞두고 "운영 실적" 쟁점으로</h1>
+      <div class="byline">디지스트신문 DNA 기자 ○○○ · 초안 v7 · 마감 D-1</div>
+
+      <div class="toolrow">
+        <button class="btn primary">인용 검증 실행</button>
+        <button class="btn">따옴표 검사</button>
+        <button class="btn">맞춤법 (바른한글)</button>
+        <button class="btn alert">⚠ 경고 1건</button>
+      </div>
+
+      <article class="draft">
+        <p>동아리 조정부가 학생단체 승격 심의를 앞두고 있다. 총학생회 산하 동아리연합회는 오는 15일 전체회의에서 조정부의 승격 안건을 다룰 예정이라고 밝혔다.</p>
+        <p>조정부 부장 김○○ 학생은 <span class="qok">“지난 2년간 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔다”</span>며 승격 요건을 충족했다는 입장이다.</p>
+        <p>반면 동아리연합회 측은 <span class="qbad">“운영 실적이 부족하고 회칙상 근거도 불분명해 승격은 어렵다”</span>고 말했다.</p>
+      </article>
+
+      <div class="note alert">
+        <span class="lab">인용 검증 실패</span>
+        <p>이 직접인용은 녹취·자료에서 원문을 찾을 수 없습니다. 두 발언을 편집해 합친 것으로 보입니다. 간접인용으로 전환하세요.</p>
+        <div class="acts"><button>간접인용으로 자동 전환</button><button>원문 대조 보기</button></div>
+      </div>
+
+      <div class="note ai">
+        <span class="lab">AI 제안 — 배경 설명 추가</span>
+        <p><ins>학생단체 승격은 예산 배정과 공간 사용 권한이 달라지는 사안으로, 2023년 이후 승격 사례는 두 건에 그친다.</ins></p>
+        <div class="acts"><button>수락</button><button>수정 후 수락</button><button>무시</button></div>
+      </div>
+    </main>
+
+    <aside class="side">
+      <section class="panel box">
+        <h3>수집 자료 · 5건</h3>
+        <div class="m"><span class="t">인터뷰 녹취 — 조정부 부장</span><span class="s">출처: <b>직접 취재</b> · 6.28</span></div>
+        <div class="m"><span class="t">동아리연합회 회칙.pdf</span><span class="s">출처: <b>동연 공개자료</b></span></div>
+        <div class="m"><span class="t">총학 공지 — 심의 일정</span><span class="s">출처: <b>총학생회 홈페이지</b></span></div>
+        <div class="law">📌 저작권법 제28조 — 인용은 주·종 관계를 지키고 출처를 반드시 표시합니다.</div>
+      </section>
+      <section class="panel box">
+        <h3>자동 검사</h3>
+        <div class="chk"><span>직접인용 검증</span><span class="b-bad">3 / 4</span></div>
+        <div class="chk"><span>곡선 따옴표</span><span class="b-ok">통과</span></div>
+        <div class="chk"><span>작은따옴표 남용</span><span class="b-ok">통과</span></div>
+      </section>
+      <section class="panel box">
+        <h3>이 초안 평가</h3>
+        <div class="stars">★★★★<span class="off">★</span></div>
+        <div class="tags"><span class="on">구조 좋음</span><span class="on">인용 오류</span><span>톤 부적절</span><span>리드 약함</span></div>
+      </section>
+    </aside>
+  </div>
+</body>
+</html>
