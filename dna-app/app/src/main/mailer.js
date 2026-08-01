@@ -1,15 +1,18 @@
 // 앱 내 이메일 발송 — SMTP (nodemailer)
 //
-// DGIST 메일은 구글 워크스페이스 기반이라 smtp.gmail.com + 앱 비밀번호로 발송한다.
-// (구글 계정 2단계 인증 → 앱 비밀번호 발급 → 설정에 저장). SMTP 호스트/포트는
-// 설정으로 바꿀 수 있어 DGIST가 자체 메일 서버를 쓰는 경우에도 대응된다.
+// DGIST 메일은 자체 메일 서버(mail.dgist.ac.kr)를 쓴다. 구글을 거치지 않고
+// DGIST SMTP로 직접 보내는 것이 기본 경로다 — DGIST 아이디·비밀번호를 그대로 쓰고,
+// 587 포트에서 STARTTLS로 암호화한다. (사용자가 POP를 Gmail에 연동해 둔 것은
+// '수신'용일 뿐, 발송과는 별개다.) 호스트를 비우면 Gmail(smtp.gmail.com, 465, 앱
+// 비밀번호)로 경유하는 대체 경로도 지원한다.
 //
-// 보안: 앱 비밀번호는 safeStorage로 암호화 저장(main에서 처리), 이 모듈은 평문을 받지만
+// 보안: 비밀번호는 safeStorage로 암호화 저장(main에서 처리), 이 모듈은 평문을 받지만
 //       메모리에서만 쓰고 저장하지 않는다.
 const nodemailer = require('nodemailer');
 
 // 프리셋: 알려진 제공자의 SMTP 기본값
 const PRESETS = {
+  dgist: { host: 'mail.dgist.ac.kr', port: 587, secure: false }, // 자체 서버, STARTTLS
   gmail: { host: 'smtp.gmail.com', port: 465, secure: true },
 };
 

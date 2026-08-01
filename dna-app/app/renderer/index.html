@@ -109,7 +109,14 @@
     <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
     <details class="law-d" style="margin:8px 0">
       <summary>이메일 발송 설정</summary>
-      <label style="margin-top:8px">보내는 이메일 <input id="setSmtpUser" placeholder="dgun_xxx@dgist.ac.kr"></label>
+      <label style="margin-top:8px">빠른 설정
+        <select id="setSmtpPreset">
+          <option value="">직접 입력</option>
+          <option value="dgist">DGIST 메일 (mail.dgist.ac.kr · 587)</option>
+          <option value="gmail">Gmail (smtp.gmail.com · 465)</option>
+        </select>
+      </label>
+      <label>보내는 이메일 <input id="setSmtpUser" placeholder="dgun_xxx@dgist.ac.kr"></label>
       <label>비밀번호 <input id="setSmtpPass" type="password" placeholder="DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)"></label>
       <label>SMTP 호스트 <input id="setSmtpHost" placeholder="예: mail.dgist.ac.kr (비우면 smtp.gmail.com)"></label>
       <label>SMTP 포트 <input id="setSmtpPort" placeholder="465(SSL) 또는 587(STARTTLS)"></label>
