@@ -28,6 +28,9 @@ function buildTransport({ host, port, secure, user, pass }) {
     requireTLS: !isSecure, // 587 등에서 STARTTLS 강제 (평문 전송 방지)
     auth: { user, pass },
     tls: { minVersion: 'TLSv1.2' },
+    // EHLO에 쓸 클라이언트 이름을 ASCII로 고정. 윈도우 PC 이름이 한글이면
+    // 그대로 EHLO에 실려 인코딩 오류로 발송이 실패한다.
+    name: 'localhost',
     connectionTimeout: 15000,
     greetingTimeout: 10000,
   });
@@ -48,21 +51,81 @@ async function verify(cfg) {
   }
 }
 
-// 발송. msg: {to, subject, body, cc?, bcc?}. cfg: {user, pass, host, port, secure, fromName}
-async function sendMail(msg, cfg) {
+// 쉼표/세미콜론으로 구분된 주소 문자열 → 정리된 배열
+function splitAddrs(value) {
+  if (Array.isArray(value)) value = value.join(',');
+  if (!value) return [];
+  return String(value)
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s && s.includes('@'));
+}
+
+const ATTACH_LIMIT = 20 * 1024 * 1024; // 첨부 총 20MB
+
+// 첨부 정규화. att: {filename, content(base64 또는 Buffer), path?}
+function normalizeAttachments(list) {
+  const out = [];
+  let total = 0;
+  for (const att of list || []) {
+    if (!att) continue;
+    const filename = String(att.filename || att.name || 'attachment')
+      .replace(/[\r\n]/g, '')       // 헤더 주입 방지
+      .replace(/[/\\]/g, '_');      // 경로 구분자 제거
+    let buf;
+    if (Buffer.isBuffer(att.content)) buf = att.content;
+    else if (att.content instanceof ArrayBuffer) buf = Buffer.from(att.content);
+    else if (typeof att.content === 'string') buf = Buffer.from(att.content, 'base64');
+    else continue;
+    total += buf.length;
+    if (total > ATTACH_LIMIT) throw new Error('첨부파일 총 용량은 20MB를 넘을 수 없습니다.');
+    out.push({ filename, content: buf });
+  }
+  return out;
+}
+
+// 발송. msg: {to, subject, body, cc?, bcc?, html?, attachments?, inReplyTo?, references?}
+// cfg: {user, pass, host, port, secure, fromName}
+// deps는 테스트에서 transport를 갈아끼우기 위한 주입점 (운영에서는 기본값 사용).
+async function sendMail(msg, cfg, deps = {}) {
+  const makeTransport = deps.buildTransport || buildTransport;
   if (!cfg.user || !cfg.pass) throw new Error('이메일 주소와 비밀번호를 설정하세요.');
-  if (!msg.to || !/.+@.+\..+/.test(msg.to)) throw new Error('받는 사람 이메일 주소가 올바르지 않습니다.');
+  const to = splitAddrs(msg.to);
+  const cc = splitAddrs(msg.cc);
+  const bcc = splitAddrs(msg.bcc);
+  if (!to.length || !to.every((a) => /.+@.+\..+/.test(a))) {
+    throw new Error('받는 사람 이메일 주소가 올바르지 않습니다.');
+  }
   const from = cfg.fromName ? `${cfg.fromName} <${cfg.user}>` : cfg.user;
+  const attachments = normalizeAttachments(msg.attachments);
+
+  const mail = {
+    from,
+    to,
+    cc: cc.length ? cc : undefined,
+    // bcc는 헤더에 남기지 않고 봉투 수신자로만 — 숨은참조가 새면 취재원이 노출된다
+    bcc: bcc.length ? bcc : undefined,
+    subject: msg.subject || '(제목 없음)',
+    attachments: attachments.length ? attachments : undefined,
+  };
+  if (msg.html) mail.html = msg.body || '';
+  else mail.text = msg.body || '';
+  // 답장이면 스레드로 묶이도록 In-Reply-To / References 지정
+  if (msg.inReplyTo) {
+    mail.inReplyTo = msg.inReplyTo;
+    mail.references = [msg.references, msg.inReplyTo].filter(Boolean).join(' ').trim();
+  }
+
   try {
-    const info = await buildTransport(cfg).sendMail({
-      from,
-      to: msg.to,
-      cc: msg.cc || undefined,
-      bcc: msg.bcc || undefined,
-      subject: msg.subject || '(제목 없음)',
-      text: msg.body || '',
-    });
-    return { ok: true, messageId: info.messageId, accepted: info.accepted };
+    const info = await makeTransport(cfg).sendMail(mail);
+    return {
+      ok: true,
+      messageId: info.messageId,
+      accepted: info.accepted,
+      count: to.length + cc.length + bcc.length,
+      to: to.join(', '),
+      attachments: attachments.length,
+    };
   } catch (e) {
     throw new Error(smtpError(e, cfg));
   }
@@ -89,4 +152,7 @@ function smtpError(e, cfg = {}) {
   return '발송 실패: ' + m;
 }
 
-module.exports = { sendMail, verify, buildTransport, PRESETS };
+module.exports = {
+  sendMail, verify, buildTransport, PRESETS,
+  splitAddrs, normalizeAttachments, ATTACH_LIMIT,
+};

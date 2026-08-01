@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   hasSmtpPass: invoke('settings:hasSmtpPass'),
   mailVerify: invoke('mail:verify'),
   mailSend: invoke('mail:send'),
+  mailImapVerify: invoke('mail:imapVerify'),
+  mailFetch: invoke('mail:fetch'),
+  mailMarkRead: invoke('mail:markRead'),
+  mailMarkAllRead: invoke('mail:markAllRead'),
+  mailDelete: invoke('mail:delete'),
 
   projectCreate: invoke('project:create'),
   projectList: invoke('project:list'),

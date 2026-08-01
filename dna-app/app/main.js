@@ -77,6 +77,16 @@ function mailConfig(s) {
   };
 }
 
+// 수신(IMAP) 설정. 계정·비밀번호는 발송과 같은 것을 쓴다 (같은 DGIST 계정).
+function imapCfg(s) {
+  return {
+    user: getSetting(s, 'smtpUser'),
+    pass: getSecret(s, 'smtpPass') || '',
+    imapHost: getSetting(s, 'imapHost') || undefined,
+    imapPort: getSetting(s, 'imapPort') || undefined,
+  };
+}
+
 function getApiKey(s) {
   const row = s.get('SELECT value FROM settings WHERE key = ?', ['apiKeyEnc']);
   if (!row) return process.env.ANTHROPIC_API_KEY || null;
@@ -116,6 +126,27 @@ function registerIpc() {
     const res = await sendMail(msg, mailConfig(s));
     return res;
   });
+
+  // 메일 수신 (IMAP) — 취재원 답신을 앱 안에서 받아본다
+  h('mail:imapVerify', async (s) => require('./src/main/mailbox').verify(imapCfg(s)));
+  h('mail:fetch', async (s, opts) => {
+    const mailbox = require('./src/main/mailbox');
+    const { triage } = require('./src/main/mail-triage');
+    const res = await mailbox.fetchRecent(imapCfg(s), opts || {});
+    // 규칙 기반 분류는 항상, AI 분류는 키가 있을 때만 (본문은 기기에 남는다)
+    const { briefing, ai } = await triage({
+      apiKey: getApiKey(s),
+      emails: res.emails,
+      interests: getSetting(s, 'mailInterests'),
+    });
+    return { ...res, briefing, ai };
+  });
+  h('mail:markRead', (s, uid, folder, seen) =>
+    require('./src/main/mailbox').markRead(imapCfg(s), uid, folder, seen));
+  h('mail:markAllRead', (s, folder) =>
+    require('./src/main/mailbox').markAllRead(imapCfg(s), folder));
+  h('mail:delete', (s, uid, folder) =>
+    require('./src/main/mailbox').deleteMessage(imapCfg(s), uid, folder));
 
   // 프로젝트 / 자료
   h('project:create', (s, data) => projects.createProject(s, data));

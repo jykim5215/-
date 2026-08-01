@@ -53,9 +53,57 @@ function makeMockAPI() {
     async settingsGet(k) { return db.settings[k] || ''; },
     async settingsSet(k, v) { db.settings[k] = v; },
     async hasApiKey() { return false; },
-    async hasSmtpPass() { return false; },
+    async hasSmtpPass() { return true; }, // 데모에서 메일함 화면을 볼 수 있게
     async mailVerify() { return { ok: false, error: '데모 모드 — Electron 앱에서 SMTP 발송이 동작합니다.' }; },
-    async mailSend() { await sleep(600); throw new Error('데모 모드 — Electron 앱에서 실제 발송됩니다. (설정에 DGIST 주소·앱 비밀번호 필요)'); },
+    async mailSend() { await sleep(600); throw new Error('데모 모드 — Electron 앱에서 실제 발송됩니다. (설정에 DGIST 주소·비밀번호 필요)'); },
+    async mailImapVerify() { return { ok: false, error: '데모 모드 — Electron 앱에서 IMAP 수신이 동작합니다.' }; },
+    async mailFetch() {
+      await sleep(900);
+      const ago = (h) => new Date(Date.now() - h * 3600000).toISOString();
+      const mk = (o) => ({ folder: 'inbox', unread: true, info: {}, summary: '', ...o });
+      return {
+        ok: true, ai: true, updatedAt: new Date().toISOString(),
+        briefing: { intro: '취재 답신 2건이 도착했어요.', todo: ['~8/5 동연 회칙 자료 회신', '8/3 15:00 조정부 인터뷰'] },
+        contacts: [
+          { email: 'park@dgist.ac.kr', name: '박성현', count: 3 },
+          { email: 'council@dgist.ac.kr', name: '동아리연합회', count: 2 },
+        ],
+        emails: [
+          mk({ id: 'inbox:101', uid: 101, category: '취재 답신', score: 9, sourceWorthy: true,
+            subject: 'Re: [디지스트신문 DNA] 조정부 승격 관련 서면 인터뷰 요청',
+            fromName: '박성현', fromEmail: 'park@dgist.ac.kr', date: ago(2), isReply: true,
+            messageId: '<r1@dgist.ac.kr>',
+            snippet: '안녕하세요, 조정부 부장 박성현입니다. 질문에 답변드립니다.',
+            body: '안녕하세요, 조정부 부장 박성현입니다. 질문에 답변드립니다.\n\n1. 승격을 준비한 기간은 2년입니다. 정기 훈련과 대외 대회 출전 실적을 꾸준히 쌓아 왔습니다.\n2. 가장 큰 어려움은 훈련 장소 확보였습니다. 교내에 조정 시설이 없어 매주 대구 인근 강으로 이동해야 했습니다.\n3. 승격되면 신입 부원 모집에 힘쓰겠습니다.' }),
+          mk({ id: 'inbox:102', uid: 102, category: '취재 답신', score: 8, sourceWorthy: true,
+            subject: 'Re: 동아리연합회 회칙 제12조 관련 문의',
+            fromName: '동아리연합회', fromEmail: 'council@dgist.ac.kr', date: ago(6), isReply: true,
+            messageId: '<r2@dgist.ac.kr>', info: { 마감: '8/5' },
+            snippet: '문의주신 승격 심의 절차에 대해 안내드립니다.',
+            body: '문의주신 승격 심의 절차에 대해 안내드립니다.\n\n기타 학생단체의 정식 동아리 승격은 전체회의 심의를 거치며, 재적 대의원 과반 출석에 출석 인원 3분의 2 이상 찬성으로 의결됩니다. 올해 심의는 9월 정기 전체회의에서 다룰 예정입니다.' }),
+          mk({ id: 'inbox:103', uid: 103, category: '세미나·행사', score: 4, sourceWorthy: false,
+            subject: '[학사] 2026학년도 2학기 수강신청 일정 안내',
+            fromName: '학사팀', fromEmail: 'academic@dgist.ac.kr', date: ago(20),
+            info: { 일시: '8/12 10:00' }, summary: '2학기 수강신청 일정',
+            snippet: '2026학년도 2학기 수강신청 일정을 안내합니다.',
+            body: '2026학년도 2학기 수강신청 일정을 안내합니다.\n\n- 수강신청: 8월 12일(수) 10:00 ~ 8월 14일(금) 17:00\n- 정정기간: 9월 1일(화) ~ 9월 5일(토)' }),
+          mk({ id: 'inbox:104', uid: 104, category: '보도자료', score: 3, sourceWorthy: false, unread: false,
+            subject: 'DGIST 연구팀, 차세대 배터리 소재 개발 성과',
+            fromName: '홍보실', fromEmail: 'pr@dgist.ac.kr', date: ago(30),
+            snippet: 'DGIST 연구팀이 차세대 배터리 소재를 개발했습니다.',
+            body: 'DGIST 연구팀이 차세대 배터리 소재를 개발했습니다. 자세한 내용은 첨부 보도자료를 참고해 주십시오.' }),
+          mk({ id: 'sent:201', uid: 201, folder: 'sent', unread: false, category: '기타', score: 2, sourceWorthy: false,
+            subject: '[디지스트신문 DNA] 조정부 승격 관련 서면 인터뷰 요청',
+            fromName: '나', fromEmail: 'dgun_189@dgist.ac.kr',
+            toName: '박성현', toEmail: 'park@dgist.ac.kr', date: ago(26),
+            snippet: '안녕하십니까, 디지스트신문 DNA 기자 ○○○입니다.',
+            body: '안녕하십니까, 디지스트신문 DNA 기자 ○○○입니다.\n\n조정부의 학생단체 승격 추진과 관련해 서면 인터뷰를 요청드립니다.' }),
+        ],
+      };
+    },
+    async mailMarkRead() { await sleep(120); return { ok: true }; },
+    async mailMarkAllRead() { await sleep(200); return { ok: true, count: 3 }; },
+    async mailDelete() { await sleep(200); return { ok: true }; },
     async projectCreate(d) { const id = uid(); db.projects.push({ id, title: d.title, keywords: d.keywords || [], article_type: '', current_stage: 'brainstorm' }); return id; },
     async projectList() { return [...db.projects]; },
     async projectGet(id) { return db.projects.find((p) => p.id === id) || null; },
@@ -748,8 +796,13 @@ function focusBlock(id) {
 // ---------- 단계 2: 취재 이메일 ----------
 async function renderEmailStage(el) {
   el.innerHTML = `
-    <h1>취재 이메일 작성 <span class="hint" style="font-size:12px; vertical-align:middle; background:var(--bg); padding:3px 10px; border-radius:99px">선택 단계</span></h1>
+    <h1>취재 이메일 <span class="hint" style="font-size:12px; vertical-align:middle; background:var(--bg); padding:3px 10px; border-radius:99px">선택 단계</span></h1>
     <p class="sub">외부 취재가 필요할 때만 — DNA 공식 형식이 자동 적용되고, 단계 1의 질문이 질문지로 첨부됩니다.</p>
+    <div class="mailtabs">
+      <button class="mailtab active" data-tab="compose">${ic('pen')} 작성</button>
+      <button class="mailtab" data-tab="inbox">${ic('mail')} 메일함<span id="mbBadge" class="mb-badge" hidden></span></button>
+    </div>
+    <section id="mailComposePane">
     <div class="toolrow">
       <button id="emSkipBtn" class="btn ghost">${ic('skip')} 건너뛰고 자료 수집으로</button>
     </div>
@@ -768,13 +821,42 @@ async function renderEmailStage(el) {
       <button id="emMailBtn" class="btn">${ic('mail')} 메일 앱으로</button>
     </div>
     <div class="send-row">
-      <input id="emTo" type="email" placeholder="받는 사람 이메일 (예: council@dgist.ac.kr)">
+      <div class="ac-wrap"><input id="emTo" type="email" placeholder="받는 사람 (여러 명은 쉼표로)" autocomplete="off"><div id="emToAc" class="ac-pop" hidden></div></div>
+      <button id="emCcToggle" class="btn ghost small" type="button">참조</button>
       <button id="emSendBtn" class="btn primary">${ic('send')} 앱에서 바로 보내기</button>
+    </div>
+    <div id="emCcRow" class="send-row" hidden>
+      <div class="ac-wrap"><input id="emCc" placeholder="참조 (cc)" autocomplete="off"><div id="emCcAc" class="ac-pop" hidden></div></div>
+      <div class="ac-wrap"><input id="emBcc" placeholder="숨은참조 (bcc) — 취재원 보호" autocomplete="off"><div id="emBccAc" class="ac-pop" hidden></div></div>
+    </div>
+    <div class="send-row">
+      <label class="btn ghost small" style="cursor:pointer">${ic('plus')} 첨부<input id="emAttach" type="file" multiple hidden></label>
+      <div id="emAttachList" class="attach-list"></div>
     </div>
     <div id="emSendState" class="hint" style="margin:-6px 0 8px"></div>
     <div id="emNotes"></div>
     <input id="emSubject" style="width:100%; font-family:inherit; font-size:15px; font-weight:700; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px" placeholder="제목">
     <textarea id="emBody" class="editor" style="min-height:320px" placeholder="본문"></textarea>
+    </section>
+    <section id="mailInboxPane" hidden>
+      <div class="toolrow">
+        <button id="mbFetchBtn" class="btn primary">${ic('download')} 메일 가져오기</button>
+        <select id="mbFolder" class="mb-folder">
+          <option value="inbox">받은 편지함</option>
+          <option value="sent">보낸 편지함</option>
+          <option value="promo">광고</option>
+        </select>
+        <input id="mbSearch" class="mb-search" placeholder="제목·발신자·본문 검색">
+        <button id="mbAllReadBtn" class="btn ghost">모두 읽음</button>
+      </div>
+      <div id="mbState" class="hint"></div>
+      <div id="mbBriefing" class="mb-brief" hidden></div>
+      <div id="mbChips" class="mb-chips"></div>
+      <div class="mb-split">
+        <div id="mbList" class="mb-list"></div>
+        <div id="mbRead" class="mb-read"><p class="hint" style="padding:20px">메일을 선택하면 여기에 열립니다.</p></div>
+      </div>
+    </section>
   `;
   const prev = await api.outputLatest(state.projectId, 'email');
   if (prev) { try { const e2 = JSON.parse(prev.content); $('#emSubject').value = e2.subject || ''; $('#emBody').value = e2.body || ''; } catch { /* 무시 */ } }
@@ -837,13 +919,29 @@ async function renderEmailStage(el) {
       st.style.color = 'var(--red)';
       return;
     }
-    if (!confirm(`아래 주소로 지금 발송합니다.\n\n받는 사람: ${to}\n제목: ${subject}\n\n보내시겠습니까?`)) return;
+    const cc = $('#emCc').value.trim();
+    const bcc = $('#emBcc').value.trim();
+    const atts = mail.attachments;
+    const extra = [
+      cc ? `참조: ${cc}` : '',
+      bcc ? `숨은참조: ${bcc}` : '',
+      atts.length ? `첨부: ${atts.map((a) => a.filename).join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+    if (!confirm(`아래 주소로 지금 발송합니다.\n\n받는 사람: ${to}\n제목: ${subject}\n${extra ? extra + '\n' : ''}\n보내시겠습니까?`)) return;
     const btn = $('#emSendBtn'); setBusy(btn, true);
     st.textContent = '발송 중…'; st.style.color = 'var(--dim)';
     try {
-      const r = await api.mailSend({ to, subject, body });
-      st.textContent = `✓ 발송됨 → ${(r.accepted || [to]).join(', ')} (보낸편지함 확인)`;
+      const r = await api.mailSend({
+        to, subject, body, cc, bcc,
+        attachments: atts.map((a) => ({ filename: a.filename, content: a.content })),
+        inReplyTo: state.replyTo?.messageId || '',
+        references: state.replyTo?.references || '',
+      });
+      st.textContent = `✓ 발송됨 → ${(r.accepted || [to]).join(', ')}${r.attachments ? ` · 첨부 ${r.attachments}개` : ''} (보낸편지함 확인)`;
       st.style.color = 'var(--green)';
+      mail.attachments = [];
+      state.replyTo = null;
+      renderAttachChips();
       setSave('이메일 발송 완료', true);
     } catch (e) {
       st.textContent = '✗ ' + (e.message || e);
@@ -861,6 +959,328 @@ async function renderEmailStage(el) {
     $('#emNotes').innerHTML = '';
     if (res.ok && !res.issues.length) note('#emNotes', 'ok', '형식 검사', 'DNA 공식 형식을 모두 충족합니다.');
     for (const iss of res.issues) note('#emNotes', iss.level === 'warn' ? 'warn' : 'alert', '형식', iss.message);
+  }
+
+  // 첨부 파일 선택 → base64로 담아두고 발송 시 함께 전송
+  $('#emAttach').onchange = async (e) => {
+    for (const file of [...e.target.files]) {
+      if (mail.attachments.reduce((n, a) => n + a.size, 0) + file.size > 20 * 1024 * 1024) {
+        setSave('첨부 총 용량 20MB를 넘을 수 없습니다', false);
+        break;
+      }
+      mail.attachments.push({
+        filename: file.name,
+        size: file.size,
+        content: await fileToBase64(file),
+      });
+    }
+    e.target.value = '';
+    renderAttachChips();
+  };
+  $('#emCcToggle').onclick = () => {
+    const row = $('#emCcRow');
+    row.hidden = !row.hidden;
+  };
+  renderAttachChips();
+  bindContactAutocomplete('#emTo', '#emToAc');
+  bindContactAutocomplete('#emCc', '#emCcAc');
+  bindContactAutocomplete('#emBcc', '#emBccAc');
+
+  // 탭 전환 (작성 ↔ 메일함)
+  el.querySelectorAll('.mailtab').forEach((tab) => {
+    tab.onclick = () => {
+      el.querySelectorAll('.mailtab').forEach((t) => t.classList.toggle('active', t === tab));
+      $('#mailComposePane').hidden = tab.dataset.tab !== 'compose';
+      $('#mailInboxPane').hidden = tab.dataset.tab !== 'inbox';
+    };
+  });
+
+  bindMailbox();
+  if (mail.emails.length) renderMailbox();  // 단계를 다시 열어도 가져온 메일 유지
+}
+
+// ---------- 메일함 (IMAP 수신) ----------
+// 가져온 메일은 화면 상태로만 들고 있는다. 자료로 편입할 때만 DB에 저장된다.
+const mail = { emails: [], contacts: [], briefing: null, folder: 'inbox', filter: '', query: '', selected: null, attachments: [] };
+
+const MAIL_CATS = ['취재 답신', '취재원', '제보', '학생회', '행정·학생팀', '세미나·행사', '보도자료', '기타'];
+const CAT_ICON = {
+  '취재 답신': '↩️', '취재원': '🎤', '제보': '📢', '학생회': '🏛',
+  '행정·학생팀': '📋', '세미나·행사': '📅', '보도자료': '📰', '기타': '📎',
+};
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function renderAttachChips() {
+  const wrap = $('#emAttachList');
+  if (!wrap) return;
+  wrap.innerHTML = mail.attachments
+    .map((a, i) => `<span class="attach-chip">${ic('copy')} ${esc(a.filename)} <b>${fmtSize(a.size)}</b><button data-rm="${i}" title="제거">×</button></span>`)
+    .join('');
+  wrap.querySelectorAll('[data-rm]').forEach((b) => {
+    b.onclick = () => { mail.attachments.splice(Number(b.dataset.rm), 1); renderAttachChips(); };
+  });
+}
+
+function fmtSize(n) {
+  return n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+}
+
+// 메일함에서 모은 주소로 받는 사람 자동완성
+function bindContactAutocomplete(inputSel, popSel) {
+  const input = $(inputSel);
+  const pop = $(popSel);
+  if (!input || !pop) return;
+  let active = -1;
+  const close = () => { pop.hidden = true; active = -1; };
+  const apply = (email) => {
+    const parts = input.value.split(',');
+    parts[parts.length - 1] = ' ' + email;
+    input.value = parts.join(',').replace(/^\s+/, '') + ', ';
+    close();
+    input.focus();
+  };
+  input.addEventListener('input', () => {
+    const term = (input.value.split(',').pop() || '').trim().toLowerCase();
+    if (!term || !mail.contacts.length) return close();
+    const hits = mail.contacts
+      .filter((c) => c.email.includes(term) || (c.name || '').toLowerCase().includes(term))
+      .slice(0, 6);
+    if (!hits.length) return close();
+    pop.innerHTML = hits
+      .map((c, i) => `<button type="button" class="ac-item ${i === 0 ? 'active' : ''}" data-email="${esc(c.email)}"><span>${esc(c.name || c.email)}</span><span class="ac-mail">${esc(c.email)}</span></button>`)
+      .join('');
+    active = 0;
+    pop.hidden = false;
+    pop.querySelectorAll('.ac-item').forEach((b) => { b.onclick = () => apply(b.dataset.email); });
+  });
+  input.addEventListener('keydown', (e) => {
+    if (pop.hidden) return;
+    const items = [...pop.querySelectorAll('.ac-item')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach((it, i) => it.classList.toggle('active', i === active));
+    } else if (e.key === 'Enter' && items[active]) {
+      e.preventDefault();
+      apply(items[active].dataset.email);
+    } else if (e.key === 'Escape') close();
+  });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+
+function bindMailbox() {
+  $('#mbFetchBtn').onclick = fetchMailbox;
+  $('#mbFolder').onchange = (e) => { mail.folder = e.target.value; mail.selected = null; renderMailbox(); };
+  $('#mbSearch').oninput = (e) => { mail.query = e.target.value.trim().toLowerCase(); renderMailbox(); };
+  $('#mbAllReadBtn').onclick = async () => {
+    if (!confirm(`${$('#mbFolder').selectedOptions[0].text}의 안 읽은 메일을 모두 읽음 처리할까요?`)) return;
+    try {
+      const r = await api.mailMarkAllRead(mail.folder);
+      mail.emails.forEach((m) => { if (m.folder === mail.folder) m.unread = false; });
+      renderMailbox();
+      setSave(`${r.count}통을 읽음으로 표시했습니다`, true);
+    } catch (e) { setSave(String(e.message || e), false); }
+  };
+}
+
+async function fetchMailbox() {
+  const btn = $('#mbFetchBtn');
+  const st = $('#mbState');
+  if (api.hasSmtpPass && !(await api.hasSmtpPass())) {
+    st.innerHTML = '먼저 <b>설정 → 이메일</b>에서 DGIST 주소·비밀번호를 등록하세요.';
+    st.style.color = 'var(--red)';
+    return;
+  }
+  setBusy(btn, true);
+  st.textContent = '메일 서버에서 가져오는 중… (최근 21일)';
+  st.style.color = 'var(--dim)';
+  try {
+    const res = await api.mailFetch({ days: 21, maxPerFolder: 60 });
+    mail.emails = res.emails || [];
+    mail.contacts = res.contacts || [];
+    mail.briefing = res.briefing || null;
+    const replies = mail.emails.filter((m) => m.category === '취재 답신').length;
+    st.textContent = `${mail.emails.length}통 가져옴${replies ? ` · 취재 답신 ${replies}건` : ''}${res.ai ? '' : ' (AI 분류 없이 규칙 분류만 적용)'}`;
+    st.style.color = 'var(--green)';
+    renderMailbox();
+  } catch (e) {
+    st.textContent = '✗ ' + (e.message || e);
+    st.style.color = 'var(--red)';
+  } finally { setBusy(btn, false); }
+}
+
+function visibleMail() {
+  return mail.emails
+    .filter((m) => m.folder === mail.folder)
+    .filter((m) => !mail.filter || (m.category || '기타') === mail.filter)
+    .filter((m) => {
+      if (!mail.query) return true;
+      return `${m.subject} ${m.fromName} ${m.fromEmail} ${m.snippet}`.toLowerCase().includes(mail.query);
+    })
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+function renderMailbox() {
+  const pool = mail.emails.filter((m) => m.folder === mail.folder);
+  const badge = $('#mbBadge');
+  if (badge) {
+    const n = mail.emails.filter((m) => m.unread && m.category === '취재 답신').length;
+    badge.hidden = !n;
+    badge.textContent = n;
+  }
+  // 브리핑
+  const brief = $('#mbBriefing');
+  if (brief) {
+    const b = mail.briefing;
+    const has = b && (b.intro || (b.todo || []).length);
+    brief.hidden = !has || mail.folder !== 'inbox';
+    if (has) {
+      brief.innerHTML = `${b.intro ? `<p class="mb-intro">${esc(b.intro)}</p>` : ''}` +
+        ((b.todo || []).length ? `<ul class="mb-todo">${b.todo.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '');
+    }
+  }
+  // 카테고리 칩
+  const chips = $('#mbChips');
+  if (chips) {
+    const counts = new Map();
+    for (const m of pool) counts.set(m.category || '기타', (counts.get(m.category || '기타') || 0) + 1);
+    const parts = [`<button class="mb-chip ${!mail.filter ? 'active' : ''}" data-cat="">전체 ${pool.length}</button>`];
+    for (const cat of MAIL_CATS) {
+      if (!counts.get(cat)) continue;
+      parts.push(`<button class="mb-chip ${mail.filter === cat ? 'active' : ''}" data-cat="${esc(cat)}">${CAT_ICON[cat]} ${esc(cat)} ${counts.get(cat)}</button>`);
+    }
+    chips.innerHTML = pool.length ? parts.join('') : '';
+    chips.querySelectorAll('[data-cat]').forEach((b) => {
+      b.onclick = () => { mail.filter = b.dataset.cat; renderMailbox(); };
+    });
+  }
+  // 목록
+  const list = $('#mbList');
+  const rows = visibleMail();
+  list.innerHTML = rows.length
+    ? rows.map((m) => `
+      <button class="mb-row ${m.unread ? 'unread' : ''} ${mail.selected === m.id ? 'sel' : ''}" data-id="${esc(m.id)}">
+        <span class="mb-cat">${CAT_ICON[m.category] || '📎'}</span>
+        <span class="mb-main">
+          <span class="mb-from">${esc(m.fromName || m.fromEmail)}</span>
+          <span class="mb-subj">${esc(m.summary || m.subject)}</span>
+          <span class="mb-snip">${esc((m.snippet || '').slice(0, 70))}</span>
+        </span>
+        <span class="mb-meta">
+          <time>${fmtMailDate(m.date)}</time>
+          ${m.sourceWorthy ? '<span class="mb-tag">자료</span>' : ''}
+        </span>
+      </button>`).join('')
+    : `<p class="hint" style="padding:18px">${mail.emails.length ? '조건에 맞는 메일이 없습니다.' : '“메일 가져오기”를 누르면 DGIST 메일함을 불러옵니다.'}</p>`;
+  list.querySelectorAll('[data-id]').forEach((b) => {
+    b.onclick = () => openMail(b.dataset.id);
+  });
+  if (mail.selected && !rows.some((m) => m.id === mail.selected)) mail.selected = null;
+}
+
+function fmtMailDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+}
+
+function openMail(id) {
+  const m = mail.emails.find((x) => x.id === id);
+  if (!m) return;
+  mail.selected = id;
+  const info = Object.entries(m.info || {});
+  $('#mbRead').innerHTML = `
+    <div class="mb-read-head">
+      <span class="mb-chip active">${CAT_ICON[m.category] || '📎'} ${esc(m.category || '기타')}</span>
+      <h3>${esc(m.subject)}</h3>
+      <p class="hint">${esc(m.fromName || '')} &lt;${esc(m.fromEmail)}&gt;${m.date ? ' · ' + new Date(m.date).toLocaleString('ko-KR') : ''}</p>
+      ${info.length ? `<div class="mb-info">${info.map(([k, v]) => `<span><b>${esc(k)}</b> ${esc(v)}</span>`).join('')}</div>` : ''}
+    </div>
+    <div class="mb-acts">
+      <button id="mbReplyBtn" class="btn primary small">${ic('send')} 답장</button>
+      <button id="mbToMatBtn" class="btn small">${ic('plus')} 자료로 편입</button>
+      <button id="mbReadBtn" class="btn ghost small">${m.unread ? '읽음 표시' : '안읽음 표시'}</button>
+      <button id="mbDelBtn" class="btn ghost small danger">${ic('trash')} 삭제</button>
+    </div>
+    <div class="mb-body">${esc(m.body || m.snippet || '(본문을 불러오지 못했습니다)')}</div>
+  `;
+  // 열람 즉시 읽음 처리 (서버에도 반영)
+  if (m.unread) setMailRead(m, true);
+
+  $('#mbReplyBtn').onclick = () => replyToMail(m);
+  $('#mbToMatBtn').onclick = () => mailToMaterial(m);
+  $('#mbReadBtn').onclick = () => setMailRead(m, m.unread);
+  $('#mbDelBtn').onclick = async () => {
+    if (!confirm(`이 메일을 삭제할까요?\n\n${m.subject}\n\n(DGIST 메일함의 휴지통으로 이동합니다)`)) return;
+    try {
+      await api.mailDelete(m.uid, m.folder);
+      mail.emails = mail.emails.filter((x) => x.id !== m.id);
+      mail.selected = null;
+      $('#mbRead').innerHTML = '<p class="hint" style="padding:20px">메일을 삭제했습니다.</p>';
+      renderMailbox();
+      setSave('메일을 휴지통으로 옮겼습니다', true);
+    } catch (e) { setSave(String(e.message || e), false); }
+  };
+  renderMailbox();
+}
+
+async function setMailRead(m, seen) {
+  m.unread = !seen;
+  renderMailbox();
+  try {
+    await api.mailMarkRead(m.uid, m.folder, seen);
+    const btn = $('#mbReadBtn');
+    if (btn && mail.selected === m.id) btn.textContent = m.unread ? '읽음 표시' : '안읽음 표시';
+  } catch {
+    m.unread = seen; // 서버 반영 실패 시 되돌림
+    renderMailbox();
+  }
+}
+
+// 답장 — 작성 탭으로 넘기고 원문을 인용해 스레드로 묶는다
+function replyToMail(m) {
+  const subject = /^\s*re\s*:/i.test(m.subject) ? m.subject : `Re: ${m.subject}`;
+  const quoted = (m.body || m.snippet || '').split('\n').map((l) => '> ' + l).join('\n');
+  $('#emTo').value = m.fromEmail;
+  $('#emSubject').value = subject;
+  $('#emBody').value = `\n\n----- 원본 메일 (${m.fromName || m.fromEmail}${m.date ? ', ' + new Date(m.date).toLocaleString('ko-KR') : ''}) -----\n${quoted}`;
+  state.replyTo = { messageId: m.messageId, references: m.references };
+  document.querySelector('.mailtab[data-tab="compose"]').click();
+  $('#emBody').focus();
+  $('#emBody').setSelectionRange(0, 0);
+  setSave('답장을 작성 탭에 준비했습니다', true);
+}
+
+// 취재원 답신을 그대로 수집 자료로 — 출처는 발신자 주소로 자동 기록
+async function mailToMaterial(m) {
+  if (!state.projectId) { setSave('먼저 프로젝트를 선택하세요', false); return; }
+  const body = m.body || m.snippet || '';
+  if (!body.trim()) { setSave('본문이 비어 있어 자료로 저장할 수 없습니다', false); return; }
+  try {
+    await api.materialAdd({
+      projectId: state.projectId,
+      title: `[메일] ${m.subject}`.slice(0, 120),
+      kind: 'transcript',           // 취재원 발언 → 인용 검증 대상이 된다
+      content: body,
+      source: `${m.fromName || ''} <${m.fromEmail}> · ${m.date ? new Date(m.date).toLocaleDateString('ko-KR') : '수신일 미상'} 이메일`.trim(),
+    });
+    await renderMaterials();
+    setSave('수집 자료로 편입했습니다 — 인용 검증에 바로 쓰입니다', true);
+  } catch (e) {
+    setSave(String(e.message || e), false);
   }
 }
 
@@ -1665,6 +2085,8 @@ $('#settingsBtn').onclick = async () => {
   $('#setSmtpHost').value = sHost;
   $('#setSmtpPort').value = await api.settingsGet('smtpPort');
   $('#setSmtpPreset').value = /dgist\.ac\.kr/i.test(sHost) ? 'dgist' : /gmail/i.test(sHost) ? 'gmail' : '';
+  $('#setImapHost').value = await api.settingsGet('imapHost');
+  $('#setImapPort').value = await api.settingsGet('imapPort');
   $('#setSmtpPass').value = '';
   $('#setSmtpPass').placeholder = (await api.hasSmtpPass?.()) ? '저장됨 — 변경하려면 입력' : 'DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)';
   $('#setMailTestState').textContent = '';
@@ -1672,24 +2094,49 @@ $('#settingsBtn').onclick = async () => {
 };
 // 빠른 설정 프리셋 → 호스트·포트 자동 채움
 const SMTP_PRESETS = {
-  dgist: { host: 'smtp.dgist.ac.kr', port: '465' },
-  gmail: { host: 'smtp.gmail.com', port: '465' },
+  // 보내기(SMTP)와 받기(IMAP)는 서버가 다르다 — DGIST는 smtp./mail. 로 나뉜다
+  dgist: { host: 'smtp.dgist.ac.kr', port: '465', imapHost: 'mail.dgist.ac.kr', imapPort: '993' },
+  gmail: { host: 'smtp.gmail.com', port: '465', imapHost: 'imap.gmail.com', imapPort: '993' },
 };
 $('#setSmtpPreset').onchange = (e) => {
   const p = SMTP_PRESETS[e.target.value];
   if (!p) return;
   $('#setSmtpHost').value = p.host;
   $('#setSmtpPort').value = p.port;
+  $('#setImapHost').value = p.imapHost;
+  $('#setImapPort').value = p.imapPort;
 };
-$('#setMailTestBtn').onclick = async () => {
-  // 테스트 전에 현재 입력값을 저장해야 검증됨
+
+// 받기(IMAP) 연결 테스트
+$('#setImapTestBtn').onclick = async () => {
+  await saveMailFields();
+  const el = $('#setMailTestState');
+  el.textContent = '받기 연결 확인 중…';
+  el.style.color = 'var(--dim)';
+  try {
+    const r = await api.mailImapVerify();
+    el.textContent = r.ok
+      ? `✓ 받기 연결 성공 — 폴더 ${r.folders.length}개 (${r.folders.slice(0, 3).join(', ')}…)`
+      : '✗ ' + r.error;
+    el.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { el.textContent = '✗ ' + (e.message || e); el.style.color = 'var(--red)'; }
+};
+
+// 테스트 전에 입력값을 먼저 저장해야 검증에 반영된다
+async function saveMailFields() {
   await api.settingsSet('smtpUser', $('#setSmtpUser').value.trim());
   await api.settingsSet('smtpHost', $('#setSmtpHost').value.trim());
   await api.settingsSet('smtpPort', $('#setSmtpPort').value.trim());
+  await api.settingsSet('imapHost', $('#setImapHost').value.trim());
+  await api.settingsSet('imapPort', $('#setImapPort').value.trim());
   const pass = $('#setSmtpPass').value.trim();
   if (pass) await api.settingsSet('smtpPass', pass);
+}
+$('#setMailTestBtn').onclick = async () => {
+  await saveMailFields();
   const el = $('#setMailTestState');
-  el.textContent = '연결 확인 중…';
+  el.textContent = '보내기 연결 확인 중…';
+  el.style.color = 'var(--dim)';
   try {
     const r = await api.mailVerify();
     el.textContent = r.ok ? '✓ 연결 성공 — 발송 준비됨' : '✗ ' + r.error;
@@ -1704,6 +2151,8 @@ $('#setSaveBtn').onclick = async () => {
   await api.settingsSet('smtpUser', $('#setSmtpUser').value.trim());
   await api.settingsSet('smtpHost', $('#setSmtpHost').value.trim());
   await api.settingsSet('smtpPort', $('#setSmtpPort').value.trim());
+  await api.settingsSet('imapHost', $('#setImapHost').value.trim());
+  await api.settingsSet('imapPort', $('#setImapPort').value.trim());
   const smtpPass = $('#setSmtpPass').value.trim();
   if (smtpPass) await api.settingsSet('smtpPass', smtpPass);
   const key = $('#setApiKey').value.trim();
