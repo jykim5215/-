@@ -112,17 +112,17 @@
       <label style="margin-top:8px">빠른 설정
         <select id="setSmtpPreset">
           <option value="">직접 입력</option>
-          <option value="dgist">DGIST 메일 (mail.dgist.ac.kr · 587)</option>
+          <option value="dgist">DGIST 메일 (smtp.dgist.ac.kr · 465 SSL)</option>
           <option value="gmail">Gmail (smtp.gmail.com · 465)</option>
         </select>
       </label>
       <label>보내는 이메일 <input id="setSmtpUser" placeholder="dgun_xxx@dgist.ac.kr"></label>
       <label>비밀번호 <input id="setSmtpPass" type="password" placeholder="DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)"></label>
-      <label>SMTP 호스트 <input id="setSmtpHost" placeholder="예: mail.dgist.ac.kr (비우면 smtp.gmail.com)"></label>
+      <label>SMTP 호스트 <input id="setSmtpHost" placeholder="예: smtp.dgist.ac.kr (비우면 smtp.gmail.com)"></label>
       <label>SMTP 포트 <input id="setSmtpPort" placeholder="465(SSL) 또는 587(STARTTLS)"></label>
       <button id="setMailTestBtn" class="btn small" type="button">연결 테스트</button>
       <span id="setMailTestState" class="hint"></span>
-      <p class="hint" style="margin-top:8px"><b>DGIST 메일 서버로 직접 보내기(권장)</b> — 구글을 안 거칩니다. DGIST는 자체 메일 서버라 <b>DGIST 아이디·비밀번호</b>를 그대로 넣으면 됩니다. 호스트·포트는 <b>Gmail 설정 → 계정 및 가져오기 → "다른 주소에서 메일 보내기"</b>에 입력했던 DGIST SMTP 값(POP 연동 시 쓴 서버)과 같습니다. 모르면 DGIST 웹메일의 POP/SMTP 설정 안내를 참고하세요.<br><br><b>Gmail 경유</b> — 호스트를 비우면 smtp.gmail.com으로 나갑니다. 이땐 구글 <b>앱 비밀번호</b>가 필요합니다.<br><br>비밀번호는 OS 키체인으로 암호화 저장되고 어디로도 전송되지 않습니다.</p>
+      <p class="hint" style="margin-top:8px"><b>DGIST 메일 서버로 직접 보내기(권장)</b> — 구글을 안 거칩니다. DGIST는 자체 메일 서버라 <b>DGIST 아이디·비밀번호</b>를 그대로 넣으면 됩니다. 빠른 설정에서 <b>DGIST 메일</b>을 고르면 <b>smtp.dgist.ac.kr · 465(SSL)</b>이 자동으로 채워집니다.<br><br><b>Gmail 경유</b> — 호스트를 비우면 smtp.gmail.com으로 나갑니다. 이땐 구글 <b>앱 비밀번호</b>가 필요합니다.<br><br>비밀번호는 OS 키체인으로 암호화 저장되고 어디로도 전송되지 않습니다.</p>
     </details>
     <details class="law-d" style="margin:8px 0">
       <summary>인터뷰 받아쓰기 (whisper.cpp) 설정</summary>

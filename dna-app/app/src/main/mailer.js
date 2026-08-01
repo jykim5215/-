@@ -1,8 +1,8 @@
 // 앱 내 이메일 발송 — SMTP (nodemailer)
 //
-// DGIST 메일은 자체 메일 서버(mail.dgist.ac.kr)를 쓴다. 구글을 거치지 않고
+// DGIST 메일은 자체 메일 서버(smtp.dgist.ac.kr)를 쓴다. 구글을 거치지 않고
 // DGIST SMTP로 직접 보내는 것이 기본 경로다 — DGIST 아이디·비밀번호를 그대로 쓰고,
-// 587 포트에서 STARTTLS로 암호화한다. (사용자가 POP를 Gmail에 연동해 둔 것은
+// 465 포트에서 SSL(암시적 TLS)로 암호화한다. (사용자가 POP를 Gmail에 연동해 둔 것은
 // '수신'용일 뿐, 발송과는 별개다.) 호스트를 비우면 Gmail(smtp.gmail.com, 465, 앱
 // 비밀번호)로 경유하는 대체 경로도 지원한다.
 //
@@ -12,7 +12,7 @@ const nodemailer = require('nodemailer');
 
 // 프리셋: 알려진 제공자의 SMTP 기본값
 const PRESETS = {
-  dgist: { host: 'mail.dgist.ac.kr', port: 587, secure: false }, // 자체 서버, STARTTLS
+  dgist: { host: 'smtp.dgist.ac.kr', port: 465, secure: true }, // 자체 서버, SSL(465)
   gmail: { host: 'smtp.gmail.com', port: 465, secure: true },
 };
 
@@ -81,7 +81,7 @@ function smtpError(e, cfg = {}) {
     return '서버 인증서 오류 — SMTP 호스트/포트가 맞는지 확인하세요. (DGIST 서버 인증서 문제면 IT에 문의)';
   }
   if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|getaddrinfo|ESOCKET/i.test(m)) {
-    return '메일 서버에 연결하지 못했습니다 — SMTP 호스트/포트를 확인하세요. (예: mail.dgist.ac.kr, 포트 465 또는 587. 일부 망은 외부 SMTP를 차단합니다)';
+    return '메일 서버에 연결하지 못했습니다 — SMTP 호스트/포트를 확인하세요. (예: smtp.dgist.ac.kr, 포트 465(SSL). 일부 망은 외부 SMTP를 차단합니다)';
   }
   if (/Application-specific password required/i.test(m)) {
     return 'Gmail 앱 비밀번호가 필요합니다 — 2단계 인증을 켜고 앱 비밀번호를 발급하세요.';

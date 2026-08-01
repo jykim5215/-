@@ -30,15 +30,19 @@ test('mailer — Gmail 프리셋 + fromName 조립', () => {
   assert.equal(t.options.secure, true);
 });
 
-test('mailer — DGIST 자체 서버 직접 연결 (STARTTLS 587)', () => {
-  const t = buildTransport({ host: 'mail.dgist.ac.kr', port: 587, user: 'dgun@dgist.ac.kr', pass: 'x' });
-  assert.equal(t.options.host, 'mail.dgist.ac.kr');
-  assert.equal(t.options.port, 587);
-  assert.equal(t.options.secure, false);      // 587 = STARTTLS
-  assert.equal(t.options.requireTLS, true);   // 평문 전송 방지
-  // 465는 암시적 SSL
-  const t2 = buildTransport({ host: 'mail.dgist.ac.kr', port: 465, user: 'x', pass: 'y' });
-  assert.equal(t2.options.secure, true);
+test('mailer — DGIST 자체 서버 직접 연결 (SSL 465)', () => {
+  // 프리셋 기본값 확인
+  assert.equal(PRESETS.dgist.host, 'smtp.dgist.ac.kr');
+  assert.equal(PRESETS.dgist.port, 465);
+  assert.equal(PRESETS.dgist.secure, true);
+  const t = buildTransport({ host: 'smtp.dgist.ac.kr', port: 465, secure: true, user: 'dgun@dgist.ac.kr', pass: 'x' });
+  assert.equal(t.options.host, 'smtp.dgist.ac.kr');
+  assert.equal(t.options.port, 465);
+  assert.equal(t.options.secure, true);       // 465 = 암시적 SSL
+  // 587을 명시하면 STARTTLS로 동작 (평문 전송 방지)
+  const t2 = buildTransport({ host: 'smtp.dgist.ac.kr', port: 587, user: 'x', pass: 'y' });
+  assert.equal(t2.options.secure, false);
+  assert.equal(t2.options.requireTLS, true);
 });
 
 test('mailer — 오류 안내가 호스트에 따라 구분됨', async () => {

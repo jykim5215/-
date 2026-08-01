@@ -1664,7 +1664,7 @@ $('#settingsBtn').onclick = async () => {
   const sHost = await api.settingsGet('smtpHost');
   $('#setSmtpHost').value = sHost;
   $('#setSmtpPort').value = await api.settingsGet('smtpPort');
-  $('#setSmtpPreset').value = /mail\.dgist\.ac\.kr/i.test(sHost) ? 'dgist' : /gmail/i.test(sHost) ? 'gmail' : '';
+  $('#setSmtpPreset').value = /dgist\.ac\.kr/i.test(sHost) ? 'dgist' : /gmail/i.test(sHost) ? 'gmail' : '';
   $('#setSmtpPass').value = '';
   $('#setSmtpPass').placeholder = (await api.hasSmtpPass?.()) ? '저장됨 — 변경하려면 입력' : 'DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)';
   $('#setMailTestState').textContent = '';
@@ -1672,7 +1672,7 @@ $('#settingsBtn').onclick = async () => {
 };
 // 빠른 설정 프리셋 → 호스트·포트 자동 채움
 const SMTP_PRESETS = {
-  dgist: { host: 'mail.dgist.ac.kr', port: '587' },
+  dgist: { host: 'smtp.dgist.ac.kr', port: '465' },
   gmail: { host: 'smtp.gmail.com', port: '465' },
 };
 $('#setSmtpPreset').onchange = (e) => {
