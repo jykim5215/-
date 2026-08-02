@@ -6,9 +6,9 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import com.vocacard.app.data.model.Example
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.Json
+import com.vocacard.app.data.model.ExampleSource
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 내 단어장에 담기는 단어.
@@ -87,25 +87,62 @@ data class SessionEntity(
     val correct: Int,
 )
 
+/**
+ * Room TypeConverter.
+ *
+ * **kotlinx.serialization 을 쓰지 않는다.** `Example.serializer()` 같은 함수는
+ * 직렬화 컴파일러 플러그인이 만들어 주는데, Room 의 KSP 프로세서는 그보다 먼저 도는
+ * 단계에서 이 클래스를 훑기 때문에 타입을 해석하지 못하고
+ * `[MissingType]: Element 'Converters' references a type that is not present` 로 실패한다.
+ * 안드로이드에 기본 내장된 org.json 만 써서 그 의존을 끊는다.
+ */
 class Converters {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-
-    // 직렬화기를 명시한다. reified 확장(encodeToString(value))은 Room 이 생성하는
-    // 자바 호출부에서 타입 추론이 되지 않아 컴파일에 실패한다.
-    private val stringList = ListSerializer(String.serializer())
-    private val exampleList = ListSerializer(Example.serializer())
 
     @TypeConverter
-    fun stringListToJson(value: List<String>): String = json.encodeToString(stringList, value)
+    fun stringListToJson(value: List<String>): String {
+        val array = JSONArray()
+        value.forEach { array.put(it) }
+        return array.toString()
+    }
 
     @TypeConverter
-    fun jsonToStringList(value: String): List<String> =
-        runCatching { json.decodeFromString(stringList, value) }.getOrDefault(emptyList())
+    fun jsonToStringList(value: String): List<String> = runCatching {
+        val array = JSONArray(value)
+        (0 until array.length()).map { array.getString(it) }
+    }.getOrDefault(emptyList())
 
     @TypeConverter
-    fun exampleListToJson(value: List<Example>): String = json.encodeToString(exampleList, value)
+    fun exampleListToJson(value: List<Example>): String {
+        val array = JSONArray()
+        value.forEach { example ->
+            array.put(
+                JSONObject()
+                    .put(KEY_TEXT, example.text)
+                    .put(KEY_TRANSLATION, example.translation)
+                    .put(KEY_SOURCE, example.source.name)
+            )
+        }
+        return array.toString()
+    }
 
     @TypeConverter
-    fun jsonToExampleList(value: String): List<Example> =
-        runCatching { json.decodeFromString(exampleList, value) }.getOrDefault(emptyList())
+    fun jsonToExampleList(value: String): List<Example> = runCatching {
+        val array = JSONArray(value)
+        (0 until array.length()).map { i ->
+            val obj = array.getJSONObject(i)
+            Example(
+                text = obj.optString(KEY_TEXT),
+                translation = obj.optString(KEY_TRANSLATION),
+                source = runCatching {
+                    ExampleSource.valueOf(obj.optString(KEY_SOURCE, ExampleSource.MANUAL.name))
+                }.getOrDefault(ExampleSource.MANUAL),
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    private companion object {
+        const val KEY_TEXT = "text"
+        const val KEY_TRANSLATION = "translation"
+        const val KEY_SOURCE = "src"
+    }
 }
