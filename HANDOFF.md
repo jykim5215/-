@@ -169,7 +169,8 @@
 ## 6. 현재 상태
 
 - **최종 갱신**: 2026-08-02
-- **단계**: **v1.1.0 구현 완료 / CI 빌드 검증 중**
+- **단계**: **v1.1.0 빌드 성공 · 릴리즈 게시 완료**
+  (릴리즈: https://github.com/jykim5215/-/releases/tag/vocacard-v1.1.0 — APK 12.3MB)
 
 ### 확정된 사용자 선택
 - **UI 스타일: B · Paper** (따뜻한 종이 배경 `#F6F1E8`, 잉크 `#241F1A`, 테라코타 포인트 `#C2603C`,
@@ -196,20 +197,25 @@
   `.github/workflows/release.yml`(version.json 변경 시 APK 빌드 → `v<version>` 릴리즈 게시)
 
 ### 알려진 제약 / 다음 할 일
-1. **컴파일 미검증.** 작업 환경의 프록시가 `dl.google.com` 을 차단해 Android SDK 를 설치할 수 없었고,
-   CI 실행 결과를 확인하기 전에 작업 세션이 끝났다.
-   따라서 이 저장소의 코드는 **정적 검토만 거쳤고 실제 컴파일은 CI(GitHub Actions)에서 처음 수행된다.**
-   Codex 가 이어받는다면 **가장 먼저 `cd android && ./gradlew assembleRelease` 를 돌리거나
-   Actions 탭에서 최신 실행 로그를 열어 컴파일 오류를 잡는 것**이 1순위 작업이다.
-   (참고: 워크플로의 SDK 사전 설치 / stdin 차단 / 타임아웃 설정은 "빌드가 멈춘 것 같다"는
-   잘못된 관찰에서 추가됐다. 실제로는 빌드가 정상 진행 중이었다. 설정 자체는 유효하므로 유지한다.)
-2. 릴리즈 서명: 저장소 시크릿 `VOCA_KEYSTORE_BASE64`(+ `VOCA_KEYSTORE_PASSWORD`,
-   `VOCA_KEY_ALIAS`, `VOCA_KEY_PASSWORD`)가 없으면 CI 가 잡 내부에서 임시 키를 만들어 서명한다.
-   임시 키로 서명된 APK 는 **이전 버전 위에 덮어 설치되지 않으므로**, 자체 업데이트 기능을
-   제대로 쓰려면 고정 keystore 를 시크릿으로 등록해야 한다.
-3. 계측 테스트/유닛 테스트 미작성. `Scheduler`, `Semver`, `ExampleTemplates` 가 순수 로직이라 우선순위가 높다.
+1. **기기에서 실행해 본 적은 없다.** CI 빌드(컴파일·KSP·lint·패키징·서명)는 전부 통과했지만,
+   실제 단말에서 화면을 띄우고 눌러 본 검증은 아직이다. 특히 확인이 필요한 것:
+   홈 히어로의 낙하 모션 프레임률, SwipeDeck 드래그 판정, 스펠링 모드 키보드 인셋.
+2. **릴리즈 서명이 임시 키다.** 저장소 시크릿 `VOCA_KEYSTORE_BASE64`(+ `VOCA_KEYSTORE_PASSWORD`,
+   `VOCA_KEY_ALIAS`, `VOCA_KEY_PASSWORD`)가 없어 CI 가 잡 안에서 매번 새 키를 만들어 서명한다.
+   서명이 매 빌드마다 달라지므로 **덮어 설치가 막힌다** → 자체 업데이트 기능을 실제로 쓰려면
+   고정 keystore 를 시크릿으로 등록해야 한다. (등록 전까지는 재설치로만 갱신 가능)
+3. 테스트 미작성. `Scheduler`, `Semver`, `ExampleTemplates` 가 순수 로직이라 우선순위가 높다.
 4. 예문의 한국어 번역은 비어 있다(사전 API 가 영어 예문만 제공). 사용자가 직접 입력할 수 있게만 열어 두었다.
 
-- **GitHub 최신 업로드 버전**: 브랜치 `claude/android-vocabulary-app-820e26` 에 v1.0.0 소스 푸시.
-  릴리즈 게시는 CI 워크플로 실행 시(또는 기본 브랜치 병합 시) 이루어진다.
+### CI 에서 실제로 겪은 실패와 해결 (같은 함정을 다시 밟지 않도록)
+- `Converters` 안에서 `Example.serializer()` 사용 → Room KSP 가
+  `[MissingType]` 으로 DB 처리 실패. 직렬화 플러그인이 만드는 함수는 KSP 단계에서 해석되지 않는다.
+  → `org.json` 으로 교체.
+- 확장 함수를 완전한정 이름(`androidx.compose.foundation.lazy.itemsIndexed(...)`)으로 호출 → Unresolved.
+  → import 후 직접 호출.
+- `backup_rules.xml` 에서 포함하지 않은 도메인을 `exclude` → `lintVitalRelease` 가 FullBackupContent 오류로 중단.
+- Gradle 실패 시 스택트레이스가 200줄 넘게 붙어 `e:` 오류가 로그 꼬리에서 밀려난다.
+  → 워크플로에 "Surface build failure" 단계를 두어 오류 줄을 잡 마지막에 다시 출력한다.
+
+- **GitHub 최신 업로드 버전**: **vocacard-v1.1.0** (2026-08-02 게시, APK/zip/version.json 첨부)
 - **앱 내 업데이트 확인 기능**: **구현 완료** (설정 → 업데이트 확인, 자동 확인은 하루 1회).
