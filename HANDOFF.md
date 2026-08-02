@@ -190,10 +190,13 @@
   `.github/workflows/release.yml`(version.json 변경 시 APK 빌드 → `v<version>` 릴리즈 게시)
 
 ### 알려진 제약 / 다음 할 일
-1. **컴파일 미검증.** 작업 환경의 프록시가 `dl.google.com` 을 차단해 Android SDK 를 설치할 수 없었다.
+1. **컴파일 미검증.** 작업 환경의 프록시가 `dl.google.com` 을 차단해 Android SDK 를 설치할 수 없었고,
+   CI 실행 결과를 확인하기 전에 작업 세션이 끝났다.
    따라서 이 저장소의 코드는 **정적 검토만 거쳤고 실제 컴파일은 CI(GitHub Actions)에서 처음 수행된다.**
-   Codex 가 이어받는다면 **가장 먼저 `cd android && ./gradlew assembleRelease` 를 돌려
-   컴파일 오류를 잡는 것**이 1순위 작업이다.
+   Codex 가 이어받는다면 **가장 먼저 `cd android && ./gradlew assembleRelease` 를 돌리거나
+   Actions 탭에서 최신 실행 로그를 열어 컴파일 오류를 잡는 것**이 1순위 작업이다.
+   (참고: 워크플로의 SDK 사전 설치 / stdin 차단 / 타임아웃 설정은 "빌드가 멈춘 것 같다"는
+   잘못된 관찰에서 추가됐다. 실제로는 빌드가 정상 진행 중이었다. 설정 자체는 유효하므로 유지한다.)
 2. 릴리즈 서명: 저장소 시크릿 `VOCA_KEYSTORE_BASE64`(+ `VOCA_KEYSTORE_PASSWORD`,
    `VOCA_KEY_ALIAS`, `VOCA_KEY_PASSWORD`)가 없으면 CI 가 잡 내부에서 임시 키를 만들어 서명한다.
    임시 키로 서명된 APK 는 **이전 버전 위에 덮어 설치되지 않으므로**, 자체 업데이트 기능을
