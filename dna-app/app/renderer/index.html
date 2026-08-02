@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNA 편집 스튜디오</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <!-- 좌측 레일: 내비게이션 -->
+    <aside class="rail">
+      <div class="rail-logo"><span class="badge">DNA</span><span class="rail-title">편집 스튜디오</span></div>
+
+      <div class="rail-sec">프로젝트</div>
+      <select id="projectSelect" class="proj-select"></select>
+      <div class="proj-acts">
+        <button id="newProjectBtn" class="rail-btn">+ 새 프로젝트</button>
+        <button id="renameProjectBtn" class="rail-mini" title="이름 변경">✎</button>
+        <button id="deleteProjectBtn" class="rail-mini danger" title="프로젝트 삭제">🗑</button>
+      </div>
+
+      <div class="rail-sec">워크플로우</div>
+      <nav id="stepper" class="nav"></nav>
+
+      <div class="rail-foot">
+        <button id="dashBtn" class="rail-btn">지표</button>
+        <button id="settingsBtn" class="rail-btn">설정</button>
+      </div>
+    </aside>
+
+    <!-- 메인 -->
+    <div class="main">
+      <header class="mainbar">
+        <span id="crumb" class="crumb"></span>
+        <span id="saveState" class="save">대기</span>
+        <button id="sideToggle" class="btn small ghost">패널</button>
+      </header>
+
+      <div class="frame">
+        <main class="panel work" id="workArea"></main>
+
+        <aside class="side">
+          <section class="panel box">
+            <h3>수집 자료 <span id="matCount"></span></h3>
+            <div id="materialList"></div>
+            <details class="add-mat">
+              <summary>+ 자료 추가</summary>
+              <input id="matTitle" placeholder="제목">
+              <select id="matKind">
+                <option value="transcript">인터뷰 녹취</option>
+                <option value="url">URL 기사</option>
+                <option value="file">문서</option>
+                <option value="note">메모</option>
+              </select>
+              <textarea id="matContent" placeholder="본문/녹취 텍스트"></textarea>
+              <input id="matSource" placeholder="출처 (필수 — 없으면 저장 불가)">
+              <button id="matAddBtn" class="btn">자료 저장</button>
+            </details>
+            <details class="law-d">
+              <summary>저작권법 제28조 인용 원칙</summary>
+              인용은 주(主)·종(從) 관계를 지키고 출처를 반드시 표시합니다. 출처 없는 자료는 저장할 수 없습니다.
+            </details>
+          </section>
+
+          <section class="panel box" id="validatorBox" hidden>
+            <h3>자동 검사</h3>
+            <div id="validatorResults"></div>
+          </section>
+
+          <section class="panel box" id="feedbackBox" hidden>
+            <h3>이 결과 평가 <span class="hint">(학습 데이터로 축적)</span></h3>
+            <div class="stars" id="stars"></div>
+            <div class="tags" id="fbTags"></div>
+            <button id="fbSaveBtn" class="btn small">평가 저장</button>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="matEditDlg">
+    <h2>자료 편집</h2>
+    <label>제목 <input id="meTitle"></label>
+    <label>출처 (필수) <input id="meSource"></label>
+    <label>본문 <textarea id="meContent" style="width:100%; min-height:140px; font-family:var(--sans); font-size:13.5px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; margin-top:4px"></textarea></label>
+    <div class="row">
+      <button id="meSaveBtn" class="btn primary">저장</button>
+      <button id="meCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
+
+  <dialog id="dashDlg">
+    <h2>자동화 성숙도 지표</h2>
+    <p class="hint">단계별 평균 수정량(edit distance)과 평점. 수정량이 내려가면 자동화 성숙도가 올라가는 것입니다.</p>
+    <div id="dashBody" style="margin-top:10px; font-size:13.5px"></div>
+    <div class="row">
+      <button id="dashBackupBtn" class="btn">프로젝트 백업 zip 생성</button>
+      <button id="dashCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
+
+  <dialog id="settingsDlg">
+    <h2>설정</h2>
+    <label>기자 이름 <input id="setName" placeholder="홍길동"></label>
+    <label>직함 <input id="setTitle" placeholder="기자"></label>
+    <label>Claude API 키 <input id="setApiKey" type="password" placeholder="sk-ant-…"></label>
+    <p class="hint">키는 OS 키체인(safeStorage)으로 암호화 저장됩니다. 파일·코드에 평문 저장하지 않습니다.</p>
+    <details class="law-d" style="margin:8px 0">
+      <summary>이메일 발송 설정</summary>
+      <label style="margin-top:8px">빠른 설정
+        <select id="setSmtpPreset">
+          <option value="">직접 입력</option>
+          <option value="dgist">DGIST 메일 (smtp.dgist.ac.kr · 465 SSL)</option>
+          <option value="gmail">Gmail (smtp.gmail.com · 465)</option>
+        </select>
+      </label>
+      <label>보내는 이메일 <input id="setSmtpUser" placeholder="dgun_xxx@dgist.ac.kr"></label>
+      <label>비밀번호 <input id="setSmtpPass" type="password" placeholder="DGIST 메일 비밀번호 (Gmail이면 앱 비밀번호)"></label>
+      <label>SMTP 호스트 <input id="setSmtpHost" placeholder="예: smtp.dgist.ac.kr (비우면 smtp.gmail.com)"></label>
+      <label>SMTP 포트 (보내기) <input id="setSmtpPort" placeholder="465(SSL) 또는 587(STARTTLS)"></label>
+      <label>IMAP 호스트 (받기) <input id="setImapHost" placeholder="예: mail.dgist.ac.kr"></label>
+      <label>IMAP 포트 (받기) <input id="setImapPort" placeholder="993 (SSL)"></label>
+      <label>관심 분야 (메일 추천 기준) <input id="setMailInterests" placeholder="전공 탐색, 취업, 음악, 세미나"></label>
+      <div class="row" style="margin-top:8px">
+        <button id="setMailTestBtn" class="btn small" type="button">보내기 테스트</button>
+        <button id="setImapTestBtn" class="btn small" type="button">받기 테스트</button>
+        <button id="setDiagBtn" class="btn small ghost" type="button">진단</button>
+      </div>
+      <span id="setMailTestState" class="hint"></span>
+      <div id="setDiagResult"></div>
+      <p class="hint" style="margin-top:8px"><b>DGIST 메일 서버로 직접 보내기(권장)</b> — 구글을 안 거칩니다. DGIST는 자체 메일 서버라 <b>DGIST 아이디·비밀번호</b>를 그대로 넣으면 됩니다. 빠른 설정에서 <b>DGIST 메일</b>을 고르면 보내기 <b>smtp.dgist.ac.kr · 465(SSL)</b>, 받기 <b>mail.dgist.ac.kr · 993(SSL)</b>이 자동으로 채워집니다. 계정·비밀번호는 보내기·받기가 같은 것을 씁니다.<br><br><b>Gmail 경유</b> — 호스트를 비우면 smtp.gmail.com으로 나갑니다. 이땐 구글 <b>앱 비밀번호</b>가 필요합니다.<br><br>비밀번호는 OS 키체인으로 암호화 저장되고 어디로도 전송되지 않습니다.</p>
+    </details>
+    <details class="law-d" style="margin:8px 0">
+      <summary>인터뷰 받아쓰기 (whisper.cpp) 설정</summary>
+      <label style="margin-top:8px">whisper 바이너리 경로 <input id="setWhisperBin" placeholder="예: /usr/local/bin/whisper-cli"></label>
+      <label>whisper 모델 경로 (ggml-*.bin) <input id="setWhisperModel" placeholder="예: ~/models/ggml-large-v3.bin"></label>
+      <p class="hint">오디오는 기기 안에서만 처리되어 취재원이 보호됩니다. whisper.cpp 빌드 + 한국어 모델 다운로드가 필요합니다.</p>
+    </details>
+    <div class="row">
+      <button id="setSaveBtn" class="btn">저장</button>
+      <button id="setCloseBtn" class="btn ghost">닫기</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
