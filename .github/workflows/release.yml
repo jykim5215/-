@@ -103,13 +103,15 @@ jobs:
           ./gradlew --no-daemon assembleRelease < /dev/null 2>&1 | tee "$RUNNER_TEMP/gradle.log"
 
       # 실패 시 Gradle 스택트레이스에 묻히는 컴파일 오류만 뽑아 로그 끝에 다시 찍는다.
-      - name: Surface compiler errors
+      - name: Surface build failure
         if: failure()
         run: |
-          echo "════════ 컴파일 오류 ════════"
-          grep -E "^(e:|w: .*error)|error:|Unresolved|Cannot infer|Argument type mismatch" \
-            "$RUNNER_TEMP/gradle.log" | head -60 \
-            || echo "(오류 형태의 줄을 찾지 못했습니다 — 전체 로그를 확인하세요)"
+          echo "════════ 오류 줄 ════════"
+          grep -E "^e: |error:|Unresolved|Cannot infer|Argument type mismatch|FAILED|Caused by" \
+            "$RUNNER_TEMP/gradle.log" | head -40 || true
+          echo "════════ 로그 끝 (스택트레이스 제외) ════════"
+          grep -vE "^[[:space:]]+at |^[[:space:]]*\.\.\. [0-9]+ more" \
+            "$RUNNER_TEMP/gradle.log" | tail -60 || true
 
       - name: Rename artifact
         id: apk
@@ -135,7 +137,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          # 이 저장소에는 다른 프로젝트의 릴리즈도 함께 있다.
+          # 앱이 자기 릴리즈만 골라낼 수 있도록 태그에 프로젝트 접두사를 붙인다.
+          tag_name: vocacard-v${{ steps.version.outputs.version }}
           name: VocaCard ${{ steps.version.outputs.version }}
           body: |
             ${{ steps.version.outputs.changelog }}

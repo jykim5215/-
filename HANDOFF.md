@@ -109,8 +109,10 @@
 ### GitHub / 버전 관리
 - 저장소: **`jykim5215/-`**, 개발 브랜치 **`claude/android-vocabulary-app-820e26`**
 - 루트 `version.json` = `{"version":"1.0.0","versionCode":1,"changelog":"...","apkName":"VocaCard-1.0.0.apk"}`
-- 앱은 `https://api.github.com/repos/jykim5215/-/releases/latest` (공개 API, 인증 토큰 없음) 를 호출하여
-  태그/자산 목록을 읽고 내장 `BuildConfig.VERSION_NAME` 과 semver 비교.
+- 앱은 `https://api.github.com/repos/jykim5215/-/releases?per_page=30` (공개 API, 인증 토큰 없음) 를 호출한 뒤
+  **`vocacard-v` 태그 + `VocaCard-*.apk` 자산인 릴리즈만** 골라 내장 `BuildConfig.VERSION_NAME` 과 semver 비교.
+  `releases/latest` 를 쓰지 않는 이유: 이 저장소에는 다른 프로젝트(AudioBridge, DNA 편집 스튜디오)의
+  릴리즈도 함께 있어 저장소 전체의 최신 릴리즈가 이 앱의 것이 아닐 수 있다.
 - 코드 수정 시 version.json 도 같이 올린다(patch=버그, minor=기능, major=호환성 파괴).
 
 ---

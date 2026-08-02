@@ -55,7 +55,10 @@ VOCA_KEY_ALIAS=vocacard VOCA_KEY_PASSWORD=... scripts/build.sh
 ```
 
 GitHub Actions(`.github/workflows/release.yml`)가 `version.json` 변경 시 APK 를 빌드해
-`v<version>` 태그로 릴리즈를 게시한다. 앱의 "업데이트 확인"이 그 릴리즈를 읽는다.
+`vocacard-v<version>` 태그로 릴리즈를 게시한다.
+앱의 "업데이트 확인"은 **이 접두사가 붙은 릴리즈만** 골라 읽는다 —
+이 저장소에는 다른 프로젝트의 릴리즈도 함께 있어서, `releases/latest` 를 그대로 쓰면
+엉뚱한 앱의 APK 를 업데이트로 착각할 수 있기 때문이다.
 
 ## 설치 / 바로가기
 

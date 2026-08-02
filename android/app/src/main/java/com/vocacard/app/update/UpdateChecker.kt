@@ -49,9 +49,17 @@ class UpdateChecker(
         data class Failed(val message: String) : Result
     }
 
+    /**
+     * 최신 릴리즈를 찾는다.
+     *
+     * `releases/latest` 를 쓰지 않는 이유: 이 저장소에는 **다른 프로젝트의 릴리즈도 섞여 있다.**
+     * `latest` 는 저장소 전체에서 가장 최근 것을 돌려주므로, 다른 앱의 APK 를 이 앱의
+     * 업데이트로 착각해 내려받을 수 있다. 그래서 목록을 받아
+     * `vocacard-v` 태그 + `VocaCard-*.apk` 자산인 것만 골라낸다.
+     */
     suspend fun check(): Result = withContext(Dispatchers.IO) {
         try {
-            val url = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest"
+            val url = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases?per_page=30"
             val req = Request.Builder().url(url)
                 .header("Accept", "application/vnd.github+json")
                 .header("X-GitHub-Api-Version", "2022-11-28")
@@ -60,25 +68,31 @@ class UpdateChecker(
                 if (res.code == 404) return@withContext Result.UpToDate(currentVersion)
                 if (!res.isSuccessful) return@withContext Result.Failed("업데이트 서버 응답 오류 (${res.code})")
                 val body = res.body?.string().orEmpty()
-                if (body.isBlank()) return@withContext Result.Failed("업데이트 정보를 받지 못했어요.")
-                val release = json.decodeFromString<GhRelease>(body)
-                val latest = release.tagName?.removePrefix("v")?.trim().orEmpty()
-                if (latest.isEmpty()) return@withContext Result.Failed("릴리즈 버전을 읽을 수 없어요.")
+                if (body.isBlank()) return@withContext Result.UpToDate(currentVersion)
 
-                if (Semver.compare(latest, currentVersion) <= 0) {
-                    Result.UpToDate(currentVersion)
-                } else {
-                    val apk = release.assets.orEmpty()
-                        .firstOrNull { it.name?.endsWith(".apk", ignoreCase = true) == true }
-                    val apkUrl = apk?.browserDownloadUrl?.takeIf { isTrustedHost(it) }
-                    Result.Available(
-                        version = latest,
-                        changelog = release.body?.trim().orEmpty().ifEmpty { "변경 내용이 제공되지 않았어요." },
-                        apkUrl = apkUrl,
-                        pageUrl = release.htmlUrl ?: "https://github.com/${BuildConfig.UPDATE_REPO}/releases",
-                        sizeBytes = apk?.size ?: 0L,
-                    )
+                val release = json.decodeFromString<List<GhRelease>>(body)
+                    .asSequence()
+                    .filter { !it.draft && !it.prerelease }
+                    .filter { it.tagName?.startsWith(TAG_PREFIX) == true }
+                    .maxByOrNull { Semver.key(it.tagName!!.removePrefix(TAG_PREFIX)) }
+                    ?: return@withContext Result.UpToDate(currentVersion)
+
+                val latest = release.tagName!!.removePrefix(TAG_PREFIX).trim()
+                if (latest.isEmpty() || Semver.compare(latest, currentVersion) <= 0) {
+                    return@withContext Result.UpToDate(currentVersion)
                 }
+
+                val apk = release.assets.orEmpty().firstOrNull {
+                    val n = it.name.orEmpty()
+                    n.startsWith(ASSET_PREFIX, ignoreCase = true) && n.endsWith(".apk", ignoreCase = true)
+                }
+                Result.Available(
+                    version = latest,
+                    changelog = release.body?.trim().orEmpty().ifEmpty { "변경 내용이 제공되지 않았어요." },
+                    apkUrl = apk?.browserDownloadUrl?.takeIf { isTrustedHost(it) },
+                    pageUrl = release.htmlUrl ?: "https://github.com/${BuildConfig.UPDATE_REPO}/releases",
+                    sizeBytes = apk?.size ?: 0L,
+                )
             }
         } catch (e: Exception) {
             Result.Failed("업데이트를 확인하지 못했어요. 네트워크를 확인해 주세요.")
@@ -132,6 +146,12 @@ class UpdateChecker(
         }
     }
 
+    private companion object {
+        /** 이 앱의 릴리즈만 골라내기 위한 태그 접두사. 워크플로의 tag_name 과 반드시 일치해야 한다. */
+        const val TAG_PREFIX = "vocacard-v"
+        const val ASSET_PREFIX = "VocaCard-"
+    }
+
     fun releasePageIntent(url: String): Intent =
         Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
@@ -153,6 +173,12 @@ object Semver {
             if (d != 0) return d
         }
         return 0
+    }
+
+    /** 정렬용 비교 키. major*1e6 + minor*1e3 + patch */
+    fun key(v: String): Long {
+        val p = parse(v)
+        return p[0] * 1_000_000L + p[1] * 1_000L + p[2]
     }
 
     private fun parse(v: String): IntArray {
