@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  include 를 하나라도 쓰면 나머지는 자동으로 백업에서 빠진다.
+  따라서 다운로드된 APK 같은 캐시를 위해 별도 exclude 를 둘 필요가 없다.
+  (실제로 포함되지 않은 경로를 exclude 하면 lint 가 FullBackupContent 오류를 낸다.)
+-->
 <full-backup-content>
     <include domain="database" path="vocacard.db" />
     <include domain="sharedpref" path="." />
-    <!-- 다운로드된 APK 등 캐시는 백업에서 제외한다. -->
-    <exclude domain="external" path="." />
 </full-backup-content>
