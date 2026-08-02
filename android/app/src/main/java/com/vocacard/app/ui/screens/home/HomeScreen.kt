@@ -43,12 +43,15 @@ import com.vocacard.app.ui.components.PaperCard
 import com.vocacard.app.ui.components.ProgressLine
 import com.vocacard.app.ui.components.ProgressRing
 import com.vocacard.app.ui.components.SectionHeader
+import com.vocacard.app.ui.components.OdometerCount
 import com.vocacard.app.ui.components.StaggerIn
+import com.vocacard.app.ui.components.WordDropStack
 import com.vocacard.app.ui.components.pressable
 import com.vocacard.app.ui.theme.VocaShape
 import com.vocacard.app.ui.theme.WordDisplay
 import com.vocacard.app.ui.theme.voca
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 /**
  * 홈 — "지금 뭘 해야 하는가"에만 답하는 화면.
@@ -73,6 +76,13 @@ fun HomeScreen(
     val archiveLearned by container.archive.observeLearnedTotal().collectAsState(initial = 0)
     val dayProgress by container.archive.observeDayProgress().collectAsState(initial = emptyMap())
     val sessions by container.words.observeSessions().collectAsState(initial = emptyList())
+
+    // "완전히 아는 단어" = 아카이브에서 외움 표시한 것 + 내 단어장에서 마스터한 것.
+    // 두 경로로 들어오지만 사용자에게는 하나의 숫자여야 의미가 있다.
+    val knownArchiveWords by container.archive.observeKnownWords(STACK_LIMIT)
+        .collectAsState(initial = emptyList())
+    val masteredWords by container.words.observeMasteredWords(STACK_LIMIT)
+        .collectAsState(initial = emptyList())
 
     val days by produceState(initialValue = emptyList<com.vocacard.app.data.model.ArchiveDay>()) {
         value = container.archive.days()
@@ -126,6 +136,21 @@ fun HomeScreen(
             }
         }
 
+        // ── 히어로: 완전히 아는 단어가 쌓이는 곳 ──
+        item {
+            val knownTotal = archiveLearned + mastered
+            // 오래된 것이 앞 → 아래층에 깔리고, 최근 것이 위에 얹힌다.
+            val stackWords = remember(knownArchiveWords, masteredWords) {
+                (knownArchiveWords + masteredWords).distinct().take(STACK_LIMIT).reversed()
+            }
+            KnownWordsHero(
+                count = knownTotal,
+                total = archiveTotal,
+                words = stackWords,
+                onClick = onOpenMyWords,
+            )
+        }
+
         // ── 오늘 복습 (가장 중요한 액션) ──
         item {
             StaggerIn(0) {
@@ -139,12 +164,11 @@ fun HomeScreen(
             }
         }
 
-        // ── 통계 3종 ──
+        // ── 통계 2종 (히어로가 "아는 단어"를 이미 크게 보여 주므로 나머지만) ──
         item {
             StaggerIn(1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("$archiveLearned", "외운 아카이브 단어", Modifier.weight(1f))
-                    StatTile("$mastered", "마스터한 내 단어", Modifier.weight(1f))
+                    StatTile("$myTotal", "모으는 중인 단어", Modifier.weight(1f))
                     StatTile("${streak}일", "연속 학습", Modifier.weight(1f))
                 }
             }
@@ -260,6 +284,107 @@ fun HomeScreen(
                     )
                     ProgressLine(archiveLearned.toFloat() / archiveTotal, Modifier.fillMaxWidth())
                 }
+            }
+        }
+    }
+}
+
+/** 히어로에 쌓아 보여 줄 단어의 최대 개수. 너무 많으면 층이 뭉개진다. */
+private const val STACK_LIMIT = 18
+
+/**
+ * 홈 히어로 — "나는 몇 개를 확실히 아는가".
+ *
+ * 이 앱에서 가장 중요한 숫자이므로 화면 맨 위에서 가장 크게 말한다.
+ * 숫자만으로는 실감이 나지 않아서, 실제로 외운 단어들이 위에서 떨어져
+ * 층층이 쌓이는 모습을 함께 보여 준다. 어두운 잉크 배경으로 종이 위에
+ * 놓인 다른 카드들과 분리시켜 시선을 먼저 붙잡는다.
+ */
+@Composable
+private fun KnownWordsHero(
+    count: Int,
+    total: Int,
+    words: List<String>,
+    onClick: () -> Unit,
+) {
+    val percent = if (total <= 0) 0 else (count * 100f / total).roundToInt().coerceAtMost(100)
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(VocaShape.card))
+            .background(voca.ink)
+            .pressable(onClick)
+            .padding(20.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "완전히 아는 단어",
+                style = MaterialTheme.typography.labelMedium,
+                color = voca.bg.copy(alpha = 0.62f),
+            )
+            if (total > 0) {
+                Text(
+                    "$percent%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = voca.accent,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Row(verticalAlignment = Alignment.Bottom) {
+            OdometerCount(value = count, color = voca.bg)
+            Text(
+                "  개",
+                style = MaterialTheme.typography.titleLarge,
+                color = voca.bg.copy(alpha = 0.55f),
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            if (total > 0) {
+                Text(
+                    "/ $total",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = voca.bg.copy(alpha = 0.45f),
+                    modifier = Modifier.padding(bottom = 14.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        if (words.isEmpty()) {
+            Text(
+                "학습에서 \"알아요\"를 누르거나 복습을 통과하면\n외운 단어가 여기에 하나씩 쌓입니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = voca.bg.copy(alpha = 0.55f),
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+        } else {
+            // 단어가 떨어져 쌓이는 통. 위쪽에서 들어오도록 잘라 낸다.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(112.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(voca.bg.copy(alpha = 0.07f)),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                WordDropStack(
+                    words = words,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                    chipColor = voca.bg.copy(alpha = 0.14f),
+                    textColor = voca.bg.copy(alpha = 0.92f),
+                    maxRows = 3,
+                )
             }
         }
     }

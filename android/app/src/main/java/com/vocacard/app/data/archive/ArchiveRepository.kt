@@ -34,6 +34,10 @@ class ArchiveRepository(
     @Volatile
     private var index: Map<String, Pair<ArchiveWord, String>> = emptyMap()
 
+    /** 아카이브 단어 id → 단어 문자열 */
+    @Volatile
+    private var byId: Map<String, String> = emptyMap()
+
     suspend fun bank(): WordBank {
         cache?.let { return it }
         return mutex.withLock {
@@ -41,10 +45,15 @@ class ArchiveRepository(
                 val text = context.assets.open(ASSET).bufferedReader().use { it.readText() }
                 val parsed = json.decodeFromString<WordBank>(text)
                 val idx = HashMap<String, Pair<ArchiveWord, String>>(parsed.days.sumOf { it.words.size })
+                val ids = HashMap<String, String>(parsed.days.sumOf { it.words.size })
                 parsed.days.forEach { day ->
-                    day.words.forEach { w -> idx.putIfAbsent(w.word.lowercase(), w to day.id) }
+                    day.words.forEach { w ->
+                        idx.putIfAbsent(w.word.lowercase(), w to day.id)
+                        ids[w.id] = w.word
+                    }
                 }
                 index = idx
+                byId = ids
                 cache = parsed
                 parsed
             }
@@ -108,6 +117,17 @@ class ArchiveRepository(
 
     fun observeLearnedTotal(): Flow<Int> =
         archiveDao.observeAllMarks().map { list -> list.count { it.known } }
+
+    /**
+     * 아카이브에서 "외움" 표시한 단어를 **최근 순**으로 돌려준다.
+     * 홈의 "쌓인 단어" 모션에 들어갈 재료다.
+     */
+    fun observeKnownWords(limit: Int): Flow<List<String>> = flow {
+        bank()
+        archiveDao.observeRecentKnown(limit).collect { marks ->
+            emit(marks.mapNotNull { byId[it.archiveWordId] })
+        }
+    }
 
     suspend fun mark(archiveWordId: String, dayId: String, known: Boolean) {
         archiveDao.upsertMark(ArchiveMarkEntity(archiveWordId, dayId, known))

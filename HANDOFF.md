@@ -167,7 +167,7 @@
 ## 6. 현재 상태
 
 - **최종 갱신**: 2026-08-02
-- **단계**: **v1.0.0 구현 완료 / 컴파일 검증 대기**
+- **단계**: **v1.1.0 구현 완료 / CI 빌드 검증 중**
 
 ### 확정된 사용자 선택
 - **UI 스타일: B · Paper** (따뜻한 종이 배경 `#F6F1E8`, 잉크 `#241F1A`, 테라코타 포인트 `#C2603C`,
@@ -184,7 +184,11 @@
 - 추천 엔진: `data/suggest/Suggester.kt` (아카이브 → 내 단어장 → 온라인 사전 → 템플릿 폴백)
 - 모션: `ui/theme/Motion.kt`(스펙 단일 출처), `FlipCard`, `SwipeDeck`, `StaggerIn`, `ProgressRing/Line`,
   `pressable`(누름 0.97 스케일), NavHost 전환(탭=fade+scale, 계층=shared axis X, 학습=아래→위)
-- 화면 7종: Home / Archive / ArchiveDay / Study / MyWords / WordDetail / AddWord / Settings
+- 화면 8종: Home / Archive / ArchiveDay / Study / MyWords / WordDetail / AddWord / Settings
+- **홈 히어로(v1.1.0)**: `ui/components/WordDropStack.kt` — 외운 단어가 위에서 떨어져 층층이 쌓이는
+  시각화(`Layout` 으로 아래층부터 채우고, 각 칩은 감쇠비 0.5 스프링의 오버슈트를 착지 반동으로 사용,
+  index 당 55ms stagger, 단어 해시로 고정된 기울기) + `OdometerCount`(자릿수별 롤링).
+  숫자는 **아카이브 외움 표시 + 내 단어장 마스터**를 합친 값이다.
 - 업데이트: `update/UpdateChecker.kt` — GitHub 공개 릴리즈 API, 호스트 화이트리스트, FileProvider 설치
 - 배포: `scripts/build.sh`, `scripts/package.sh`(자격증명 혼입 검사), `scripts/install.sh`,
   `.github/workflows/release.yml`(version.json 변경 시 APK 빌드 → `v<version>` 릴리즈 게시)

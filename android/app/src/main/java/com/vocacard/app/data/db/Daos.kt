@@ -72,6 +72,15 @@ abstract class WordDao {
     @Query("SELECT COUNT(*) FROM study_state WHERE box >= 5")
     abstract fun observeMastered(): Flow<Int>
 
+    /** 완전히 외운(마스터) 단어를 최근 순으로. 홈의 "쌓인 단어" 시각화에 쓴다. */
+    @Query(
+        """
+        SELECT w.word FROM words w JOIN study_state s ON s.wordId = w.id
+        WHERE s.box >= 5 ORDER BY s.updatedAt DESC LIMIT :limit
+        """
+    )
+    abstract fun observeMasteredWords(limit: Int): Flow<List<String>>
+
     @Query(
         """
         SELECT w.id AS id, w.word AS word, w.meanings AS meanings, w.examples AS examples,
@@ -156,6 +165,9 @@ interface ArchiveDao {
 
     @Query("SELECT * FROM archive_marks")
     fun observeAllMarks(): Flow<List<ArchiveMarkEntity>>
+
+    @Query("SELECT * FROM archive_marks WHERE known = 1 ORDER BY updatedAt DESC LIMIT :limit")
+    fun observeRecentKnown(limit: Int): Flow<List<ArchiveMarkEntity>>
 
     @Upsert
     suspend fun upsertMark(mark: ArchiveMarkEntity)

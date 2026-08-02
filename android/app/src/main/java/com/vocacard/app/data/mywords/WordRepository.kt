@@ -28,6 +28,7 @@ class WordRepository(
     fun observeDueCount(): Flow<Int> = wordDao.observeDueCount(System.currentTimeMillis())
     fun observeTotal(): Flow<Int> = wordDao.observeTotal()
     fun observeMastered(): Flow<Int> = wordDao.observeMastered()
+    fun observeMasteredWords(limit: Int): Flow<List<String>> = wordDao.observeMasteredWords(limit)
     fun observeOne(id: Long): Flow<WordWithState?> = wordDao.observeOne(id)
     fun observeSessions(): Flow<List<SessionEntity>> = sessionDao.observeRecent(60)
 
