@@ -570,3 +570,13 @@ dialog p.hint { margin-top: 4px; }
   font-size: 15px; line-height: 1; padding: 0 0 0 2px;
 }
 .attach-chip button:hover { color: var(--red); }
+
+/* ---- 수신 진단 결과 ---- */
+.diag { margin-top: 10px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; background: var(--bg); }
+.diag-head { margin: 0 0 8px; font-size: 13.5px; font-weight: 700; display: flex; justify-content: space-between; gap: 10px; }
+.diag-head .hint { font-weight: 500; }
+.diag-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.diag-steps li { font-size: 12.5px; }
+.diag-steps li.ok b { color: var(--green); }
+.diag-steps li.bad b { color: var(--red); }
+.diag-steps li span { display: block; color: var(--dim); margin-top: 1px; }

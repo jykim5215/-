@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('dnaAPI', {
   mailVerify: invoke('mail:verify'),
   mailSend: invoke('mail:send'),
   mailImapVerify: invoke('mail:imapVerify'),
+  mailDiagnose: invoke('mail:diagnose'),
   mailFetch: invoke('mail:fetch'),
   mailMarkRead: invoke('mail:markRead'),
   mailMarkAllRead: invoke('mail:markAllRead'),

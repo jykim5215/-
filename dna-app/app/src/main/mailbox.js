@@ -7,6 +7,9 @@ const { MiniIMAP, classifyFolder, folderRaw, parseMessage, buildContacts } = req
 
 const DEFAULT_IMAP = { host: 'mail.dgist.ac.kr', port: 993 };
 
+// 수집하지 않는 폴더 (노이즈 + 지운 메일이 되살아나는 것 방지)
+const SKIP_FOLDERS = new Set(['spam', 'draft', 'trash']);
+
 function imapConfig(cfg = {}) {
   return {
     host: cfg.imapHost || DEFAULT_IMAP.host,
@@ -16,21 +19,30 @@ function imapConfig(cfg = {}) {
   };
 }
 
-async function connect(cfg) {
+// deps.createClient는 테스트에서 가짜 서버에 물리기 위한 주입점 (운영은 TLS 고정).
+async function connect(cfg, deps = {}) {
   const c = imapConfig(cfg);
   if (!c.user || !c.pass) {
     throw new Error('설정에서 학교 이메일 계정을 먼저 입력해 주세요.');
   }
-  const client = await MiniIMAP.connect(c.host, c.port);
-  await client.login(c.user, c.pass);
+  const createClient = deps.createClient || MiniIMAP.connect;
+  const client = await createClient(c.host, c.port);
+  try {
+    await client.login(c.user, c.pass);
+  } catch (e) {
+    // 로그인이 실패해도 소켓은 반드시 닫는다. 안 닫으면 비밀번호를 고쳐 다시
+    // 시도할 때마다 연결이 쌓여 서버가 동시 접속 제한으로 거부하게 된다.
+    await client.logout();
+    throw e;
+  }
   return client;
 }
 
 // 연결 확인만 (설정 화면의 "받기 테스트")
-async function verify(cfg) {
+async function verify(cfg, deps = {}) {
   let client;
   try {
-    client = await connect(cfg);
+    client = await connect(cfg, deps);
     const folders = await client.listFolders();
     return { ok: true, folders: folders.map((f) => f.name) };
   } catch (e) {
@@ -42,16 +54,17 @@ async function verify(cfg) {
 
 // 받은/보낸/광고 등 관심 폴더에서 최근 메일 수집.
 // onProgress: ({ folder, done, total }) => void
-async function fetchRecent(cfg, { days = 21, maxPerFolder = 60, onProgress } = {}) {
+async function fetchRecent(cfg, { days = 21, maxPerFolder = 60, onProgress } = {}, deps = {}) {
   let client;
   try {
-    client = await connect(cfg);
+    client = await connect(cfg, deps);
     const targets = [];
     const seenKeys = new Set();
     for (const { raw, name } of await client.listFolders()) {
       const key = classifyFolder(name);
-      // 스팸·임시보관함은 기본 수집 대상에서 제외 (노이즈)
-      if (key && key !== 'spam' && key !== 'draft' && !seenKeys.has(key)) {
+      // 스팸·임시보관함·휴지통은 수집 대상에서 제외.
+      // 특히 휴지통을 빼지 않으면 앱에서 지운 메일이 다음 수집에 되살아난다.
+      if (key && !SKIP_FOLDERS.has(key) && !seenKeys.has(key)) {
         targets.push({ raw, key });
         seenKeys.add(key);
       }
@@ -91,8 +104,8 @@ async function fetchRecent(cfg, { days = 21, maxPerFolder = 60, onProgress } = {
 }
 
 // 메일 하나의 읽음/안읽음 표시
-async function markRead(cfg, uid, folder = 'inbox', seen = true) {
-  const client = await connect(cfg);
+async function markRead(cfg, uid, folder = 'inbox', seen = true, deps = {}) {
+  const client = await connect(cfg, deps);
   try {
     const raw = (await folderRaw(client, folder)) || 'INBOX';
     await client.selectFolder(raw);
@@ -104,8 +117,8 @@ async function markRead(cfg, uid, folder = 'inbox', seen = true) {
 }
 
 // 폴더의 안읽은 메일 전부 읽음 처리
-async function markAllRead(cfg, folder = 'inbox') {
-  const client = await connect(cfg);
+async function markAllRead(cfg, folder = 'inbox', deps = {}) {
+  const client = await connect(cfg, deps);
   try {
     const raw = (await folderRaw(client, folder)) || 'INBOX';
     await client.selectFolder(raw);
@@ -118,8 +131,8 @@ async function markAllRead(cfg, folder = 'inbox') {
 }
 
 // 삭제 = 휴지통으로 복사한 뒤 원본에 \Deleted + EXPUNGE
-async function deleteMessage(cfg, uid, folder = 'inbox') {
-  const client = await connect(cfg);
+async function deleteMessage(cfg, uid, folder = 'inbox', deps = {}) {
+  const client = await connect(cfg, deps);
   try {
     const raw = (await folderRaw(client, folder)) || 'INBOX';
     await client.selectFolder(raw);
@@ -131,6 +144,73 @@ async function deleteMessage(cfg, uid, folder = 'inbox') {
   } finally {
     await client.logout();
   }
+}
+
+// 어디서 막혔는지 단계별로 짚어주는 진단.
+// DNS → TCP → TLS → LOGIN → 폴더 목록 순서로 확인해 처음 실패한 지점을 알려준다.
+async function diagnose(cfg) {
+  const dns = require('dns').promises;
+  const net = require('net');
+  const tls = require('tls');
+  const c = imapConfig(cfg);
+  const steps = [];
+  const add = (name, ok, detail) => steps.push({ name, ok, detail });
+
+  if (!c.user || !c.pass) {
+    add('계정 설정', false, '설정 → 이메일에서 주소와 비밀번호를 먼저 입력하세요.');
+    return { ok: false, host: c.host, port: c.port, steps };
+  }
+  add('계정 설정', true, c.user);
+
+  // 1) DNS
+  let ip;
+  try {
+    ip = (await dns.lookup(c.host)).address;
+    add('DNS 조회', true, `${c.host} → ${ip}`);
+  } catch (e) {
+    add('DNS 조회', false, `${c.host} 주소를 찾지 못했습니다 (${e.code}). 호스트 이름을 확인하세요.`);
+    return { ok: false, host: c.host, port: c.port, steps };
+  }
+
+  // 2) TCP 연결
+  const tcpOk = await new Promise((res) => {
+    const s = net.connect({ host: c.host, port: c.port });
+    const t = setTimeout(() => { s.destroy(); res('timeout'); }, 8000);
+    s.on('connect', () => { clearTimeout(t); s.destroy(); res(true); });
+    s.on('error', (e) => { clearTimeout(t); res(e.code || 'error'); });
+  });
+  if (tcpOk !== true) {
+    add('서버 연결', false,
+      tcpOk === 'timeout'
+        ? `${c.host}:${c.port} 응답 없음 — 포트가 막혔거나 포트 번호가 다릅니다. (교내망/방화벽/VPN 확인, IMAP은 보통 993)`
+        : `${c.host}:${c.port} 연결 거부 (${tcpOk}) — 포트 번호를 확인하세요.`);
+    return { ok: false, host: c.host, port: c.port, steps };
+  }
+  add('서버 연결', true, `${c.host}:${c.port} 열림`);
+
+  // 3) TLS 핸드셰이크
+  const tlsOk = await new Promise((res) => {
+    const s = tls.connect({ host: c.host, port: c.port, servername: c.host, minVersion: 'TLSv1.2' });
+    const t = setTimeout(() => { s.destroy(); res('timeout'); }, 8000);
+    s.on('secureConnect', () => { clearTimeout(t); s.destroy(); res(true); });
+    s.on('error', (e) => { clearTimeout(t); res(e.message); });
+  });
+  if (tlsOk !== true) {
+    add('보안 연결(TLS)', false,
+      `${tlsOk} — 이 포트가 SSL 포트가 아닐 수 있습니다. IMAP SSL은 993입니다. (143은 비암호화라 지원하지 않습니다)`);
+    return { ok: false, host: c.host, port: c.port, steps };
+  }
+  add('보안 연결(TLS)', true, 'TLS 핸드셰이크 성공');
+
+  // 4) 로그인 + 폴더 목록
+  const r = await verify(cfg);
+  if (!r.ok) {
+    add('로그인', false, r.error);
+    return { ok: false, host: c.host, port: c.port, steps };
+  }
+  add('로그인', true, '인증 성공');
+  add('폴더 목록', true, r.folders.join(', '));
+  return { ok: true, host: c.host, port: c.port, steps };
 }
 
 // IMAP 오류를 사용자 언어로
@@ -155,6 +235,7 @@ module.exports = {
   markRead,
   markAllRead,
   deleteMessage,
+  diagnose,
   imapError,
   DEFAULT_IMAP,
 };

@@ -57,6 +57,14 @@ function makeMockAPI() {
     async mailVerify() { return { ok: false, error: '데모 모드 — Electron 앱에서 SMTP 발송이 동작합니다.' }; },
     async mailSend() { await sleep(600); throw new Error('데모 모드 — Electron 앱에서 실제 발송됩니다. (설정에 DGIST 주소·비밀번호 필요)'); },
     async mailImapVerify() { return { ok: false, error: '데모 모드 — Electron 앱에서 IMAP 수신이 동작합니다.' }; },
+    async mailDiagnose() {
+      await sleep(700);
+      return { ok: false, host: 'mail.dgist.ac.kr', port: 993, steps: [
+        { name: '계정 설정', ok: true, detail: 'dgun_189@dgist.ac.kr' },
+        { name: 'DNS 조회', ok: true, detail: 'mail.dgist.ac.kr → 114.71.99.21' },
+        { name: '서버 연결', ok: false, detail: '데모 모드 — Electron 앱에서 실제로 진단합니다.' },
+      ] };
+    },
     async mailFetch() {
       await sleep(900);
       const ago = (h) => new Date(Date.now() - h * 3600000).toISOString();
@@ -2120,6 +2128,28 @@ $('#setImapTestBtn').onclick = async () => {
       : '✗ ' + r.error;
     el.style.color = r.ok ? 'var(--green)' : 'var(--red)';
   } catch (e) { el.textContent = '✗ ' + (e.message || e); el.style.color = 'var(--red)'; }
+};
+
+// 진단 — DNS → 연결 → TLS → 로그인 → 폴더 목록 중 어디서 막혔는지 보여준다
+$('#setDiagBtn').onclick = async () => {
+  await saveMailFields();
+  const box = $('#setDiagResult');
+  const st = $('#setMailTestState');
+  st.textContent = '';
+  box.innerHTML = '<p class="hint">진단 중… (최대 20초)</p>';
+  try {
+    const r = await api.mailDiagnose();
+    box.innerHTML = `
+      <div class="diag">
+        <p class="diag-head">${r.ok ? '✓ 수신 설정 정상' : '✗ 아래 단계에서 막혔습니다'}
+          <span class="hint">${esc(r.host)}:${esc(String(r.port))}</span></p>
+        <ol class="diag-steps">
+          ${r.steps.map((s) => `<li class="${s.ok ? 'ok' : 'bad'}"><b>${s.ok ? '✓' : '✗'} ${esc(s.name)}</b><span>${esc(s.detail)}</span></li>`).join('')}
+        </ol>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<p class="hint" style="color:var(--red)">진단 실패: ${esc(e.message || String(e))}</p>`;
+  }
 };
 
 // 테스트 전에 입력값을 먼저 저장해야 검증에 반영된다

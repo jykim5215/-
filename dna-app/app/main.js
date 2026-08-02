@@ -129,6 +129,7 @@ function registerIpc() {
 
   // 메일 수신 (IMAP) — 취재원 답신을 앱 안에서 받아본다
   h('mail:imapVerify', async (s) => require('./src/main/mailbox').verify(imapCfg(s)));
+  h('mail:diagnose', async (s) => require('./src/main/mailbox').diagnose(imapCfg(s)));
   h('mail:fetch', async (s, opts) => {
     const mailbox = require('./src/main/mailbox');
     const { triage } = require('./src/main/mail-triage');
