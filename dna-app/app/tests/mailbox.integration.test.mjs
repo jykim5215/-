@@ -58,8 +58,12 @@ test('통합 — 메일 수집: euc-kr·quoted-printable·HTML 본문이 모두 
     assert.equal(res.ok, true);
     assert.deepEqual(res.errors, [], '메일 파싱 오류가 없어야 한다');
 
-    // 스팸·임시함은 수집 대상에서 빠지고, 받은/보낸/광고만
-    assert.deepEqual(res.folders.sort(), ['inbox', 'promo', 'sent'], '휴지통·스팸·임시함은 수집하지 않는다');
+    // 붕어빵 앱과 동일하게 분류되는 폴더를 전부 수집 (휴지통·스팸 포함)
+    assert.deepEqual(res.folders.sort(), ['inbox', 'promo', 'sent', 'spam', 'trash']);
+    // 휴지통 메일은 trash 폴더로만 들어가고 받은편지함을 오염시키지 않는다
+    const trash = res.emails.filter((m) => m.folder === 'trash');
+    assert.equal(trash.length, 1);
+    assert.equal(trash[0].uid, 301);
 
     const inbox = res.emails.filter((m) => m.folder === 'inbox');
     assert.equal(inbox.length, 3);
@@ -145,4 +149,19 @@ test('통합 — 계정 미입력은 즉시 안내', async () => {
     mailbox.fetchRecent({ user: '', pass: '' }, {}, {}),
     /학교 이메일 계정을 먼저 입력/
   );
+});
+
+
+test('통합 — 붕어빵 앱과 서버 설정이 동일', async () => {
+  const { DEFAULT_IMAP, DEFAULT_INTERESTS } = mailbox;
+  const { PRESETS } = require('../src/main/mailer');
+  // 받기 (IMAP)
+  assert.equal(DEFAULT_IMAP.host, 'mail.dgist.ac.kr');
+  assert.equal(DEFAULT_IMAP.port, 993);
+  // 보내기 (SMTP) — 설정을 비워도 이 값이 쓰인다
+  assert.equal(PRESETS.dgist.host, 'smtp.dgist.ac.kr');
+  assert.equal(PRESETS.dgist.port, 465);
+  assert.equal(PRESETS.dgist.secure, true);
+  // 관심사 기본값
+  assert.equal(DEFAULT_INTERESTS, '전공 탐색, 취업, 음악, 세미나');
 });

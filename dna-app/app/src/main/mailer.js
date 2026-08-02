@@ -17,8 +17,11 @@ const PRESETS = {
 };
 
 function buildTransport({ host, port, secure, user, pass }) {
-  const h = host || PRESETS.gmail.host;
-  const p = port || PRESETS.gmail.port;
+  // 설정을 비워둬도 바로 쓸 수 있도록 DGIST를 기본값으로 한다.
+  // (예전엔 Gmail이 기본이라, 호스트를 안 넣으면 DGIST 계정으로 구글에 로그인
+  //  시도해서 무조건 실패했다.)
+  const h = host || PRESETS.dgist.host;
+  const p = port || PRESETS.dgist.port;
   // 465 = 암시적 SSL, 그 외(587/25) = STARTTLS. secure를 명시하면 그대로 따름.
   const isSecure = secure !== undefined ? secure : Number(p) === 465;
   return nodemailer.createTransport({
@@ -36,8 +39,9 @@ function buildTransport({ host, port, secure, user, pass }) {
   });
 }
 
+// 호스트를 비우면 DGIST가 기본이므로, Gmail 안내는 명시적으로 gmail일 때만 한다.
 function isGmailHost(cfg) {
-  return !cfg.host || /gmail\.com|googlemail\.com/i.test(cfg.host);
+  return /gmail\.com|googlemail\.com/i.test(cfg.host || '');
 }
 
 // 설정 검증 (발송 전 연결 확인). 반환: {ok, error?}

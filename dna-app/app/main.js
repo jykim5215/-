@@ -138,7 +138,7 @@ function registerIpc() {
     const { briefing, ai } = await triage({
       apiKey: getApiKey(s),
       emails: res.emails,
-      interests: getSetting(s, 'mailInterests'),
+      interests: getSetting(s, 'mailInterests') || require('./src/main/mailbox').DEFAULT_INTERESTS,
     });
     return { ...res, briefing, ai };
   });

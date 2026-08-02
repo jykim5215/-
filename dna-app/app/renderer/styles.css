@@ -580,3 +580,10 @@ dialog p.hint { margin-top: 4px; }
 .diag-steps li.ok b { color: var(--green); }
 .diag-steps li.bad b { color: var(--red); }
 .diag-steps li span { display: block; color: var(--dim); margin-top: 1px; }
+
+/* ---- 메일함 추가 컨트롤 ---- */
+.mb-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); margin: 2px 0 8px; cursor: pointer; }
+.mb-toggle input { accent-color: var(--accent); }
+#emDropzone { align-items: center; flex-wrap: wrap; border: 1px dashed transparent; border-radius: 10px; padding: 4px; transition: border-color .15s, background .15s; }
+#emDropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+.drop-hint { font-size: 12px; }

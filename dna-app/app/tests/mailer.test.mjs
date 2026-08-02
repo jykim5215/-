@@ -24,12 +24,21 @@ test('mailer — 받는 사람 주소 검증', async () => {
   );
 });
 
-test('mailer — Gmail 프리셋 + fromName 조립', () => {
+test('mailer — 설정을 비우면 DGIST가 기본값 (Gmail 아님)', () => {
   assert.equal(PRESETS.gmail.host, 'smtp.gmail.com');
   assert.equal(PRESETS.gmail.port, 465);
+  // 호스트를 안 넣어도 DGIST로 나가야 한다. 예전엔 Gmail이 기본이라
+  // DGIST 계정으로 구글에 로그인 시도해 무조건 실패했다.
   const t = buildTransport({ user: 'hong@dgist.ac.kr', pass: 'x' });
-  assert.equal(t.options.host, 'smtp.gmail.com'); // 기본값
+  assert.equal(t.options.host, 'smtp.dgist.ac.kr');
+  assert.equal(t.options.port, 465);
   assert.equal(t.options.secure, true);
+});
+
+test('mailer — 호스트 미설정 시 Gmail 앱 비밀번호 안내가 나오지 않는다', async () => {
+  const r = await verify({ user: 'a@dgist.ac.kr', pass: 'x', host: 'nonexistent.dgist.invalid', port: 465 });
+  assert.equal(r.ok, false);
+  assert.ok(!/앱 비밀번호/.test(r.error), r.error);
 });
 
 test('mailer — DGIST 자체 서버 직접 연결 (SSL 465)', () => {

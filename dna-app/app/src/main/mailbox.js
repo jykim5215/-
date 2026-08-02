@@ -7,8 +7,8 @@ const { MiniIMAP, classifyFolder, folderRaw, parseMessage, buildContacts } = req
 
 const DEFAULT_IMAP = { host: 'mail.dgist.ac.kr', port: 993 };
 
-// 수집하지 않는 폴더 (노이즈 + 지운 메일이 되살아나는 것 방지)
-const SKIP_FOLDERS = new Set(['spam', 'draft', 'trash']);
+// 관심사 기본값 (붕어빵 앱과 동일)
+const DEFAULT_INTERESTS = '전공 탐색, 취업, 음악, 세미나';
 
 function imapConfig(cfg = {}) {
   return {
@@ -62,9 +62,9 @@ async function fetchRecent(cfg, { days = 21, maxPerFolder = 60, onProgress } = {
     const seenKeys = new Set();
     for (const { raw, name } of await client.listFolders()) {
       const key = classifyFolder(name);
-      // 스팸·임시보관함·휴지통은 수집 대상에서 제외.
-      // 특히 휴지통을 빼지 않으면 앱에서 지운 메일이 다음 수집에 되살아난다.
-      if (key && !SKIP_FOLDERS.has(key) && !seenKeys.has(key)) {
+      // 붕어빵 앱과 동일하게 분류되는 폴더를 전부 수집한다(스팸·임시·휴지통 포함).
+      // 지운 메일은 휴지통 폴더로만 보이므로 받은편지함에 되살아나지 않는다.
+      if (key && !seenKeys.has(key)) {
         targets.push({ raw, key });
         seenKeys.add(key);
       }
@@ -238,4 +238,5 @@ module.exports = {
   diagnose,
   imapError,
   DEFAULT_IMAP,
+  DEFAULT_INTERESTS,
 };
