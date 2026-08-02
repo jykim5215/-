@@ -120,8 +120,9 @@ jobs:
             ${{ steps.apk.outputs.path }}
             dist/*.zip
 
+      # 앱의 "업데이트 확인" 기능은 releases/latest 를 읽으므로,
+      # 실제 릴리즈가 있어야 기능이 동작한다. 빌드가 성공하면 항상 게시한다.
       - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
