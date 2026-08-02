@@ -25,8 +25,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,12 +51,15 @@ import com.vocacard.app.data.study.Scheduler
 import com.vocacard.app.ui.StudyScope
 import com.vocacard.app.ui.components.EmptyState
 import com.vocacard.app.ui.components.StaggerIn
+import com.vocacard.app.ui.components.pile.PileWord
+import com.vocacard.app.ui.components.pile.WordPile
 import com.vocacard.app.ui.components.pressable
 import com.vocacard.app.ui.theme.Motion
+import com.vocacard.app.ui.theme.WordDisplay
 import com.vocacard.app.ui.theme.voca
 import kotlinx.coroutines.launch
 
-private enum class WordFilter(val label: String) {
+enum class WordFilter(val label: String) {
     DUE("복습 예정"), ALL("전체"), HARD("어려움"), MASTERED("마스터"),
 }
 
@@ -70,10 +75,13 @@ fun MyWordsScreen(
     onStudy: (StudyScope) -> Unit,
     onOpenWord: (Long) -> Unit,
     onAdd: () -> Unit,
+    initialFilter: WordFilter = WordFilter.DUE,
+    initialPile: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val all by container.words.observeAll().collectAsState(initial = emptyList())
-    var filter by remember { mutableStateOf(WordFilter.DUE) }
+    var filter by remember { mutableStateOf(initialFilter) }
+    var pileMode by remember { mutableStateOf(initialPile) }
 
     val dueCount = remember(all) { all.count { it.isDue } }
     val visible = remember(all, filter) {
@@ -133,16 +141,23 @@ fun MyWordsScreen(
             }
 
             Spacer(Modifier.height(14.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                itemsIndexed(WordFilter.entries.toList()) { _, f ->
-                    val count = when (f) {
-                        WordFilter.DUE -> all.count { it.isDue }
-                        WordFilter.ALL -> all.size
-                        WordFilter.HARD -> all.count { it.isHard }
-                        WordFilter.MASTERED -> all.count { it.isMastered }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LazyRow(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    itemsIndexed(WordFilter.entries.toList()) { _, f ->
+                        val count = when (f) {
+                            WordFilter.DUE -> all.count { it.isDue }
+                            WordFilter.ALL -> all.size
+                            WordFilter.HARD -> all.count { it.isHard }
+                            WordFilter.MASTERED -> all.count { it.isMastered }
+                        }
+                        FilterChip(f.label, count, filter == f) { filter = f }
                     }
-                    FilterChip(f.label, count, filter == f) { filter = f }
                 }
+                Spacer(Modifier.width(8.dp))
+                ViewToggle(pileMode = pileMode) { pileMode = !pileMode }
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -171,6 +186,12 @@ fun MyWordsScreen(
                     }
                 } else null,
             )
+        } else if (pileMode) {
+            PilePane(
+                words = visible,
+                modifier = Modifier.weight(1f),
+                onOpenWord = onOpenWord,
+            )
         } else {
             LazyColumn(
                 Modifier.weight(1f),
@@ -192,6 +213,92 @@ fun MyWordsScreen(
         }
     }
 }
+
+/** 목록 ↔ 쌓기 전환 버튼. 두 보기가 같은 데이터를 다르게 보여 줄 뿐이라 화면을 나누지 않았다. */
+@Composable
+private fun ViewToggle(pileMode: Boolean, onToggle: () -> Unit) {
+    val bg by animateColorAsState(
+        if (pileMode) voca.accent else voca.surface, tween(Motion.DurQuick), label = "viewBg",
+    )
+    val fg by animateColorAsState(
+        if (pileMode) Color(0xFFFFF8F2) else voca.inkSoft, tween(Motion.DurQuick), label = "viewFg",
+    )
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(bg)
+            .border(1.dp, if (pileMode) Color.Transparent else voca.line, RoundedCornerShape(99.dp))
+            .pressable(onToggle)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Icon(
+            if (pileMode) Icons.Outlined.FormatListBulleted else Icons.Outlined.ViewInAr,
+            contentDescription = if (pileMode) "목록으로 보기" else "쌓아서 보기",
+            tint = fg,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+/**
+ * 쌓기 보기 — 단어들이 통 안에 떨어져 쌓이고, 기기를 기울이거나 흔들면 그대로 굴러다닌다.
+ *
+ * 화면을 새로 만들지 않고 내 단어 탭 안에 둔 이유: 보여 주는 대상은 같은 목록이고
+ * "어떻게 보여 줄지"만 다르기 때문이다. 필터를 바꾸면 쌓이는 단어도 함께 바뀐다.
+ */
+@Composable
+private fun PilePane(
+    words: List<WordWithState>,
+    modifier: Modifier = Modifier,
+    onOpenWord: (Long) -> Unit,
+) {
+    // 너무 많으면 층이 뭉개지고 프레임도 떨어진다. 최근 것부터 채운다.
+    val shown = remember(words) { words.take(PILE_LIMIT) }
+    val pileWords = remember(shown) { shown.map { PileWord(it.id, it.word) } }
+    val hidden = words.size - shown.size
+
+    Column(modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(voca.ink)
+        ) {
+            Text(
+                "${words.size}",
+                style = WordDisplay,
+                color = voca.bg.copy(alpha = 0.10f),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(bottom = 24.dp),
+            )
+            WordPile(
+                words = pileWords,
+                modifier = Modifier.fillMaxSize(),
+                chipColor = voca.bg.copy(alpha = 0.16f),
+                chipHighlight = voca.accent,
+                textColor = voca.bg.copy(alpha = 0.95f),
+                textStyle = MaterialTheme.typography.labelLarge,
+                onWordTap = onOpenWord,
+            )
+        }
+        Text(
+            if (hidden > 0) {
+                "기기를 기울이거나 흔들어 보세요 · 단어를 누르면 상세로 · ${hidden}개는 표시 생략"
+            } else {
+                "기기를 기울이거나 흔들어 보세요 · 단어를 끌거나 누를 수 있어요"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = voca.inkSoft,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 110.dp),
+        )
+    }
+}
+
+/** 물리 공간에 동시에 올리는 단어 수 상한. */
+private const val PILE_LIMIT = 45
 
 @Composable
 private fun FilterChip(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {

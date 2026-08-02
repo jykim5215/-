@@ -68,6 +68,7 @@ fun HomeScreen(
     onOpenArchive: () -> Unit,
     onOpenAdd: () -> Unit,
     onOpenMyWords: () -> Unit,
+    onOpenPile: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val dueCount by container.words.observeDueCount().collectAsState(initial = 0)
@@ -147,7 +148,7 @@ fun HomeScreen(
                 count = knownTotal,
                 total = archiveTotal,
                 words = stackWords,
-                onClick = onOpenMyWords,
+                onClick = onOpenPile,
             )
         }
 

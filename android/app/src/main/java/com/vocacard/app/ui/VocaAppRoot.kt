@@ -58,6 +58,7 @@ import com.vocacard.app.ui.screens.archive.ArchiveDayScreen
 import com.vocacard.app.ui.screens.archive.ArchiveScreen
 import com.vocacard.app.ui.screens.home.HomeScreen
 import com.vocacard.app.ui.screens.mywords.MyWordsScreen
+import com.vocacard.app.ui.screens.mywords.WordFilter
 import com.vocacard.app.ui.screens.mywords.WordDetailScreen
 import com.vocacard.app.ui.screens.settings.SettingsScreen
 import com.vocacard.app.ui.screens.study.StudyScreen
@@ -109,7 +110,8 @@ fun VocaAppRoot(
                     onStudy = { nav.navigate(Route.study(it)) },
                     onOpenArchive = { nav.navigateTab(Route.ARCHIVE) },
                     onOpenAdd = { nav.navigateTab(Route.add()) },
-                    onOpenMyWords = { nav.navigateTab(Route.MY_WORDS) },
+                    onOpenMyWords = { nav.navigateTab(Route.myWords()) },
+                    onOpenPile = { nav.navigateTab(Route.myWords("MASTERED", pile = true)) },
                     onOpenSettings = { nav.navigate(Route.SETTINGS) },
                 )
             }
@@ -146,17 +148,27 @@ fun VocaAppRoot(
                     container = container,
                     settings = settings,
                     initialWord = entry.arguments?.getString("word").orEmpty(),
-                    onSaved = { nav.navigateTab(Route.MY_WORDS) },
+                    onSaved = { nav.navigateTab(Route.myWords()) },
                     onOpenWord = { nav.navigate(Route.wordDetail(it)) },
                 )
             }
 
-            composable(Route.MY_WORDS) {
+            composable(
+                Route.MY_WORDS,
+                arguments = listOf(
+                    navArgument("filter") { type = NavType.StringType; defaultValue = "DUE" },
+                    navArgument("pile") { type = NavType.StringType; defaultValue = "false" },
+                ),
+            ) { entry ->
+                val filterName = entry.arguments?.getString("filter") ?: "DUE"
                 MyWordsScreen(
                     container = container,
                     onStudy = { nav.navigate(Route.study(it)) },
                     onOpenWord = { nav.navigate(Route.wordDetail(it)) },
                     onAdd = { nav.navigateTab(Route.add()) },
+                    initialFilter = runCatching { WordFilter.valueOf(filterName) }
+                        .getOrDefault(WordFilter.DUE),
+                    initialPile = entry.arguments?.getString("pile") == "true",
                 )
             }
 
@@ -242,7 +254,7 @@ private fun VocaBottomBar(current: String?, onSelect: (String) -> Unit) {
         TabItem(Route.HOME, Route.HOME, "홈", Icons.Outlined.Home),
         TabItem(Route.ARCHIVE, Route.ARCHIVE, "아카이브", Icons.Outlined.AutoStories),
         TabItem(Route.ADD, Route.add(), "단어 추가", Icons.Outlined.Add),
-        TabItem(Route.MY_WORDS, Route.MY_WORDS, "내 단어", Icons.Outlined.Bookmarks),
+        TabItem(Route.MY_WORDS, Route.myWords(), "내 단어", Icons.Outlined.Bookmarks),
     )
 
     Box(

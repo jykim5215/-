@@ -169,7 +169,7 @@
 ## 6. 현재 상태
 
 - **최종 갱신**: 2026-08-02
-- **단계**: **v1.1.0 빌드 성공 · 릴리즈 게시 완료**
+- **단계**: **v1.2.0 구현 완료 (CI 검증 중) / v1.1.0 릴리즈 게시됨**
   (릴리즈: https://github.com/jykim5215/-/releases/tag/vocacard-v1.1.0 — APK 12.3MB)
 
 ### 확정된 사용자 선택
@@ -188,6 +188,12 @@
 - 모션: `ui/theme/Motion.kt`(스펙 단일 출처), `FlipCard`, `SwipeDeck`, `StaggerIn`, `ProgressRing/Line`,
   `pressable`(누름 0.97 스케일), NavHost 전환(탭=fade+scale, 계층=shared axis X, 학습=아래→위)
 - 화면 8종: Home / Archive / ArchiveDay / Study / MyWords / WordDetail / AddWord / Settings
+- **쌓기 보기(v1.2.0)**: `ui/components/pile/` — 직접 만든 초소형 2D 물리(AABB + 순차 임펄스, 5회 반복).
+  `PileWorld` 가 시뮬레이션, `TiltSensor` 가 가속도계로 중력 방향과 흔들기를 읽고,
+  `WordPile` 이 Canvas + TextMeasurer 로 그린다(텍스트는 목록이 바뀔 때만 측정).
+  회전은 **충돌에 넣지 않는다** — 각도를 넣는 순간 쌓임이 무너지므로 `lean` 은 시각 효과 전용.
+  진입: 내 단어 탭 우측 상단 목록/쌓기 토글, 또는 홈 히어로 탭(→ `mywords?filter=MASTERED&pile=true`).
+  동시 표시 상한 45개(`PILE_LIMIT`).
 - **홈 히어로(v1.1.0)**: `ui/components/WordDropStack.kt` — 외운 단어가 위에서 떨어져 층층이 쌓이는
   시각화(`Layout` 으로 아래층부터 채우고, 각 칩은 감쇠비 0.5 스프링의 오버슈트를 착지 반동으로 사용,
   index 당 55ms stagger, 단어 해시로 고정된 기울기) + `OdometerCount`(자릿수별 롤링).

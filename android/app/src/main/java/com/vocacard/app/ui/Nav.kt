@@ -66,13 +66,16 @@ object Route {
     const val ARCHIVE = "archive"
     const val ARCHIVE_DAY = "archive/{dayId}"
     const val ADD = "add?word={word}"
-    const val MY_WORDS = "mywords"
+    const val MY_WORDS = "mywords?filter={filter}&pile={pile}"
     const val WORD_DETAIL = "word/{wordId}"
     const val STUDY = "study/{scope}"
     const val SETTINGS = "settings"
 
     fun archiveDay(dayId: String) = "archive/$dayId"
     fun add(word: String = "") = "add?word=$word"
+    /** [filter] 는 WordFilter 이름(DUE/ALL/HARD/MASTERED), [pile] 이면 쌓기 보기로 연다. */
+    fun myWords(filter: String = "DUE", pile: Boolean = false) = "mywords?filter=$filter&pile=$pile"
+
     fun wordDetail(id: Long) = "word/$id"
     fun study(scope: StudyScope) = "study/${scope.encoded}"
 
