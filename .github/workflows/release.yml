@@ -98,8 +98,18 @@ jobs:
         timeout-minutes: 25
         run: |
           chmod +x gradlew
+          set -o pipefail
           # stdin 을 닫아 어떤 대화형 프롬프트에도 멈추지 않게 한다.
-          ./gradlew --no-daemon --stacktrace assembleRelease < /dev/null
+          ./gradlew --no-daemon assembleRelease < /dev/null 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      # 실패 시 Gradle 스택트레이스에 묻히는 컴파일 오류만 뽑아 로그 끝에 다시 찍는다.
+      - name: Surface compiler errors
+        if: failure()
+        run: |
+          echo "════════ 컴파일 오류 ════════"
+          grep -E "^(e:|w: .*error)|error:|Unresolved|Cannot infer|Argument type mismatch" \
+            "$RUNNER_TEMP/gradle.log" | head -60 \
+            || echo "(오류 형태의 줄을 찾지 못했습니다 — 전체 로그를 확인하세요)"
 
       - name: Rename artifact
         id: apk
