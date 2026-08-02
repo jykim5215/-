@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 업데이트 APK 다운로드 위치. 앱 전용 캐시 하위 경로만 노출한다. -->
+    <cache-path name="updates" path="updates/" />
+    <files-path name="exports" path="exports/" />
+</paths>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="vocacard.db" />
+    <include domain="sharedpref" path="." />
+    <!-- 다운로드된 APK 등 캐시는 백업에서 제외한다. -->
+    <exclude domain="external" path="." />
+</full-backup-content>

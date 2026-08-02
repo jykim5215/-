@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 단어 카드 두 장이 겹친 모티프 + 세리프 A. 108dp 캔버스, 안전영역 72dp 기준. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 뒤 카드 -->
+    <group android:pivotX="54" android:pivotY="56" android:rotation="-9">
+        <path
+            android:fillColor="#E6D8C0"
+            android:pathData="M31,32 L77,32 A5,5 0 0 1 82,37 L82,79 A5,5 0 0 1 77,84 L31,84 A5,5 0 0 1 26,79 L26,37 A5,5 0 0 1 31,32 Z" />
+    </group>
+
+    <!-- 앞 카드 -->
+    <path
+        android:fillColor="#FFFDF8"
+        android:strokeColor="#C2603C"
+        android:strokeWidth="2.6"
+        android:pathData="M30,31 L78,31 A6,6 0 0 1 84,37 L84,80 A6,6 0 0 1 78,86 L30,86 A6,6 0 0 1 24,80 L24,37 A6,6 0 0 1 30,31 Z" />
+
+    <!-- 카드 상단 라인 -->
+    <path
+        android:fillColor="#C2603C"
+        android:pathData="M24,42 L84,42 L84,45 L24,45 Z" />
+
+    <!-- 세리프 A -->
+    <path
+        android:fillColor="#241F1A"
+        android:pathData="M54,50 L64.5,78 L58.6,78 L56.3,71.4 L47.8,71.4 L45.6,78 L39.9,78 L50.3,50 Z M52,56.6 L49.3,66.6 L54.8,66.6 Z" />
+
+    <!-- 밑줄 -->
+    <path
+        android:fillColor="#8A5A34"
+        android:pathData="M38,81.5 L66,81.5 L66,83 L38,83 Z" />
+</vector>

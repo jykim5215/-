@@ -1,0 +1,124 @@
+name: Build & Release APK
+
+# version.json 이 바뀌거나 수동 실행하면 릴리즈 APK 를 만들어 GitHub Release 로 게시한다.
+# 앱의 "업데이트 확인" 기능이 바로 이 릴리즈를 읽는다.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "version.json"
+      - "android/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "GitHub Release 로 게시할까요?"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version.json
+        id: version
+        run: |
+          VERSION=$(jq -r .version version.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          jq -r .changelog version.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/libs.versions.toml') }}
+
+      # 서명 키는 저장소에 두지 않는다.
+      # 레포지토리 시크릿(VOCA_KEYSTORE_BASE64)이 있으면 그것으로 서명하고,
+      # 없으면 이 잡 안에서만 쓰고 버리는 임시 키로 서명한다.
+      - name: Prepare signing key
+        id: sign
+        env:
+          KEYSTORE_B64: ${{ secrets.VOCA_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.VOCA_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.VOCA_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.VOCA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/vocacard.jks"
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$KS"
+            echo "VOCA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "VOCA_KEY_ALIAS=${KEY_ALIAS:-vocacard}" >> "$GITHUB_ENV"
+            echo "VOCA_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "persistent=true" >> "$GITHUB_OUTPUT"
+          else
+            PW=$(head -c 24 /dev/urandom | base64 | tr -d '\n/+=')
+            keytool -genkeypair -keystore "$KS" -storepass "$PW" -keypass "$PW" \
+              -alias vocacard -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=VocaCard, OU=App, O=VocaCard, L=Seoul, C=KR" >/dev/null 2>&1
+            echo "::add-mask::$PW"
+            echo "VOCA_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "VOCA_KEY_ALIAS=vocacard" >> "$GITHUB_ENV"
+            echo "VOCA_KEY_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "persistent=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "VOCA_KEYSTORE=$KS" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Rename artifact
+        id: apk
+        run: |
+          SRC=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          DEST="VocaCard-${{ steps.version.outputs.version }}.apk"
+          cp "$SRC" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Package distribution zip
+        run: |
+          bash scripts/package.sh "${{ steps.version.outputs.version }}" "${{ steps.apk.outputs.path }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VocaCard-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.apk.outputs.path }}
+            dist/*.zip
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: VocaCard ${{ steps.version.outputs.version }}
+          body: |
+            ${{ steps.version.outputs.changelog }}
+
+            ---
+            앱 안 **설정 → 업데이트 확인**에서 이 릴리즈를 자동으로 감지합니다.
+            ${{ steps.sign.outputs.persistent == 'false' && '⚠️ 이 빌드는 임시 키로 서명되었습니다. 이전 버전 위에 덮어 설치하려면 저장소 시크릿에 고정 keystore(VOCA_KEYSTORE_BASE64)를 등록하세요.' || '' }}
+          files: |
+            ${{ steps.apk.outputs.path }}
+            version.json
+            dist/*.zip

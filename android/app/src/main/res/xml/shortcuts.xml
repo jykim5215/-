@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="review"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_review"
+        android:shortcutShortLabel="@string/shortcut_review_short"
+        android:shortcutLongLabel="@string/shortcut_review_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.vocacard.app"
+            android:targetClass="com.vocacard.app.MainActivity"
+            android:data="vocacard://review" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_add_short"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.vocacard.app"
+            android:targetClass="com.vocacard.app.MainActivity"
+            android:data="vocacard://add" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="archive"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_archive"
+        android:shortcutShortLabel="@string/shortcut_archive_short"
+        android:shortcutLongLabel="@string/shortcut_archive_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.vocacard.app"
+            android:targetClass="com.vocacard.app.MainActivity"
+            android:data="vocacard://archive" />
+    </shortcut>
+</shortcuts>

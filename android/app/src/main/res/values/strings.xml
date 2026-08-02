@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">단어장</string>
+    <string name="shortcut_review_short">오늘 복습</string>
+    <string name="shortcut_review_long">오늘 복습 시작</string>
+    <string name="shortcut_add_short">단어 추가</string>
+    <string name="shortcut_add_long">새 단어 추가</string>
+    <string name="shortcut_archive_short">아카이브</string>
+    <string name="shortcut_archive_long">30일 아카이브</string>
+</resources>
