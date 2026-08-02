@@ -6,6 +6,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import com.vocacard.app.data.model.Example
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /**
@@ -88,17 +90,22 @@ data class SessionEntity(
 class Converters {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    // 직렬화기를 명시한다. reified 확장(encodeToString(value))은 Room 이 생성하는
+    // 자바 호출부에서 타입 추론이 되지 않아 컴파일에 실패한다.
+    private val stringList = ListSerializer(String.serializer())
+    private val exampleList = ListSerializer(Example.serializer())
+
     @TypeConverter
-    fun stringListToJson(value: List<String>): String = json.encodeToString(value)
+    fun stringListToJson(value: List<String>): String = json.encodeToString(stringList, value)
 
     @TypeConverter
     fun jsonToStringList(value: String): List<String> =
-        runCatching { json.decodeFromString<List<String>>(value) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(stringList, value) }.getOrDefault(emptyList())
 
     @TypeConverter
-    fun exampleListToJson(value: List<Example>): String = json.encodeToString(value)
+    fun exampleListToJson(value: List<Example>): String = json.encodeToString(exampleList, value)
 
     @TypeConverter
     fun jsonToExampleList(value: String): List<Example> =
-        runCatching { json.decodeFromString<List<Example>>(value) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(exampleList, value) }.getOrDefault(emptyList())
 }

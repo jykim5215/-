@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -259,7 +260,7 @@ fun AddWordScreen(
                         )
                     }
                 } else {
-                    itemsIndexedCompat(state.allMeaningCandidates) { index, candidate ->
+                    itemsIndexed(state.allMeaningCandidates) { index, candidate ->
                         StaggerIn(index) {
                             MeaningRow(
                                 candidate = candidate,
@@ -294,7 +295,7 @@ fun AddWordScreen(
                         )
                     }
                 } else {
-                    itemsIndexedCompat(state.allExampleCandidates) { index, example ->
+                    itemsIndexed(state.allExampleCandidates) { index, example ->
                         StaggerIn(index) {
                             ExampleRow(
                                 example = example,
@@ -559,12 +560,4 @@ private fun originLabel(origin: MeaningCandidate.Origin): String = when (origin)
     MeaningCandidate.Origin.ARCHIVE -> "아카이브"
     MeaningCandidate.Origin.DICTIONARY -> "영영사전"
     MeaningCandidate.Origin.USER -> "내 단어장"
-}
-
-/** LazyListScope 에서 인덱스와 함께 항목을 그리는 축약형. */
-private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexedCompat(
-    list: List<T>,
-    content: @Composable (Int, T) -> Unit,
-) {
-    androidx.compose.foundation.lazy.itemsIndexed(list) { index, item -> content(index, item) }
 }
