@@ -19,9 +19,15 @@ on:
 permissions:
   contents: write
 
+# 같은 브랜치에서 새 빌드가 시작되면 이전 빌드는 취소한다.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +46,12 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+
+      # AGP 가 빌드 도중 SDK 를 내려받으며 멈추지 않도록 미리 설치해 둔다.
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" < /dev/null
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -83,9 +95,11 @@ jobs:
 
       - name: Build release APK
         working-directory: android
+        timeout-minutes: 25
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          # stdin 을 닫아 어떤 대화형 프롬프트에도 멈추지 않게 한다.
+          ./gradlew --no-daemon --stacktrace assembleRelease < /dev/null
 
       - name: Rename artifact
         id: apk
