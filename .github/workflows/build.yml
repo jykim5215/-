@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: audiobridge-rolling-release
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,12 +53,13 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease bundleRelease \
             -PversionCode=${{ github.run_number }} \
-            -PversionName=1.0.${{ github.run_number }}
+            -PversionName=2.7.${{ github.run_number }}
 
       - name: Build Windows exe (win-x64, single file)
         working-directory: audiobridge/windows
         run: >
           dotnet publish -c Release -r win-x64 --self-contained true
+          -p:Version=2.7.${{ github.run_number }}
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o out
 
@@ -64,9 +69,12 @@ jobs:
           cp audiobridge/android/app/build/outputs/apk/release/app-release.apk dist/AudioBridge/AudioBridge.apk
           cp audiobridge/android/app/build/outputs/bundle/release/app-release.aab dist/AudioBridge.aab
           cp audiobridge/windows/out/AudioBridgeWin.exe dist/AudioBridge/
-          cp audiobridge/README.md audiobridge/PROTOCOL.md audiobridge/HANDOFF.md dist/AudioBridge/
+          cp audiobridge/windows/out/AudioBridgeWin.exe dist/AudioBridgeWin.exe
+          cp audiobridge/README.md audiobridge/PROTOCOL.md audiobridge/LATENCY_POLICY.md audiobridge/HANDOFF.md dist/AudioBridge/
+          APK_SHA=$(sha256sum dist/AudioBridge/AudioBridge.apk | cut -d ' ' -f1)
+          WIN_SHA=$(sha256sum dist/AudioBridgeWin.exe | cut -d ' ' -f1)
           cat > dist/latest.json <<EOF
-          {"versionCode": ${{ github.run_number }}, "versionName": "1.0.${{ github.run_number }}", "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.0-build/AudioBridge.apk"}
+          {"versionCode": ${{ github.run_number }}, "versionName": "2.7.${{ github.run_number }}", "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.0-build/AudioBridge.apk", "apkSha256": "$APK_SHA", "windowsUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.0-build/AudioBridgeWin.exe", "windowsSha256": "$WIN_SHA"}
           EOF
           cd dist && zip -r AudioBridge-dist.zip AudioBridge
 
@@ -80,18 +88,27 @@ jobs:
           name: AudioBridge-apk
           path: dist/AudioBridge/AudioBridge.apk
 
+      - name: Point rolling release tag at this build
+        run: |
+          git tag -f v1.0.0-build "$GITHUB_SHA"
+          git push origin refs/tags/v1.0.0-build --force
+
       - name: Publish release (download link)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0-build
-          name: "AudioBridge v1.0.0 (자동 빌드)"
+          target_commitish: ${{ github.sha }}
+          name: "AudioBridge v2.7 (자동 빌드)"
           prerelease: true
+          overwrite_files: true
           body: |
-            폰↔PC 양방향 오디오 스트리밍 — 설치·사용법은 zip 안의 README.md 참고.
+            폰↔PC 양방향 오디오 스트리밍 — 600–2000ms 단계형 공통 재생 대기와 마이크·스피커 자동 음향 보정이 적용된 롤링 빌드입니다.
             - `AudioBridge.apk`: 안드로이드 앱 (Android 8.0+)
-            - `AudioBridge-dist.zip`: APK + 윈도우 실행파일 + 문서 (배포용 패키지)
+            - `AudioBridgeWin.exe`: 윈도우 단일 실행파일 (앱 내 자동 업데이트 지원)
+            - `AudioBridge-dist.zip`: APK + 윈도우 실행파일 + 문서
           files: |
             dist/AudioBridge-dist.zip
             dist/AudioBridge/AudioBridge.apk
             dist/AudioBridge.aab
+            dist/AudioBridgeWin.exe
             dist/latest.json

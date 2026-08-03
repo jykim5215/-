@@ -1,6 +1,6 @@
 namespace AudioBridge.Win;
 
-/// <summary>PROTOCOL.md v1 — 오디오 패킷 헤더(24B, 빅엔디안)와 공용 상수.</summary>
+/// <summary>AudioBridge protocol v1 audio header (24-byte, big endian).</summary>
 public static class Protocol
 {
     public const int Version = 1;
@@ -15,6 +15,17 @@ public static class Protocol
 
     public const int SampleRate = 48000;
     public const int FrameMs = 5;
+    public const int MinPlayoutDelayMs = 600;
+    public const int MaxPlayoutDelayMs = 2000;
+    public const int PlayoutDelayStepMs = 200;
+    public const int DefaultPlayoutDelayMs = MinPlayoutDelayMs;
+
+    public static int NormalizePlayoutDelayMs(int value)
+    {
+        int clamped = Math.Clamp(value, MinPlayoutDelayMs, MaxPlayoutDelayMs);
+        int stepIndex = (clamped - MinPlayoutDelayMs + PlayoutDelayStepMs / 2) / PlayoutDelayStepMs;
+        return MinPlayoutDelayMs + stepIndex * PlayoutDelayStepMs;
+    }
 
     public static int FrameBytes(int channels) => SampleRate / 1000 * FrameMs * 2 * channels;
 
@@ -22,7 +33,8 @@ public static class Protocol
         byte[] outBuf, ReadOnlySpan<byte> payload, int seq,
         int sampleRate, int channels, int flags, long timestampUs)
     {
-        outBuf[0] = 0x41; outBuf[1] = 0x42;
+        outBuf[0] = 0x41;
+        outBuf[1] = 0x42;
         outBuf[2] = Version;
         outBuf[3] = CodecPcm16;
         outBuf[4] = (byte)channels;
@@ -40,8 +52,8 @@ public static class Protocol
     {
         if (data.Length < HeaderSize) return null;
         if (data[0] != 0x41 || data[1] != 0x42) return null;
-        if (data[2] != Version) return null;
-        if (data[3] != CodecPcm16) return null;
+        if (data[2] != Version || data[3] != CodecPcm16) return null;
+
         int channels = data[4];
         if (channels is < 1 or > 2) return null;
         int flags = data[5];
@@ -50,13 +62,17 @@ public static class Protocol
         int seq = ReadInt(data, 8);
         int rate = ReadInt(data, 12);
         if (rate is < 8000 or > 192000) return null;
-        return new PacketInfo(channels, flags, payloadLen, seq, rate);
+        long timestampUs = ReadLong(data, 16);
+        if (timestampUs < 0) return null;
+        return new PacketInfo(channels, flags, payloadLen, seq, rate, timestampUs);
     }
 
     private static void WriteInt(byte[] b, int off, int v)
     {
-        b[off] = (byte)(v >> 24); b[off + 1] = (byte)(v >> 16);
-        b[off + 2] = (byte)(v >> 8); b[off + 3] = (byte)v;
+        b[off] = (byte)(v >> 24);
+        b[off + 1] = (byte)(v >> 16);
+        b[off + 2] = (byte)(v >> 8);
+        b[off + 3] = (byte)v;
     }
 
     private static void WriteLong(byte[] b, int off, long v)
@@ -66,6 +82,19 @@ public static class Protocol
 
     private static int ReadInt(ReadOnlySpan<byte> b, int off) =>
         (b[off] << 24) | (b[off + 1] << 16) | (b[off + 2] << 8) | b[off + 3];
+
+    private static long ReadLong(ReadOnlySpan<byte> b, int off)
+    {
+        long value = 0;
+        for (int i = 0; i < 8; i++) value = (value << 8) | b[off + i];
+        return value;
+    }
 }
 
-public record PacketInfo(int Channels, int Flags, int PayloadLen, int Seq, int SampleRate);
+public record PacketInfo(
+    int Channels,
+    int Flags,
+    int PayloadLen,
+    int Seq,
+    int SampleRate,
+    long TimestampUs);

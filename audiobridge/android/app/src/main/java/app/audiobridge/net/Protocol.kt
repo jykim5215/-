@@ -15,6 +15,31 @@ object Protocol {
     const val SAMPLE_RATE = 48000
     const val FRAME_MS = 5
 
+    /** 모든 수신기가 공유하는 사용자 선택 재생 대기 시간. */
+    const val MIN_PLAYOUT_DELAY_MS = 600
+    const val MAX_PLAYOUT_DELAY_MS = 2000
+    const val PLAYOUT_DELAY_STEP_MS = 200
+    const val DEFAULT_PLAYOUT_DELAY_MS = MIN_PLAYOUT_DELAY_MS
+    const val MAX_EXTRA_DELAY_MS = 300
+
+    /** 범위 밖이거나 200ms 눈금 사이인 값을 가장 가까운 지원값으로 맞춘다. */
+    fun normalizePlayoutDelayMs(value: Int): Int {
+        val clamped = value.coerceIn(MIN_PLAYOUT_DELAY_MS, MAX_PLAYOUT_DELAY_MS)
+        val stepIndex = (clamped - MIN_PLAYOUT_DELAY_MS + PLAYOUT_DELAY_STEP_MS / 2) /
+            PLAYOUT_DELAY_STEP_MS
+        return MIN_PLAYOUT_DELAY_MS + stepIndex * PLAYOUT_DELAY_STEP_MS
+    }
+
+    /** 음향 왕복 측정값에 출력/DSP 변동 여유 400ms를 더하고, 부족하지 않게 위 단계로 올린다. */
+    fun recommendedPlayoutDelayMs(acousticOneWayMs: Int): Int {
+        val desired = acousticOneWayMs.coerceAtLeast(0) + 400
+        if (desired <= MIN_PLAYOUT_DELAY_MS) return MIN_PLAYOUT_DELAY_MS
+        val stepIndex = (desired - MIN_PLAYOUT_DELAY_MS + PLAYOUT_DELAY_STEP_MS - 1) /
+            PLAYOUT_DELAY_STEP_MS
+        return (MIN_PLAYOUT_DELAY_MS + stepIndex * PLAYOUT_DELAY_STEP_MS)
+            .coerceAtMost(MAX_PLAYOUT_DELAY_MS)
+    }
+
     /** 5ms 프레임의 페이로드 바이트 수 (PCM16). */
     fun frameBytes(channels: Int): Int = SAMPLE_RATE / 1000 * FRAME_MS * 2 * channels
 

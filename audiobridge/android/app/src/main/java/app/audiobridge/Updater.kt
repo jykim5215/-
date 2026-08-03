@@ -10,73 +10,100 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
-data class UpdateInfo(val versionCode: Long, val versionName: String, val apkUrl: String)
+data class UpdateInfo(
+    val versionCode: Long,
+    val versionName: String,
+    val apkUrl: String,
+    val apkSha256: String,
+)
 
-/**
- * 앱 내 업데이트: GitHub Release의 latest.json으로 새 버전을 확인하고,
- * APK를 받아 시스템 설치 화면을 띄운다. (동일 서명 키 → 덮어쓰기 설치)
- */
+/** GitHub rolling release updater with cache bypass and SHA-256 verification. */
 object Updater {
     private const val LATEST_URL =
         "https://github.com/jykim5215/-/releases/download/v1.0.0-build/latest.json"
     private const val MAX_APK_BYTES = 100L * 1024 * 1024
 
     fun currentVersionCode(context: Context): Long {
-        val pi = context.packageManager.getPackageInfo(context.packageName, 0)
-        return if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode
-        else @Suppress("DEPRECATION") pi.versionCode.toLong()
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        return if (Build.VERSION.SDK_INT >= 28) info.longVersionCode
+        else @Suppress("DEPRECATION") info.versionCode.toLong()
     }
 
-    /** 새 버전이 있으면 UpdateInfo, 없거나 확인 실패면 null (조용히). */
+    /** Returns a newer release, or null when current/offline/invalid. */
     suspend fun check(context: Context): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
-            val conn = URL(LATEST_URL).openConnection() as HttpURLConnection
-            conn.connectTimeout = 6000
-            conn.readTimeout = 6000
-            val text = conn.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }
-            if (text.length > 4096) return@withContext null
-            val obj = JSONObject(text)
-            val code = obj.optLong("versionCode", -1)
-            val url = obj.optString("apkUrl", "")
-            // 신뢰 도메인(이 저장소의 릴리스)만 허용
-            if (code <= 0 || !url.startsWith("https://github.com/jykim5215/")) return@withContext null
+            val url = "$LATEST_URL?t=${System.currentTimeMillis()}"
+            val connection = open(url, 6_000, 6_000)
+            val text = connection.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }
+            if (text.length > 4_096) return@withContext null
+            val json = JSONObject(text)
+            val code = json.optLong("versionCode", -1)
+            val apkUrl = json.optString("apkUrl", "")
+            val hash = json.optString("apkSha256", "").lowercase()
             if (code <= currentVersionCode(context)) return@withContext null
-            UpdateInfo(code, obj.optString("versionName", code.toString()), url)
+            if (!isTrustedReleaseUrl(apkUrl) || !isSha256(hash)) return@withContext null
+            UpdateInfo(
+                code,
+                json.optString("versionName", code.toString()),
+                apkUrl,
+                hash,
+            )
         } catch (_: Exception) {
             null
         }
     }
 
-    /** APK 다운로드 후 설치 화면 호출. 성공 시 null, 실패 시 사용자용 오류 메시지. */
+    /** Downloads, verifies, then opens Android's package installer. */
     suspend fun downloadAndInstall(
         context: Context,
         info: UpdateInfo,
         onProgress: (Float) -> Unit,
     ): String? = withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, "update-${info.versionCode}.apk")
         try {
-            val file = File(context.cacheDir, "update.apk")
-            val conn = URL(info.apkUrl).openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 60000
-            val total = conn.contentLengthLong
-            if (total > MAX_APK_BYTES) return@withContext "업데이트 파일이 비정상적으로 큽니다"
+            if (!isTrustedReleaseUrl(info.apkUrl) || !isSha256(info.apkSha256)) {
+                return@withContext "업데이트 정보가 올바르지 않습니다."
+            }
+            val connection = open(info.apkUrl, 8_000, 60_000)
+            val total = connection.contentLengthLong
+            if (total > MAX_APK_BYTES) return@withContext "업데이트 파일이 비정상적으로 큽니다."
+
+            val digest = MessageDigest.getInstance("SHA-256")
             var done = 0L
-            conn.inputStream.use { input ->
-                file.outputStream().use { out ->
-                    val buf = ByteArray(64 * 1024)
+            connection.inputStream.use { input ->
+                file.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
                     while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        if (done > MAX_APK_BYTES) return@withContext "업데이트 파일이 비정상적으로 큽니다"
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        done += read
+                        if (done > MAX_APK_BYTES) {
+                            throw IllegalStateException("업데이트 파일이 비정상적으로 큽니다.")
+                        }
+                        output.write(buffer, 0, read)
+                        digest.update(buffer, 0, read)
                         if (total > 0) onProgress(done.toFloat() / total)
                     }
                 }
             }
-            if (done == 0L) return@withContext "업데이트 파일을 받지 못했습니다"
-            val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+            if (done == 0L) throw IllegalStateException("업데이트 파일을 받지 못했습니다.")
+            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!MessageDigest.isEqual(
+                    actualHash.toByteArray(Charsets.US_ASCII),
+                    info.apkSha256.toByteArray(Charsets.US_ASCII),
+                )
+            ) {
+                file.delete()
+                throw IllegalStateException("업데이트 무결성 확인에 실패했습니다.")
+            }
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                context.packageName + ".fileprovider",
+                file,
+            )
             context.startActivity(
                 Intent(Intent.ACTION_VIEW)
                     .setDataAndType(uri, "application/vnd.android.package-archive")
@@ -84,7 +111,31 @@ object Updater {
             )
             null
         } catch (e: Exception) {
+            file.delete()
             "업데이트 다운로드 실패: ${e.message}"
         }
     }
+
+    private fun open(url: String, connectTimeout: Int, readTimeout: Int): HttpURLConnection {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.connectTimeout = connectTimeout
+        connection.readTimeout = readTimeout
+        connection.instanceFollowRedirects = true
+        connection.useCaches = false
+        connection.setRequestProperty("Cache-Control", "no-cache, no-store")
+        connection.setRequestProperty("User-Agent", "AudioBridge-Android-Updater/1.0")
+        val status = connection.responseCode
+        if (status !in 200..299) throw IllegalStateException("HTTP $status")
+        return connection
+    }
+
+    private fun isTrustedReleaseUrl(value: String): Boolean = runCatching {
+        val url = URL(value)
+        url.protocol == "https" &&
+            url.host.equals("github.com", ignoreCase = true) &&
+            url.path.startsWith("/jykim5215/-/releases/download/")
+    }.getOrDefault(false)
+
+    private fun isSha256(value: String): Boolean =
+        value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 }

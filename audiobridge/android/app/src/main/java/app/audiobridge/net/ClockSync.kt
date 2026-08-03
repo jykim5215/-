@@ -2,39 +2,96 @@ package app.audiobridge.net
 
 import android.os.SystemClock
 import org.json.JSONObject
+import kotlin.math.abs
+import kotlin.math.roundToLong
 
 /**
- * 컨트롤 채널 위의 NTP식 시계 동기 (PROTOCOL.md §7).
- * 재생(수신) 측이 질의하고, 소스 측이 자기 시계(t1)를 붙여 에코한다.
- * 왕복시간이 가장 짧은 샘플의 오프셋을 채택한다: toLocal(srcTs) = srcTs + offsetUs.
+ * Maps the source monotonic clock to this device's monotonic clock.
+ *
+ * Low-RTT samples establish the offset. A bounded drift estimate then keeps the
+ * speakers aligned during long sessions instead of assuming that every device's
+ * oscillator runs at exactly the same speed.
  */
 class ClockSync(private val send: (JSONObject) -> Unit) {
-    @Volatile var offsetUs: Long? = null
-        private set
-    private var bestRtt = Long.MAX_VALUE
+    @Volatile private var ready = false
+    @Volatile private var anchorLocalUs = 0L
+    @Volatile private var anchorOffsetUs = 0.0
+    @Volatile private var driftPpm = 0.0
+    private var bestRttUs = Long.MAX_VALUE
+    private var driftSampleLocalUs = 0L
+    private var driftSampleOffsetUs = 0.0
+
+    val offsetUs: Long?
+        get() {
+            if (!ready) return null
+            val now = nowUs()
+            return (anchorOffsetUs +
+                (now - anchorLocalUs) * driftPpm / 1_000_000.0).roundToLong()
+        }
 
     fun nowUs(): Long = SystemClock.elapsedRealtimeNanos() / 1000
 
-    /** 주기적으로 호출 — 질의 발송. */
     fun tick() {
-        // 오래된 최적 샘플이 계속 군림하지 않도록 서서히 완화
-        if (bestRtt != Long.MAX_VALUE) bestRtt += 2000
+        synchronized(this) {
+            if (bestRttUs != Long.MAX_VALUE) {
+                bestRttUs = (bestRttUs + 2_000).coerceAtMost(200_000)
+            }
+        }
         send(JSONObject().put("type", "clk").put("t0", nowUs()))
     }
 
-    /** {"type":"clk","t0":보낸시각,"t1":상대시각} 응답 처리. */
+    /** Handles {"type":"clk","t0":localSend,"t1":sourceClock} replies. */
+    @Synchronized
     fun onReply(t0: Long, t1: Long) {
         val t2 = nowUs()
         val rtt = t2 - t0
         if (rtt < 0 || rtt > 2_000_000) return
-        if (rtt <= bestRtt) {
-            bestRtt = rtt
-            offsetUs = (t0 + t2) / 2 - t1
+        if (bestRttUs != Long.MAX_VALUE && rtt > bestRttUs + 5_000) return
+        bestRttUs = minOf(bestRttUs, rtt)
+
+        val measuredOffset = (t0 + t2) / 2.0 - t1
+        if (!ready) {
+            anchorLocalUs = t2
+            anchorOffsetUs = measuredOffset
+            driftSampleLocalUs = t2
+            driftSampleOffsetUs = measuredOffset
+            ready = true
+            return
         }
+
+        val predicted = anchorOffsetUs +
+            (t2 - anchorLocalUs) * driftPpm / 1_000_000.0
+        val residual = measuredOffset - predicted
+        if (abs(residual) > 200_000) {
+            // Sleep/resume can invalidate the old relationship. Re-lock quickly.
+            anchorLocalUs = t2
+            anchorOffsetUs = measuredOffset
+            driftPpm = 0.0
+            driftSampleLocalUs = t2
+            driftSampleOffsetUs = measuredOffset
+            return
+        }
+
+        val sampleSpan = t2 - driftSampleLocalUs
+        if (sampleSpan >= 5_000_000) {
+            val measuredPpm = ((measuredOffset - driftSampleOffsetUs) *
+                1_000_000.0 / sampleSpan).coerceIn(-250.0, 250.0)
+            driftPpm = driftPpm * 0.9 + measuredPpm * 0.1
+            driftSampleLocalUs = t2
+            driftSampleOffsetUs = measuredOffset
+        }
+        anchorLocalUs = t2
+        anchorOffsetUs = predicted + residual * 0.2
     }
 
+    @Synchronized
     fun reset() {
-        offsetUs = null
-        bestRtt = Long.MAX_VALUE
+        ready = false
+        anchorLocalUs = 0
+        anchorOffsetUs = 0.0
+        driftPpm = 0.0
+        bestRttUs = Long.MAX_VALUE
+        driftSampleLocalUs = 0
+        driftSampleOffsetUs = 0.0
     }
 }

@@ -9,13 +9,17 @@
     <Nullable>enable</Nullable>
     <AssemblyName>AudioBridgeWin</AssemblyName>
     <RootNamespace>AudioBridge.Win</RootNamespace>
+    <ApplicationIcon>Assets\AudioBridge.ico</ApplicationIcon>
     <InvariantGlobalization>true</InvariantGlobalization>
     <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\AudioBridge.ico" />
+    <Resource Include="Assets\AudioBridge.png" />
     <PackageReference Include="NAudio.Core" Version="2.2.1" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
   </ItemGroup>
 
 </Project>

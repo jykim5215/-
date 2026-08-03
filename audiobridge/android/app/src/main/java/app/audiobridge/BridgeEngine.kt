@@ -2,11 +2,14 @@ package app.audiobridge
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.Manifest
 import android.media.projection.MediaProjection
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import app.audiobridge.audio.CaptureSource
+import app.audiobridge.audio.AcousticCalibrator
 import app.audiobridge.audio.ModeAPlayer
 import app.audiobridge.audio.ModeBSender
 import app.audiobridge.audio.SendTarget
@@ -23,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.InetSocketAddress
+import java.util.UUID
 
 /**
  * 앱 전체 오케스트레이터.
@@ -68,6 +72,13 @@ object BridgeEngine {
     @Volatile private var awaitingTcpListen = false
     @Volatile private var awaitingTcpSend = false
 
+    private data class PendingCalibrationResponse(val id: String, val holdMs: Int)
+    @Volatile private var calibrationId: String? = null
+    @Volatile private var pendingCalibrationResponse: PendingCalibrationResponse? = null
+    private val calibrationTimeout = Runnable {
+        if (calibrationId != null) finishCalibration("자동 보정 시간이 초과됐어요. 기존 지연값을 유지합니다")
+    }
+
     private enum class SendReason { CLIENT, SERVER }
     private var pendingSend: SendReason? = null
     private var serverSendPort = 0
@@ -82,12 +93,26 @@ object BridgeEngine {
         if (::app.isInitialized) return
         app = context.applicationContext
         val prefs = prefs()
-        // 기본 동기 지연 150ms: 폰 오디오 출력 지연(흔히 40~100ms)+망을 흡수해
-        // 다기기 재생이 목표 시각을 놓치지 않게 한다(가상 시뮬 test_latency_floor 근거).
-        BridgeState.bufferMs.value = prefs.getInt("bufferMs", 150)
+        val storedPlayoutDelay = Protocol.normalizePlayoutDelayMs(
+            prefs.getInt("playoutDelayMs", Protocol.DEFAULT_PLAYOUT_DELAY_MS)
+        )
+        BridgeState.bufferMs.value = storedPlayoutDelay
         BridgeState.transportTcp.value = prefs.getBoolean("tcp", false)
         BridgeState.modeAPort.value = prefs.getInt("modeAPort", Protocol.DEFAULT_MODE_A_PORT)
-        BridgeState.nudgeMs.value = prefs.getInt("nudgeMs", 0)
+        val savedOrLegacyExtraDelay = if (prefs.contains("extraDelayMs")) {
+            prefs.getInt("extraDelayMs", 0)
+        } else {
+            // v2.5까지의 양방향 nudge는 양수만 보존한다. 음수(앞당김)는 새 정책에서 0이다.
+            prefs.getInt("nudgeMs", 0).coerceAtLeast(0)
+        }
+        val storedExtraDelay = savedOrLegacyExtraDelay.coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS)
+        BridgeState.extraDelayMs.value = storedExtraDelay
+        prefs.edit()
+            .putInt("playoutDelayMs", storedPlayoutDelay)
+            .putInt("extraDelayMs", storedExtraDelay)
+            .remove("nudgeMs")
+            .remove("bufferMs")
+            .apply()
         BridgeState.bSource.value =
             if (prefs.getString("bSource", "MIC") == "INTERNAL") CaptureSource.INTERNAL else CaptureSource.MIC
         BridgeState.myName.value =
@@ -108,14 +133,16 @@ object BridgeEngine {
         prefs().edit().putString("deviceName", n).apply()
     }
 
-    fun setBufferMs(ms: Int) {
-        BridgeState.bufferMs.value = ms.coerceIn(20, 500)
-        prefs().edit().putInt("bufferMs", BridgeState.bufferMs.value).apply()
+    fun setExtraDelayMs(ms: Int) {
+        BridgeState.extraDelayMs.value = ms.coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS)
+        prefs().edit().putInt("extraDelayMs", BridgeState.extraDelayMs.value).apply()
     }
 
-    fun setNudgeMs(ms: Int) {
-        BridgeState.nudgeMs.value = ms.coerceIn(-300, 300)
-        prefs().edit().putInt("nudgeMs", BridgeState.nudgeMs.value).apply()
+    fun setPlayoutDelayMs(ms: Int) {
+        if (BridgeState.listening.value || BridgeState.sending.value || BridgeState.sendPending.value) return
+        val normalized = Protocol.normalizePlayoutDelayMs(ms)
+        BridgeState.bufferMs.value = normalized
+        prefs().edit().putInt("playoutDelayMs", normalized).apply()
     }
 
     fun setTransportTcp(tcp: Boolean) {
@@ -245,10 +272,14 @@ object BridgeEngine {
             serverPlayDelayMs = delayMs
         }
 
+        override fun onCalibration(message: JSONObject) {
+            handleCalibrationMessage(message)
+        }
+
         override fun playbackDelayMs(): Int =
             if (serverPlayDelayMs > 0) serverPlayDelayMs else BridgeState.bufferMs.value
 
-        override fun playbackNudgeMs(): Int = BridgeState.nudgeMs.value
+        override fun playbackExtraDelayMs(): Int = BridgeState.extraDelayMs.value
 
         override fun playbackOffsetUs(): Long? = serverClock.offsetUs
     }
@@ -398,6 +429,7 @@ object BridgeEngine {
     }
 
     private fun resetSession(message: String?) {
+        cancelCalibrationQuietly()
         stopStreamsQuiet()
         synchronized(links) { links.clear() }
         sendTargets = emptyList()
@@ -570,7 +602,7 @@ object BridgeEngine {
         link.clock.tick()
         val p = ModeAPlayer(
             delayMsProvider = { BridgeState.bufferMs.value },
-            nudgeMsProvider = { BridgeState.nudgeMs.value },
+            extraDelayMsProvider = { BridgeState.extraDelayMs.value },
             offsetUsProvider = { link.clock.offsetUs },
             onStats = { _, level, _ -> BridgeState.level.value = level },
             onError = { msg ->
@@ -859,8 +891,158 @@ object BridgeEngine {
                     }
                 }
             }
+            "cal" -> handleCalibrationMessage(obj)
             "error" -> BridgeState.notify(obj.optString("message", "오류"))
         }
+    }
+
+    // ---------- 스피커·마이크 물리 자동 보정 ----------
+
+    fun requestAcousticCalibration() {
+        if (BridgeState.conn.value != ConnState.CONNECTED) {
+            BridgeState.notify("먼저 보정할 기기와 연결해 주세요")
+            return
+        }
+        if (BridgeState.listening.value || BridgeState.sending.value || BridgeState.sendPending.value) {
+            BridgeState.notify("소리를 끈 뒤 자동 보정을 시작해 주세요")
+            return
+        }
+        if (!BridgeState.isServerSession.value && mainLinks().size != 1) {
+            BridgeState.notify("자동 보정은 기기 한 대와 연결했을 때 사용할 수 있어요")
+            return
+        }
+        if (BridgeState.calibrationRunning.value) return
+
+        val id = UUID.randomUUID().toString()
+        calibrationId = id
+        BridgeState.calibrationRunning.value = true
+        main.removeCallbacks(calibrationTimeout)
+        main.postDelayed(calibrationTimeout, 30_000)
+        val sent = sendCalibration(
+            JSONObject()
+                .put("type", "cal")
+                .put("action", "prepare")
+                .put("id", id)
+                .put("holdMs", AcousticCalibrator.REPLY_HOLD_MS)
+        )
+        if (!sent) finishCalibration("보정 요청을 보낼 수 없어요. 기존 지연값을 유지합니다")
+        else BridgeState.notify("두 기기를 가까이 두고 볼륨을 60% 이상으로 올려 주세요")
+    }
+
+    /** MainActivity의 전용 마이크 권한 결과. */
+    fun onCalibrationPermission(granted: Boolean) {
+        val pending = pendingCalibrationResponse ?: return
+        pendingCalibrationResponse = null
+        if (!granted) {
+            sendCalibration(errorCalibration(pending.id, "상대 기기에서 마이크 권한이 거부됐어요"))
+            BridgeState.calibrationRunning.value = false
+            return
+        }
+        startCalibrationResponder(pending)
+    }
+
+    private fun handleCalibrationMessage(message: JSONObject) {
+        when (message.optString("action")) {
+            "prepare" -> {
+                val id = message.optString("id").take(64)
+                if (id.isBlank()) return
+                if (BridgeState.listening.value || BridgeState.sending.value || BridgeState.sendPending.value ||
+                    BridgeState.calibrationRunning.value
+                ) {
+                    sendCalibration(errorCalibration(id, "상대 기기가 지금 오디오를 사용 중이에요"))
+                    return
+                }
+                val pending = PendingCalibrationResponse(
+                    id,
+                    message.optInt("holdMs", AcousticCalibrator.REPLY_HOLD_MS).coerceIn(200, 1_000),
+                )
+                BridgeState.calibrationRunning.value = true
+                if (app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    startCalibrationResponder(pending)
+                } else {
+                    pendingCalibrationResponse = pending
+                    BridgeState.notify("상대 기기가 자동 보정을 요청했어요. 마이크 권한을 허용해 주세요")
+                    BridgeState.calibrationPermissionRequest.tryEmit(Unit)
+                }
+            }
+            "ready" -> {
+                val id = message.optString("id")
+                if (id != calibrationId) return
+                scope.launch {
+                    runCatching { AcousticCalibrator.measureInitiator() }
+                        .onSuccess { measured ->
+                            main.post {
+                                if (calibrationId != id) return@post
+                                setPlayoutDelayMs(measured.recommendedDelayMs)
+                                finishCalibration(
+                                    "자동 보정 완료: 왕복 ${measured.roundTripMs}ms · 기본 지연 ${measured.recommendedDelayMs}ms"
+                                )
+                            }
+                        }
+                        .onFailure { error ->
+                            main.post {
+                                if (calibrationId == id) {
+                                    finishCalibration(error.message ?: "응답음을 감지하지 못했어요. 기존 값을 유지합니다")
+                                }
+                            }
+                        }
+                }
+            }
+            "error" -> {
+                val id = message.optString("id")
+                if (id == calibrationId) {
+                    main.post { finishCalibration(message.optString("message", "자동 보정에 실패했어요")) }
+                }
+            }
+            "complete" -> {
+                // 응답음 재생 완료 알림. 측정 기기는 마이크 검출 결과를 기준으로 끝낸다.
+            }
+        }
+    }
+
+    private fun startCalibrationResponder(pending: PendingCalibrationResponse) {
+        scope.launch {
+            runCatching {
+                AcousticCalibrator.respond(pending.holdMs) {
+                    sendCalibration(
+                        JSONObject().put("type", "cal").put("action", "ready").put("id", pending.id)
+                    )
+                }
+            }.onSuccess {
+                sendCalibration(
+                    JSONObject().put("type", "cal").put("action", "complete").put("id", pending.id)
+                )
+            }.onFailure { error ->
+                sendCalibration(errorCalibration(pending.id, error.message ?: "시험음을 처리하지 못했어요"))
+            }
+            main.post { BridgeState.calibrationRunning.value = false }
+        }
+    }
+
+    private fun sendCalibration(message: JSONObject): Boolean {
+        return if (BridgeState.isServerSession.value) {
+            server?.sendToPeer(message) == true
+        } else {
+            mainLinks().singleOrNull()?.client?.send(message) == true
+        }
+    }
+
+    private fun errorCalibration(id: String, message: String) =
+        JSONObject().put("type", "cal").put("action", "error").put("id", id).put("message", message)
+
+    private fun finishCalibration(message: String) {
+        main.removeCallbacks(calibrationTimeout)
+        calibrationId = null
+        pendingCalibrationResponse = null
+        BridgeState.calibrationRunning.value = false
+        BridgeState.notify(message)
+    }
+
+    private fun cancelCalibrationQuietly() {
+        main.removeCallbacks(calibrationTimeout)
+        calibrationId = null
+        pendingCalibrationResponse = null
+        BridgeState.calibrationRunning.value = false
     }
 
     // ---------- 서비스 ----------

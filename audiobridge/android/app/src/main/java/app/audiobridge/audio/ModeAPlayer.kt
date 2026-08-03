@@ -3,6 +3,7 @@ package app.audiobridge.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.AudioTimestamp
 import android.os.Process
 import android.os.SystemClock
 import app.audiobridge.net.Protocol
@@ -21,13 +22,13 @@ import kotlin.math.max
  * 수신 재생기 — 상대가 보내는 오디오를 이 기기에서 재생한다.
  *
  * 시간 동기 재생: 각 패킷의 소스 타임스탬프를 시계 오프셋([offsetUsProvider],
- * PROTOCOL.md §7)으로 로컬 시각으로 바꾸고, "소스 시각 + 목표 지연 + 미세 조정"
+ * PROTOCOL.md §7)으로 로컬 시각으로 바꾸고, "소스 시각 + 공통 지연 + 추가 지연"
  * 시점에 맞춰 재생한다. 여러 스피커가 같은 소스에 물리면 같은 시점에 소리가 난다.
  * 오프셋이 없으면(구버전 PC 등) 첫 패킷 도착 기준으로 잠정 오프셋을 잡는다.
  */
 class ModeAPlayer(
     private val delayMsProvider: () -> Int,
-    private val nudgeMsProvider: () -> Int,
+    private val extraDelayMsProvider: () -> Int,
     private val offsetUsProvider: () -> Long?,
     private val onStats: (lossPct: Double, level: Float, bufferedMs: Int) -> Unit,
     private val onError: (String) -> Unit,
@@ -168,6 +169,37 @@ class ModeAPlayer(
         }
     }
 
+    private fun writeFully(track: AudioTrack, data: ByteArray): Int {
+        var offset = 0
+        while (running && offset < data.size) {
+            val written = track.write(
+                data,
+                offset,
+                data.size - offset,
+                AudioTrack.WRITE_BLOCKING,
+            )
+            if (written <= 0) break
+            offset += written
+        }
+        return offset
+    }
+
+    /** Presentation time of the next frame written to the hardware output path. */
+    private fun nextWritePresentationUs(
+        track: AudioTrack,
+        timestamp: AudioTimestamp,
+        writtenFrames: Long,
+        sampleRate: Int,
+    ): Long {
+        if (track.getTimestamp(timestamp)) {
+            val pending = (writtenFrames - timestamp.framePosition).coerceAtLeast(0)
+            return timestamp.nanoTime / 1000 + pending * 1_000_000L / sampleRate
+        }
+        val played = track.playbackHeadPosition.toLong() and 0xFFFFFFFFL
+        val pending = (writtenFrames - played).coerceAtLeast(0)
+        return nowUs() + pending * 1_000_000L / sampleRate
+    }
+
     private fun playLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         // 첫 패킷으로 포맷 파악 (상대 준비·동의 시간을 고려해 30초 대기)
@@ -212,6 +244,7 @@ class ModeAPlayer(
         val frameDurUs = Protocol.FRAME_MS * 1000L
         val bytesPerFrameUnit = 2 * fmt.channels // 샘플 프레임(모든 채널) 1개의 바이트
         var writtenFrames = 0L // 트랙에 쓴 샘플 프레임 수
+        val audioTimestamp = AudioTimestamp()
         var fallbackOffset: Long? = null
         var level = 0f
         var lastStats = 0L
@@ -220,8 +253,8 @@ class ModeAPlayer(
                 val head = jitter.peek()
                 if (head == null) {
                     // 데이터 없음 — 무음으로 트랙을 채우며 대기 (write가 실시간 페이스 유지)
-                    track.write(silence, 0, silence.size)
-                    writtenFrames += silence.size / bytesPerFrameUnit
+                    val written = writeFully(track, silence)
+                    writtenFrames += written / bytesPerFrameUnit
                     level = 0f
                     continue
                 }
@@ -230,30 +263,33 @@ class ModeAPlayer(
                     fallbackOffset!!
                 }
                 val targetUs = head.tsUs + offset +
-                    delayMsProvider().coerceIn(20, 500) * 1000L +
-                    nudgeMsProvider().coerceIn(-300, 300) * 1000L
+                    Protocol.normalizePlayoutDelayMs(delayMsProvider()) * 1000L +
+                    extraDelayMsProvider().coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS) * 1000L
                 // 핵심: "지금 쓰는 데이터가 실제 스피커에서 나오는 시각"으로 비교한다.
                 // 기기마다 오디오 출력 버퍼 크기가 크게 달라서, 트랙에 쌓여 있는
                 // 미재생분만큼 미래에 소리가 나온다 — 이걸 반영해야 기기 간이 맞는다.
-                val pending = (writtenFrames - (track.playbackHeadPosition.toLong() and 0xFFFFFFFFL))
-                    .coerceAtLeast(0)
-                val playAtUs = nowUs() + pending * 1_000_000L / fmt.sampleRate
+                val playAtUs = nextWritePresentationUs(
+                    track,
+                    audioTimestamp,
+                    writtenFrames,
+                    fmt.sampleRate,
+                )
                 val lead = targetUs - playAtUs
                 when {
-                    lead > frameDurUs * 2 -> {
+                    lead > frameDurUs -> {
                         // 아직 이르다 — 무음 한 프레임으로 시간을 보낸다
-                        track.write(silence, 0, silence.size)
-                        writtenFrames += silence.size / bytesPerFrameUnit
+                        val written = writeFully(track, silence)
+                        writtenFrames += written / bytesPerFrameUnit
                     }
-                    lead < -60_000 -> {
+                    lead < -20_000 -> {
                         // 너무 늦었다 — 버린다
                         jitter.poll()
                     }
                     else -> {
                         val frame = jitter.poll() ?: continue
                         applyGain(frame.data, gainProvider())
-                        track.write(frame.data, 0, frame.data.size)
-                        writtenFrames += frame.data.size / bytesPerFrameUnit
+                        val written = writeFully(track, frame.data)
+                        writtenFrames += written / bytesPerFrameUnit
                         var peak = 0
                         var i = 0
                         while (i + 1 < frame.data.size) {

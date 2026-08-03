@@ -42,9 +42,10 @@ class ControlServer(
         fun onClkReply(t0: Long, t1: Long)
         /** modeB start의 재생 지연 지시값(ms, 없으면 -1) — 재생 시작 전에 호출됨 */
         fun onPlayDelay(delayMs: Int)
+        fun onCalibration(message: JSONObject)
         /** 재생 스케줄용 파라미터 제공 */
         fun playbackDelayMs(): Int
-        fun playbackNudgeMs(): Int
+        fun playbackExtraDelayMs(): Int
         fun playbackOffsetUs(): Long?
     }
 
@@ -176,6 +177,7 @@ class ControlServer(
                     }
                 }
                 "modeB" -> handleModeB(m)
+                "cal" -> callbacks.onCalibration(JSONObject(m.toString()))
             }
         }
 
@@ -206,7 +208,7 @@ class ControlServer(
             player?.stop()
             val p = ModeAPlayer(
                 delayMsProvider = { callbacks.playbackDelayMs() },
-                nudgeMsProvider = { callbacks.playbackNudgeMs() },
+                extraDelayMsProvider = { callbacks.playbackExtraDelayMs() },
                 offsetUsProvider = { callbacks.playbackOffsetUs() },
                 onStats = { _, level, _ -> callbacks.onLevel(level) },
                 onError = { msg -> callbacks.onError(msg) },
