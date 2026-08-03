@@ -82,7 +82,9 @@ object BridgeEngine {
         if (::app.isInitialized) return
         app = context.applicationContext
         val prefs = prefs()
-        BridgeState.bufferMs.value = prefs.getInt("bufferMs", 60)
+        // 기본 동기 지연 150ms: 폰 오디오 출력 지연(흔히 40~100ms)+망을 흡수해
+        // 다기기 재생이 목표 시각을 놓치지 않게 한다(가상 시뮬 test_latency_floor 근거).
+        BridgeState.bufferMs.value = prefs.getInt("bufferMs", 150)
         BridgeState.transportTcp.value = prefs.getBoolean("tcp", false)
         BridgeState.modeAPort.value = prefs.getInt("modeAPort", Protocol.DEFAULT_MODE_A_PORT)
         BridgeState.nudgeMs.value = prefs.getInt("nudgeMs", 0)
