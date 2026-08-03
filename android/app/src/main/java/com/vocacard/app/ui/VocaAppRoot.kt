@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.vocacard.app.AppContainer
 import com.vocacard.app.data.settings.Settings
+import com.vocacard.app.ui.components.LocalSpeaker
 import com.vocacard.app.ui.components.pressable
 import com.vocacard.app.ui.screens.add.AddWordScreen
 import com.vocacard.app.ui.screens.archive.ArchiveDayScreen
@@ -88,6 +90,7 @@ fun VocaAppRoot(
 
     val showBar = route in Route.tabs
 
+    CompositionLocalProvider(LocalSpeaker provides container.speaker) {
     Box(
         Modifier
             .fillMaxSize()
@@ -229,6 +232,7 @@ fun VocaAppRoot(
                 onSelect = { nav.navigateTab(it) },
             )
         }
+    }
     }
 }
 

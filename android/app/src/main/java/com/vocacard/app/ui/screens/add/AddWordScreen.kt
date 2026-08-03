@@ -63,6 +63,7 @@ import com.vocacard.app.data.model.MeaningCandidate
 import com.vocacard.app.data.settings.Settings
 import com.vocacard.app.ui.components.PaperCard
 import com.vocacard.app.ui.components.SectionHeader
+import com.vocacard.app.ui.components.SpeakButton
 import com.vocacard.app.ui.components.StaggerIn
 import com.vocacard.app.ui.components.pressable
 import com.vocacard.app.ui.factoryOf
@@ -190,6 +191,8 @@ fun AddWordScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(suggestion.query, style = WordDisplay, color = voca.ink)
                                     Spacer(Modifier.width(10.dp))
+                                    SpeakButton(suggestion.query, size = 36.dp)
+                                    Spacer(Modifier.width(8.dp))
                                     if (state.alreadySaved) {
                                         Badge("이미 저장됨", voca.highlight)
                                     }

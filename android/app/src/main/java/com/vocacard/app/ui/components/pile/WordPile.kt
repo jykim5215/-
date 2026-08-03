@@ -28,7 +28,6 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
@@ -54,14 +53,12 @@ fun WordPile(
     textColor: Color,
     textStyle: TextStyle,
     tiltEnabled: Boolean = true,
-    cornerRadius: Dp = 10.dp,
     onWordTap: (Long) -> Unit = {},
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val padH = with(density) { 11.dp.toPx() }
     val padV = with(density) { 7.dp.toPx() }
-    val radiusPx = with(density) { cornerRadius.toPx() }
 
     val layouts: List<TextLayoutResult> = remember(words, textStyle) {
         words.map { measurer.measure(AnnotatedString(it.text), textStyle) }
@@ -97,7 +94,9 @@ fun WordPile(
                     halfH = halfH,
                     x = halfW + pseudoRandom(i) * span,
                     // 화면 위쪽 밖에서 시작 → 차례차례 떨어져 쌓인다.
-                    y = -halfH - i * halfH * 1.7f,
+                    y = -halfH - i * halfH * 1.9f,
+                    // 처음부터 조금씩 기울어져 떨어져야 굴러가는 맛이 산다.
+                    angle = (pseudoRandom(i * 17 + 3) - 0.5f) * 1.2f,
                 )
             )
         }
@@ -128,9 +127,18 @@ fun WordPile(
                     onDragStart = { pos ->
                         held = world.bodies.lastOrNull { it.contains(pos.x, pos.y) }
                         held?.held = true
+                        held?.wake()
                     },
-                    onDragEnd = { held?.held = false; held = null },
-                    onDragCancel = { held?.held = false; held = null },
+                    onDragEnd = {
+                        held?.held = false
+                        held?.wake()
+                        held = null
+                    },
+                    onDragCancel = {
+                        held?.held = false
+                        held?.wake()
+                        held = null
+                    },
                 ) { change, drag ->
                     change.consume()
                     val body = held ?: return@detectDragGestures
@@ -139,6 +147,8 @@ fun WordPile(
                     // 놓는 순간 던져지도록 손가락 이동량을 속도로 남겨 둔다.
                     body.vx = drag.x * 40f
                     body.vy = drag.y * 40f
+                    // 끌면서 손목을 틀면 살짝 돌아간다.
+                    body.av = (drag.x / (body.halfW + 1f)) * 2.2f
                 }
             }
             .pointerInput(words) {
@@ -154,7 +164,7 @@ fun WordPile(
 
             world.bodies.forEachIndexed { i, body ->
                 val layout = layouts.getOrNull(i) ?: return@forEachIndexed
-                drawChip(body, layout, chipColor, chipHighlight, textColor, radiusPx)
+                drawChip(body, layout, chipColor, chipHighlight, textColor)
             }
         }
     }
@@ -166,19 +176,20 @@ private fun DrawScope.drawChip(
     chipColor: Color,
     chipHighlight: Color,
     textColor: Color,
-    radiusPx: Float,
 ) {
     val w = body.halfW * 2f
     val h = body.halfH * 2f
     val left = body.x - body.halfW
     val top = body.y - body.halfH
+    // 충돌 형상이 알약이므로 모서리 반지름도 halfH — 보이는 것과 부딪히는 것이 같아진다.
+    val corner = body.halfH
 
-    rotate(degrees = body.lean, pivot = Offset(body.x, body.y)) {
+    rotate(degrees = body.angle * RAD_TO_DEG, pivot = Offset(body.x, body.y)) {
         drawRoundRect(
             color = lerpColor(chipColor, chipHighlight, body.flash * 0.5f),
             topLeft = Offset(left, top),
             size = Size(w, h),
-            cornerRadius = CornerRadius(radiusPx, radiusPx),
+            cornerRadius = CornerRadius(corner, corner),
         )
         drawText(
             textLayoutResult = layout,
@@ -200,6 +211,8 @@ private fun lerpColor(a: Color, b: Color, t: Float): Color {
         alpha = a.alpha + (b.alpha - a.alpha) * f,
     )
 }
+
+private const val RAD_TO_DEG = 57.29578f
 
 /**
  * 씨앗 고정 의사난수(0~1).

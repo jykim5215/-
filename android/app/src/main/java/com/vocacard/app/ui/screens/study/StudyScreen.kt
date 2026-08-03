@@ -66,6 +66,8 @@ import com.vocacard.app.ui.components.FlipCard
 import com.vocacard.app.ui.components.PaperCard
 import com.vocacard.app.ui.components.ProgressLine
 import com.vocacard.app.ui.components.StaggerIn
+import com.vocacard.app.ui.components.LocalSpeaker
+import com.vocacard.app.ui.components.SpeakButton
 import com.vocacard.app.ui.components.SwipeDeck
 import com.vocacard.app.ui.components.SwipeDirection
 import com.vocacard.app.ui.components.pressable
@@ -170,12 +172,14 @@ fun StudyScreen(
                     StudyMode.FLASHCARD -> CardMode(
                         state = state,
                         reverse = false,
+                        autoSpeak = settings.autoSpeak,
                         onAnswer = { haptic(); vm.answer(it) },
                         onPostpone = vm::postpone,
                     )
                     StudyMode.RECALL -> CardMode(
                         state = state,
                         reverse = true,
+                        autoSpeak = false,
                         onAnswer = { haptic(); vm.answer(it) },
                         onPostpone = vm::postpone,
                     )
@@ -253,6 +257,7 @@ private fun ModePicker(count: Int, onPick: (StudyMode) -> Unit) {
 private fun CardMode(
     state: StudyUiState,
     reverse: Boolean,
+    autoSpeak: Boolean,
     onAnswer: (Boolean) -> Unit,
     onPostpone: () -> Unit,
 ) {
@@ -314,8 +319,8 @@ private fun CardMode(
                         flipped = flipped,
                         modifier = Modifier.fillMaxSize(),
                         onClick = { flipped = !flipped },
-                        front = { CardFace(card, showMeaning = reverse) },
-                        back = { CardFace(card, showMeaning = !reverse) },
+                        front = { CardFace(card, showMeaning = reverse, autoSpeak = autoSpeak) },
+                        back = { CardFace(card, showMeaning = !reverse, autoSpeak = autoSpeak) },
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) { CardFace(card, showMeaning = reverse) }
@@ -348,7 +353,16 @@ private fun CardMode(
 }
 
 @Composable
-private fun CardFace(card: StudyCard, showMeaning: Boolean) {
+private fun CardFace(card: StudyCard, showMeaning: Boolean, autoSpeak: Boolean = false) {
+    val speaker = LocalSpeaker.current
+    // 단어 면이 나오면 자동으로 한 번 읽어 준다(설정에서 끌 수 있다).
+    LaunchedEffect(card.key, showMeaning, autoSpeak) {
+        if (autoSpeak && !showMeaning) {
+            delay(180)
+            speaker?.speak(card.word)
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -390,6 +404,13 @@ private fun CardFace(card: StudyCard, showMeaning: Boolean) {
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            SpeakButton(card.word, size = 40.dp)
+        }
+
+        if (showMeaning) {
+            Spacer(Modifier.height(12.dp))
+            SpeakButton(card.word, size = 34.dp)
         }
 
         val example = card.examples.firstOrNull()
@@ -466,7 +487,11 @@ private fun QuizMode(state: StudyUiState, onAnswer: (Boolean) -> Unit) {
                 },
                 label = "quizWord",
             ) { _ ->
-                Text(card.word, style = WordDisplay, color = voca.ink, textAlign = TextAlign.Center)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(card.word, style = WordDisplay, color = voca.ink, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(10.dp))
+                    SpeakButton(card.word, size = 38.dp)
+                }
             }
         }
 

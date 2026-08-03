@@ -27,6 +27,8 @@ data class Settings(
     val lastUpdateCheck: Long = 0L,
     val skippedVersion: String? = null,
     val hapticFeedback: Boolean = true,
+    /** 암기 카드에서 단어 면이 나오면 자동으로 발음을 읽어 준다. */
+    val autoSpeak: Boolean = true,
 )
 
 class SettingsStore(private val context: Context) {
@@ -41,6 +43,7 @@ class SettingsStore(private val context: Context) {
             lastUpdateCheck = p[KEY_LAST_CHECK] ?: 0L,
             skippedVersion = p[KEY_SKIPPED],
             hapticFeedback = p[KEY_HAPTIC] ?: true,
+            autoSpeak = p[KEY_AUTO_SPEAK] ?: true,
         )
     }
 
@@ -54,6 +57,7 @@ class SettingsStore(private val context: Context) {
         if (v == null) p.remove(KEY_SKIPPED) else p[KEY_SKIPPED] = v
     }
     suspend fun setHaptic(v: Boolean) = edit { it[KEY_HAPTIC] = v }
+    suspend fun setAutoSpeak(v: Boolean) = edit { it[KEY_AUTO_SPEAK] = v }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)
@@ -68,5 +72,6 @@ class SettingsStore(private val context: Context) {
         val KEY_LAST_CHECK = longPreferencesKey("last_update_check")
         val KEY_SKIPPED = stringPreferencesKey("skipped_version")
         val KEY_HAPTIC = booleanPreferencesKey("haptic")
+        val KEY_AUTO_SPEAK = booleanPreferencesKey("auto_speak")
     }
 }

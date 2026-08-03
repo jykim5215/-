@@ -157,6 +157,11 @@ fun SettingsScreen(
                             checked = settings.onlineSuggest,
                         ) { scope.launch { container.settings.setOnlineSuggest(it) } }
                         ToggleRow(
+                            title = "단어 자동 발음",
+                            description = "암기 카드에서 단어가 나오면 자동으로 읽어 줘요. 발음 버튼은 언제든 직접 누를 수 있습니다.",
+                            checked = settings.autoSpeak,
+                        ) { scope.launch { container.settings.setAutoSpeak(it) } }
+                        ToggleRow(
                             title = "촉각 피드백",
                             description = "카드를 넘길 때 가볍게 진동해요.",
                             checked = settings.hapticFeedback,

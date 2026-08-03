@@ -169,7 +169,7 @@
 ## 6. 현재 상태
 
 - **최종 갱신**: 2026-08-02
-- **단계**: **v1.2.0 구현 완료 (CI 검증 중) / v1.1.0 릴리즈 게시됨**
+- **단계**: **v1.3.0 구현 완료 (CI 검증 중) / v1.2.0 까지 릴리즈 게시됨**
   (릴리즈: https://github.com/jykim5215/-/releases/tag/vocacard-v1.1.0 — APK 12.3MB)
 
 ### 확정된 사용자 선택
@@ -188,6 +188,16 @@
 - 모션: `ui/theme/Motion.kt`(스펙 단일 출처), `FlipCard`, `SwipeDeck`, `StaggerIn`, `ProgressRing/Line`,
   `pressable`(누름 0.97 스케일), NavHost 전환(탭=fade+scale, 계층=shared axis X, 학습=아래→위)
 - 화면 8종: Home / Archive / ArchiveDay / Study / MyWords / WordDetail / AddWord / Settings
+- **발음(v1.3.0)**: `data/speech/Speaker.kt` — 안드로이드 내장 TTS(Locale.US, rate 0.92).
+  음원을 APK 에 넣지 않은 이유는 1,222단어 음원이 수십 MB 이고 사용자가 추가한 단어는 어차피
+  음원이 없기 때문. 엔진/영어 데이터가 없으면 `available=false` 로 두고 `SpeakButton` 이
+  **아예 그려지지 않는다**(눌러도 반응 없는 버튼은 고장으로 보인다).
+  `LocalSpeaker` CompositionLocal 로 루트에서 내려 준다. 설정에 `autoSpeak` 토글.
+- **쌓기 물리 v2(v1.3.0)**: AABB → **회전 있는 강체**로 교체. 충돌 형상은 알약(가로로 늘어선 원 2~5개).
+  사각형 SAT+클리핑 대신 원 뭉치를 쓴 이유: 수식이 짧아 틀릴 여지가 적고(실기 테스트 불가),
+  접촉점이 여러 개라 바닥에 평평하게 눕는다. 임펄스를 무게중심에서 떨어진 접촉점에 적용해
+  토크가 생기므로 회전이 자연스럽게 나온다. 그리는 모서리 반지름 = halfH 라 보이는 것과 부딪히는 것이 일치.
+  안전장치: 속도/각속도 클램프, NaN 감지 시 바디 리셋, 저속 충돌 반발 제거(잔진동 방지), 재우기.
 - **쌓기 보기(v1.2.0)**: `ui/components/pile/` — 직접 만든 초소형 2D 물리(AABB + 순차 임펄스, 5회 반복).
   `PileWorld` 가 시뮬레이션, `TiltSensor` 가 가속도계로 중력 방향과 흔들기를 읽고,
   `WordPile` 이 Canvas + TextMeasurer 로 그린다(텍스트는 목록이 바뀔 때만 측정).

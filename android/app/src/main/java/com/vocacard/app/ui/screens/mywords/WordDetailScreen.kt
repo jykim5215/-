@@ -51,6 +51,7 @@ import com.vocacard.app.data.settings.Settings
 import com.vocacard.app.data.study.Scheduler
 import com.vocacard.app.ui.components.PaperCard
 import com.vocacard.app.ui.components.SectionHeader
+import com.vocacard.app.ui.components.SpeakButton
 import com.vocacard.app.ui.components.pressable
 import com.vocacard.app.ui.screens.archive.IconButtonSoft
 import com.vocacard.app.ui.theme.WordDisplay
@@ -119,7 +120,11 @@ fun WordDetailScreen(
         ) {
             item {
                 Column {
-                    Text(w.word, style = WordDisplay, color = voca.ink)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(w.word, style = WordDisplay, color = voca.ink)
+                        Spacer(Modifier.width(12.dp))
+                        SpeakButton(w.word, size = 38.dp)
+                    }
                     if (!w.phonetic.isNullOrBlank()) {
                         Text(
                             w.phonetic.orEmpty(),
