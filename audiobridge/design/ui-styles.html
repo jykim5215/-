@@ -1,0 +1,268 @@
+<title>AudioBridge — UI 스타일 3안</title>
+<style>
+  :root{
+    --bg:#f5f4f1; --ink:#26241f; --sub:#6f6a60; --line:#dcd9d2; --card:#ffffff;
+    --accent:#b4562a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#171614; --ink:#ece9e3; --sub:#9a958b; --line:#33312c; --card:#201f1c; }
+  }
+  :root[data-theme="dark"]{ --bg:#171614; --ink:#ece9e3; --sub:#9a958b; --line:#33312c; --card:#201f1c; }
+  :root[data-theme="light"]{ --bg:#f5f4f1; --ink:#26241f; --sub:#6f6a60; --line:#dcd9d2; --card:#ffffff; }
+
+  body{ background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    margin:0; padding:40px 24px 72px; line-height:1.55; }
+  .wrap{ max-width:1240px; margin:0 auto; }
+  header.page h1{ font-size:1.5rem; margin:0 0 4px; letter-spacing:-.01em; }
+  header.page p{ color:var(--sub); margin:0; max-width:62ch; }
+  .cols{ display:flex; flex-wrap:wrap; gap:36px; margin-top:36px; justify-content:center; }
+  .col{ width:340px; display:flex; flex-direction:column; gap:14px; }
+  .col .tag{ font-size:.72rem; letter-spacing:.14em; color:var(--accent); font-weight:700; }
+  .col h2{ font-size:1.05rem; margin:0; }
+  .col .desc{ font-size:.85rem; color:var(--sub); margin:0; min-height:3.6em; }
+  .phone{ border-radius:30px; overflow:hidden; box-shadow:0 18px 48px rgba(0,0,0,.22);
+    border:1px solid var(--line); }
+  .scr{ padding:22px 20px 26px; display:flex; flex-direction:column; gap:14px; min-height:600px; }
+  .meter i{ display:block; height:100%; border-radius:inherit; }
+  button,.seg span{ font-family:inherit; }
+
+  /* ============ A안 · 스튜디오 다크 ============ */
+  .pa .scr{ background:#101418; color:#e8edf2; }
+  .pa .top{ display:flex; justify-content:space-between; align-items:baseline; }
+  .pa .logo{ font-weight:800; letter-spacing:.02em; font-size:1.05rem; }
+  .pa .logo b{ color:#ffb545; }
+  .pa .conn{ font-size:.72rem; color:#7fd97f; font-family:ui-monospace,Consolas,monospace; }
+  .pa .conn::before{ content:"●"; margin-right:6px; }
+  .pa .card{ background:#171d24; border:1px solid #232c36; border-radius:14px; padding:14px 16px;
+    display:flex; flex-direction:column; gap:10px; }
+  .pa .row{ display:flex; justify-content:space-between; align-items:center; }
+  .pa .mode{ font-size:.68rem; letter-spacing:.16em; color:#8b98a5; }
+  .pa .name{ font-weight:700; font-size:.98rem; }
+  .pa .sub{ font-size:.75rem; color:#8b98a5; }
+  .pa .sw{ width:52px; height:30px; border-radius:15px; background:#232c36; position:relative; border:none; }
+  .pa .sw.on{ background:#ffb545; }
+  .pa .sw::after{ content:""; position:absolute; top:3px; left:3px; width:24px; height:24px;
+    border-radius:12px; background:#0f1216; transition:.2s; }
+  .pa .sw.on::after{ left:25px; background:#101418; }
+  .pa .meter{ height:8px; border-radius:4px; background:#0b0e11; overflow:hidden; }
+  .pa .meter i{ width:64%; background:linear-gradient(90deg,#2f9e44,#ffd43b 78%,#ff6b35); }
+  .pa .stat{ font-family:ui-monospace,Consolas,monospace; font-size:.72rem; color:#8b98a5;
+    display:flex; gap:14px; }
+  .pa .stat b{ color:#ffb545; font-weight:600; }
+  .pa .seg{ display:flex; background:#0b0e11; border-radius:9px; padding:3px; gap:3px; }
+  .pa .seg span{ flex:1; text-align:center; font-size:.76rem; padding:7px 0; border-radius:7px; color:#8b98a5; }
+  .pa .seg .sel{ background:#232c36; color:#e8edf2; font-weight:600; }
+  .pa .slider{ display:flex; flex-direction:column; gap:8px; }
+  .pa .rail{ height:4px; background:#232c36; border-radius:2px; position:relative; }
+  .pa .rail i{ position:absolute; left:0; top:0; height:100%; width:35%; background:#ffb545; border-radius:2px; }
+  .pa .rail::after{ content:""; position:absolute; left:35%; top:-7px; width:18px; height:18px;
+    border-radius:9px; background:#ffb545; box-shadow:0 0 0 4px rgba(255,181,69,.18); }
+  .pa .ends{ display:flex; justify-content:space-between; font-size:.7rem; color:#8b98a5; }
+  .pa .foot{ margin-top:auto; display:flex; justify-content:space-between;
+    font-family:ui-monospace,Consolas,monospace; font-size:.7rem; color:#5c6873; }
+
+  /* ============ B안 · 라이트 미니멀 ============ */
+  .pb .scr{ background:#fafbfc; color:#1d2530; }
+  .pb .top{ display:flex; justify-content:space-between; align-items:center; }
+  .pb .logo{ font-weight:700; font-size:1.1rem; letter-spacing:-.01em; color:#0f6b5c; }
+  .pb .conn{ font-size:.74rem; background:#e3f3ef; color:#0f6b5c; padding:4px 12px; border-radius:999px; }
+  .pb .card{ background:#fff; border:1px solid #e7eaee; border-radius:18px; padding:16px 18px;
+    display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 3px rgba(20,30,40,.05); }
+  .pb .row{ display:flex; justify-content:space-between; align-items:center; }
+  .pb .name{ font-weight:700; }
+  .pb .sub{ font-size:.78rem; color:#66707d; }
+  .pb .sw{ width:50px; height:28px; border-radius:14px; background:#dfe3e8; position:relative; border:none; }
+  .pb .sw.on{ background:#0f6b5c; }
+  .pb .sw::after{ content:""; position:absolute; top:3px; left:3px; width:22px; height:22px;
+    border-radius:11px; background:#fff; transition:.2s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .pb .sw.on::after{ left:25px; }
+  .pb .meter{ height:6px; border-radius:3px; background:#eef1f4; overflow:hidden; }
+  .pb .meter i{ width:64%; background:#0f6b5c; }
+  .pb .stat{ font-size:.75rem; color:#66707d; }
+  .pb .stat b{ color:#0f6b5c; font-variant-numeric:tabular-nums; }
+  .pb .seg{ display:flex; border:1px solid #e7eaee; border-radius:12px; overflow:hidden; }
+  .pb .seg span{ flex:1; text-align:center; font-size:.78rem; padding:9px 0; color:#66707d; background:#fff; }
+  .pb .seg .sel{ background:#0f6b5c; color:#fff; font-weight:600; }
+  .pb .rail{ height:5px; background:#eef1f4; border-radius:3px; position:relative; margin-top:4px; }
+  .pb .rail i{ position:absolute; left:0; height:100%; width:35%; background:#0f6b5c; border-radius:3px; }
+  .pb .rail::after{ content:""; position:absolute; left:35%; top:-8px; width:20px; height:20px;
+    border-radius:10px; background:#fff; border:2px solid #0f6b5c; box-sizing:border-box; }
+  .pb .ends{ display:flex; justify-content:space-between; font-size:.72rem; color:#66707d; margin-top:6px; }
+  .pb .foot{ margin-top:auto; text-align:center; }
+  .pb .foot button{ width:100%; padding:13px 0; border-radius:14px; border:none; background:#0f6b5c;
+    color:#fff; font-weight:600; font-size:.9rem; }
+  .pb .foot p{ font-size:.72rem; color:#98a1ac; margin:8px 0 0; }
+
+  /* ============ C안 · 레트로 하이파이 ============ */
+  .pc .scr{ background:#efe6d4; color:#3a2f22;
+    background-image:repeating-linear-gradient(0deg,rgba(58,47,34,.03) 0 1px,transparent 1px 4px); }
+  .pc .top{ display:flex; justify-content:space-between; align-items:baseline;
+    border-bottom:3px double #3a2f22; padding-bottom:10px; }
+  .pc .logo{ font-weight:800; font-size:1.15rem; letter-spacing:.06em; }
+  .pc .logo b{ color:#c2571f; }
+  .pc .conn{ font-size:.7rem; font-family:ui-monospace,Consolas,monospace; background:#3a2f22;
+    color:#f4c95d; padding:3px 10px; border-radius:3px; }
+  .pc .card{ background:#f7f1e3; border:2px solid #3a2f22; border-radius:10px; padding:14px 16px;
+    display:flex; flex-direction:column; gap:10px; box-shadow:4px 4px 0 rgba(58,47,34,.25); }
+  .pc .row{ display:flex; justify-content:space-between; align-items:center; }
+  .pc .mode{ font-size:.66rem; letter-spacing:.2em; color:#8a7a60; font-weight:700; }
+  .pc .name{ font-weight:800; }
+  .pc .sub{ font-size:.76rem; color:#8a7a60; }
+  .pc .sw{ width:56px; height:30px; border-radius:5px; background:#d9ccb2; border:2px solid #3a2f22;
+    position:relative; box-sizing:border-box; }
+  .pc .sw::after{ content:""; position:absolute; top:2px; left:2px; width:22px; height:22px;
+    border-radius:3px; background:#3a2f22; transition:.2s; }
+  .pc .sw.on{ background:#c2571f; }
+  .pc .sw.on::after{ left:28px; background:#f7f1e3; }
+  .pc .meter{ height:12px; border:2px solid #3a2f22; border-radius:3px; background:#f7f1e3;
+    overflow:hidden; box-sizing:border-box; }
+  .pc .meter i{ width:64%;
+    background:repeating-linear-gradient(90deg,#c2571f 0 6px,#f7f1e3 6px 8px); }
+  .pc .stat{ font-family:ui-monospace,Consolas,monospace; font-size:.72rem; color:#6b5c44; }
+  .pc .seg{ display:flex; border:2px solid #3a2f22; border-radius:6px; overflow:hidden; }
+  .pc .seg span{ flex:1; text-align:center; font-size:.76rem; font-weight:700; padding:8px 0;
+    background:#f7f1e3; color:#8a7a60; }
+  .pc .seg .sel{ background:#c2571f; color:#f7f1e3; }
+  .pc .rail{ height:10px; border:2px solid #3a2f22; border-radius:5px; background:#f7f1e3;
+    position:relative; box-sizing:border-box; margin-top:4px; }
+  .pc .rail::after{ content:""; position:absolute; left:33%; top:-8px; width:14px; height:22px;
+    background:#3a2f22; border-radius:3px; }
+  .pc .ends{ display:flex; justify-content:space-between; font-size:.7rem; color:#8a7a60;
+    font-weight:700; margin-top:6px; }
+  .pc .foot{ margin-top:auto; display:flex; gap:10px; }
+  .pc .foot button{ flex:1; padding:11px 0; border:2px solid #3a2f22; border-radius:6px;
+    background:#f4c95d; font-weight:800; font-size:.82rem; color:#3a2f22;
+    box-shadow:3px 3px 0 rgba(58,47,34,.25); }
+
+  @media (max-width:760px){ .col{ width:min(340px,100%); } body{ padding:28px 14px 56px; } }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <h1>AudioBridge — UI 스타일 3안</h1>
+    <p>세 시안 모두 기능 구성은 동일합니다: 연결 상태, 모드 A/B 토글, 모드 B 소스 선택(마이크/내부 소리), 지연·버퍼 슬라이더를 <strong>한 화면</strong>에 통합했습니다. 마음에 드는 스타일 하나를 골라 주세요 — 선택한 시안으로 실제 안드로이드 앱을 구현합니다.</p>
+  </header>
+
+  <div class="cols">
+
+    <!-- A안 -->
+    <div class="col">
+      <span class="tag">A안</span>
+      <h2>스튜디오 다크</h2>
+      <p class="desc">프로 오디오 콘솔 감성. 어두운 바탕에 앰버 포인트, 모노스페이스 수치와 레벨 미터로 "장비를 다루는 느낌"을 줍니다.</p>
+      <div class="phone pa">
+        <div class="scr">
+          <div class="top">
+            <span class="logo">Audio<b>Bridge</b></span>
+            <span class="conn">DESKTOP-PC 연결됨</span>
+          </div>
+          <div class="card">
+            <span class="mode">MODE A · PC → 폰</span>
+            <div class="row">
+              <div><div class="name">폰을 PC 스피커로</div><div class="sub">PC 소리를 이 폰에서 재생</div></div>
+              <button class="sw on" aria-label="모드 A 켜짐"></button>
+            </div>
+            <div class="meter"><i></i></div>
+            <div class="stat"><span>지연 <b>42ms</b></span><span>48kHz · 스테레오</span><span>손실 <b>0.1%</b></span></div>
+          </div>
+          <div class="card">
+            <span class="mode">MODE B · 폰 → PC</span>
+            <div class="row">
+              <div><div class="name">PC를 폰 스피커로</div><div class="sub">폰 소리를 PC에서 재생</div></div>
+              <button class="sw" aria-label="모드 B 꺼짐"></button>
+            </div>
+            <div class="seg"><span class="sel">내부 소리</span><span>마이크</span></div>
+          </div>
+          <div class="card slider">
+            <span class="mode">버퍼</span>
+            <div class="rail"><i></i></div>
+            <div class="ends"><span>최소 지연</span><span>안정성 우선</span></div>
+          </div>
+          <div class="foot"><span>UDP · PCM16</span><span>포트 48550</span><span>다른 PC 찾기</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B안 -->
+    <div class="col">
+      <span class="tag">B안</span>
+      <h2>라이트 미니멀</h2>
+      <p class="desc">밝고 담백한 카드 UI. 딥 그린 포인트 하나로 절제하고, 큰 터치 영역과 명확한 상태 표시로 누구나 쉽게 씁니다.</p>
+      <div class="phone pb">
+        <div class="scr">
+          <div class="top">
+            <span class="logo">AudioBridge</span>
+            <span class="conn">DESKTOP-PC 연결됨</span>
+          </div>
+          <div class="card">
+            <div class="row">
+              <div><div class="name">폰을 PC 스피커로</div><div class="sub">모드 A · PC 소리를 이 폰에서 재생</div></div>
+              <button class="sw on" aria-label="모드 A 켜짐"></button>
+            </div>
+            <div class="meter"><i></i></div>
+            <div class="stat">지연 <b>42ms</b> · 48kHz 스테레오 · 손실 <b>0.1%</b></div>
+          </div>
+          <div class="card">
+            <div class="row">
+              <div><div class="name">PC를 폰 스피커로</div><div class="sub">모드 B · 폰 소리를 PC에서 재생</div></div>
+              <button class="sw" aria-label="모드 B 꺼짐"></button>
+            </div>
+            <div class="seg"><span class="sel">내부 소리</span><span>마이크</span></div>
+          </div>
+          <div class="card">
+            <div class="row"><span class="name" style="font-size:.88rem">지연 ↔ 안정성</span><span class="stat"><b>35ms</b> 버퍼</span></div>
+            <div class="rail"><i></i></div>
+            <div class="ends"><span>최소 지연</span><span>안정성 우선</span></div>
+          </div>
+          <div class="foot">
+            <button>다른 PC 찾기</button>
+            <p>UDP · PCM 16-bit · 포트 48550 — 고급 설정에서 변경</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C안 -->
+    <div class="col">
+      <span class="tag">C안</span>
+      <h2>레트로 하이파이</h2>
+      <p class="desc">70~80년대 카세트덱·리시버 오마주. 크림 바탕에 굵은 윤곽선, 주황 포인트와 도트 VU 미터로 개성이 가장 강한 안.</p>
+      <div class="phone pc">
+        <div class="scr">
+          <div class="top">
+            <span class="logo">AUDIO<b>BRIDGE</b></span>
+            <span class="conn">DESKTOP-PC ●</span>
+          </div>
+          <div class="card">
+            <span class="mode">MODE A ▸ PC → PHONE</span>
+            <div class="row">
+              <div><div class="name">폰을 PC 스피커로</div><div class="sub">PC 소리를 이 폰에서 재생</div></div>
+              <button class="sw on" aria-label="모드 A 켜짐"></button>
+            </div>
+            <div class="meter"><i></i></div>
+            <div class="stat">LATENCY 42ms · 48kHz STEREO</div>
+          </div>
+          <div class="card">
+            <span class="mode">MODE B ▸ PHONE → PC</span>
+            <div class="row">
+              <div><div class="name">PC를 폰 스피커로</div><div class="sub">폰 소리를 PC에서 재생</div></div>
+              <button class="sw" aria-label="모드 B 꺼짐"></button>
+            </div>
+            <div class="seg"><span class="sel">내부 소리</span><span>마이크</span></div>
+          </div>
+          <div class="card">
+            <span class="mode">BUFFER</span>
+            <div class="rail"></div>
+            <div class="ends"><span>FAST</span><span>STABLE</span></div>
+          </div>
+          <div class="foot">
+            <button>다른 PC 찾기</button>
+            <button>고급 설정</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
