@@ -304,6 +304,36 @@ object BridgeEngine {
         }
     }
 
+    // ---------- Wi-Fi Direct (공유기 없이 직접 연결) ----------
+    // 컨트롤러(WifiP2pManager 래퍼)는 MainActivity가 생성해 주입한다. UI는 이 훅으로만 접근.
+
+    interface WifiDirectController {
+        fun discover()
+        fun connect(deviceAddress: String)
+        fun disconnect()
+    }
+
+    @Volatile var wifiDirect: WifiDirectController? = null
+
+    /**
+     * Wi-Fi Direct 그룹이 형성되면 호출된다. 그룹장(GO)은 서버(192.168.49.1)로 대기하고,
+     * 상대는 그 IP의 기존 컨트롤 채널에 붙는다 — 이후 흐름은 일반 연결과 동일.
+     */
+    fun onWifiDirectConnected(isGroupOwner: Boolean, groupOwnerHost: String?) {
+        main.post {
+            if (isGroupOwner) {
+                // 내가 그룹장 = 서버. 상대가 붙어오면 상시 서버가 받는다.
+                BridgeState.notify("Wi-Fi Direct 준비됨 — 상대 기기가 연결하면 시작돼요")
+            } else {
+                val host = groupOwnerHost ?: run {
+                    BridgeState.notify("상대 주소를 확인할 수 없어요")
+                    return@post
+                }
+                connect(host, Protocol.DEFAULT_CTL_PORT)
+            }
+        }
+    }
+
     fun connect(host: String, port: Int) {
         if (BridgeState.isServerSession.value) {
             scope.launch { server?.closeSession() }

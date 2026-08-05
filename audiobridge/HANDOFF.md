@@ -272,3 +272,12 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
 6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
    완료로 표기하지 않는다.
+- [x] v2.8 (사용자 선택 A: Wi-Fi Direct 옵션 추가 — 블루투스는 A2DP sink 불가로 대체):
+  net/WifiDirect.kt(WifiP2pManager 래퍼: discoverPeers/connect/requestConnectionInfo,
+  리시버는 액티비티 onResume/onPause에서 register/unregister, ContextCompat.RECEIVER_NOT_EXPORTED).
+  그룹 형성 시 BridgeEngine.onWifiDirectConnected(isGO, goHost): 비-GO는 기존 connect(goHost,48550)
+  재사용, GO는 상시 서버가 수신 → 오디오·동기·다대일 로직 무변경. UI: DiscoveryCard에
+  "Wi-Fi Direct로 연결" 섹션(P2P 피어 목록). 권한: NEARBY_WIFI_DEVICES(33+)/ACCESS_FINE_LOCATION(≤32),
+  CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE. BridgeState에 p2p* 상태 추가.
+  주의: Wi-Fi Direct는 기기 편차 크고 이 환경에서 테스트 불가 — CI 컴파일만 검증, 실기기 확인 필요.
+  블루투스(RFCOMM) 미채택 이유: 폰을 BT 스피커로 만드는 A2DP sink를 앱에 안 열어 줌.

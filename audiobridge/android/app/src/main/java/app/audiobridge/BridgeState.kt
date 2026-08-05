@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class ConnState { DISCONNECTED, CONNECTING, CONNECTED }
 
+/** Wi-Fi Direct로 발견된 기기. [address]는 P2P용 MAC 주소(연결 대상 식별자). */
+data class P2pDevice(val name: String, val address: String)
+
 /** [channel] 0=양쪽, 1=왼쪽, 2=오른쪽 · [gain] 0~100 */
 data class SpeakerInfo(
     val id: Int,
@@ -57,6 +60,13 @@ object BridgeState {
     // 검색
     val discovering = MutableStateFlow(false)
     val peers = MutableStateFlow<List<Peer>>(emptyList())
+
+    // Wi-Fi Direct (공유기 없이 폰끼리 직접 연결). 연결이 맺어지면 기존 소켓 로직 그대로 사용.
+    val p2pSupported = MutableStateFlow(true)
+    val p2pDiscovering = MutableStateFlow(false)
+    val p2pPeers = MutableStateFlow<List<P2pDevice>>(emptyList())
+    /** null=미사용, "connecting", "connected"(그룹 형성) */
+    val p2pStatus = MutableStateFlow<String?>(null)
 
     // 알림·업데이트
     val toast = MutableSharedFlow<String>(extraBufferCapacity = 8)

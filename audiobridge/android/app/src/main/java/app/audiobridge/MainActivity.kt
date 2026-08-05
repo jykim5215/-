@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,12 +72,44 @@ import app.audiobridge.ui.AppTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var wifiDirect: app.audiobridge.net.WifiDirect? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         BridgeEngine.init(applicationContext)
+
+        val wd = app.audiobridge.net.WifiDirect(
+            context = applicationContext,
+            onPeers = { list ->
+                BridgeState.p2pPeers.value = list.map { app.audiobridge.P2pDevice(it.first, it.second) }
+                BridgeState.p2pDiscovering.value = false
+            },
+            onStatus = { BridgeState.p2pStatus.value = it },
+            onConnected = { go, host -> BridgeEngine.onWifiDirectConnected(go, host) },
+            onUnsupported = { BridgeState.p2pSupported.value = false },
+            onError = { BridgeState.notify(it) },
+        )
+        wifiDirect = wd
+        // UI가 접근하는 컨트롤러 훅
+        BridgeEngine.wifiDirect = object : BridgeEngine.WifiDirectController {
+            override fun discover() { BridgeState.p2pDiscovering.value = true; wd.discover() }
+            override fun connect(deviceAddress: String) = wd.connect(deviceAddress)
+            override fun disconnect() = wd.disconnect()
+        }
+
         setContent {
             AppTheme { MainScreen() }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        wifiDirect?.register()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        wifiDirect?.unregister()
     }
 }
 
@@ -123,6 +156,27 @@ fun MainScreen() {
     val isServerSession by BridgeState.isServerSession.collectAsState()
     val extraDelayMs by BridgeState.extraDelayMs.collectAsState()
     val calibrationRunning by BridgeState.calibrationRunning.collectAsState()
+    val p2pSupported by BridgeState.p2pSupported.collectAsState()
+    val p2pDiscovering by BridgeState.p2pDiscovering.collectAsState()
+    val p2pStatus by BridgeState.p2pStatus.collectAsState()
+    val p2pPeers by BridgeState.p2pPeers.collectAsState()
+
+    // Wi-Fi Direct 검색 권한 (API 33+ NEARBY_WIFI_DEVICES, 이하 위치)
+    val p2pPermission = if (Build.VERSION.SDK_INT >= 33)
+        Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
+    val p2pPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) BridgeEngine.wifiDirect?.discover()
+        else BridgeState.notify("주변 기기 연결에는 권한이 필요해요")
+    }
+    val startP2pFind: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, p2pPermission) == PackageManager.PERMISSION_GRANTED) {
+            BridgeEngine.wifiDirect?.discover()
+        } else {
+            p2pPermLauncher.launch(p2pPermission)
+        }
+    }
 
     val uiScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -315,6 +369,12 @@ fun MainScreen() {
                     onFind = { BridgeEngine.discover() },
                     onConnect = { host, port -> BridgeEngine.connect(host, port) },
                     onManual = { showManual = true },
+                    p2pSupported = p2pSupported,
+                    p2pDiscovering = p2pDiscovering,
+                    p2pStatus = p2pStatus,
+                    p2pPeers = p2pPeers,
+                    onP2pFind = startP2pFind,
+                    onP2pConnect = { addr -> BridgeEngine.wifiDirect?.connect(addr) },
                 )
             }
 
@@ -510,6 +570,12 @@ private fun DiscoveryCard(
     onFind: () -> Unit,
     onConnect: (String, Int) -> Unit,
     onManual: () -> Unit,
+    p2pSupported: Boolean,
+    p2pDiscovering: Boolean,
+    p2pStatus: String?,
+    p2pPeers: List<P2pDevice>,
+    onP2pFind: () -> Unit,
+    onP2pConnect: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Surface(shape = RoundedCornerShape(28.dp), color = cs.surface, border = BorderStroke(1.dp, cs.outline)) {
@@ -568,6 +634,59 @@ private fun DiscoveryCard(
                 }
             }
             TextButton(onClick = onManual) { Text("IP 주소로 직접 연결") }
+
+            if (p2pSupported) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(cs.outline)
+                )
+                Text(
+                    "공유기가 없어도 폰끼리 바로 연결",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Button(
+                    onClick = onP2pFind,
+                    enabled = p2pStatus == null && !p2pDiscovering,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = cs.secondaryContainer,
+                        contentColor = cs.onSecondaryContainer,
+                    ),
+                ) {
+                    when {
+                        p2pStatus == "connecting" -> {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onSecondaryContainer)
+                            Spacer(Modifier.width(10.dp)); Text("연결 중…")
+                        }
+                        p2pDiscovering -> {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onSecondaryContainer)
+                            Spacer(Modifier.width(10.dp)); Text("주변 폰 찾는 중…")
+                        }
+                        else -> Text("Wi-Fi Direct로 연결")
+                    }
+                }
+                p2pPeers.forEach { dev ->
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = cs.surfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onP2pConnect(dev.address) },
+                    ) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(painterResource(R.drawable.ic_device_phone), contentDescription = null, tint = cs.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(dev.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text("연결", style = MaterialTheme.typography.labelLarge, color = cs.primary)
+                        }
+                    }
+                }
+            }
         }
     }
 }
