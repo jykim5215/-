@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스타일 B · 아케이드 스피드런 — 수강신청 연습</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#070b14;color:#dbe4f5;font:14px/1.55 -apple-system,"Pretendard","Segoe UI",sans-serif;
+       background-image:radial-gradient(900px 420px at 50% -10%,rgba(34,211,238,.14),transparent 65%)}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 18px 70px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .logo{font-weight:800;letter-spacing:-.4px;font-size:15px;color:#7dd3fc}
+  .logo span{color:#475569;font-weight:600}
+  .warn{font-size:11.5px;color:#64748b;border:1px solid #1e293b;padding:4px 9px;border-radius:99px}
+  .hero{background:linear-gradient(180deg,#0d1526,#0a1120);border:1px solid #1c2942;border-radius:16px;padding:18px 20px;
+        display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;box-shadow:0 0 0 1px rgba(34,211,238,.06),0 20px 50px -30px #22d3ee}
+  .timer{font:800 62px/1 "SF Mono",Consolas,monospace;color:#22d3ee;text-shadow:0 0 26px rgba(34,211,238,.45);letter-spacing:-2px}
+  .timer small{font-size:26px;opacity:.65}
+  .tl{font-size:11px;letter-spacing:2px;color:#64748b;text-transform:uppercase;margin-bottom:4px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .kpi{background:#0b1322;border:1px solid #1c2942;border-radius:11px;padding:9px 11px}
+  .kpi b{display:block;font-size:22px;font-weight:800;color:#e2e8f0;line-height:1.2}
+  .kpi i{font-style:normal;font-size:10.5px;color:#64748b;letter-spacing:.6px}
+  .kpi.good b{color:#4ade80}.kpi.bad b{color:#fb7185}
+  .prog{height:5px;background:#111c2f;border-radius:99px;overflow:hidden;margin-top:12px}
+  .prog i{display:block;height:100%;width:33%;background:linear-gradient(90deg,#22d3ee,#4ade80)}
+  .grid{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-top:14px}
+  .card{background:#0b1322;border:1px solid #1c2942;border-radius:14px;overflow:hidden}
+  .card h3{margin:0;padding:11px 14px;font-size:12px;letter-spacing:1.4px;color:#64748b;text-transform:uppercase;border-bottom:1px solid #1c2942}
+  .entry{padding:14px}
+  .entry input{width:100%;background:#060b15;border:2px solid #22d3ee;border-radius:10px;color:#22d3ee;
+        font:700 30px/1 "SF Mono",Consolas,monospace;padding:13px 15px;letter-spacing:2px;outline:none;
+        box-shadow:0 0 24px -6px rgba(34,211,238,.5)}
+  .entry .hint{font-size:11.5px;color:#475569;margin-top:8px}
+  .row{display:flex;align-items:center;gap:11px;padding:10px 14px;border-top:1px solid #131f33}
+  .row .cd{font:700 13px "SF Mono",Consolas,monospace;color:#7dd3fc;width:96px;flex:none}
+  .row .nm{flex:1;font-size:13px;color:#cbd5e1}
+  .row .cr{font-size:11px;color:#64748b;width:32px;text-align:right}
+  .go{background:#22d3ee;color:#031018;border:0;border-radius:8px;padding:6px 15px;font-weight:800;font-size:12px;cursor:pointer}
+  .go.ghost{background:#131f33;color:#64748b}
+  .row.done{opacity:.5}.row.done .nm{text-decoration:line-through}
+  .badge{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:99px}
+  .b-ok{background:rgba(74,222,128,.14);color:#4ade80}
+  .b-no{background:rgba(251,113,133,.14);color:#fb7185}
+  .b-wait{background:rgba(250,204,21,.14);color:#facc15}
+  .laps{padding:6px 0}
+  .lap{display:flex;justify-content:space-between;padding:7px 14px;font-size:12px;border-bottom:1px solid #101a2b}
+  .lap b{font-family:"SF Mono",Consolas,monospace;color:#e2e8f0}
+  .lap .best{color:#4ade80}
+  .pv{position:fixed;left:0;right:0;bottom:0;background:#22d3ee;color:#041016;text-align:center;font-size:12px;padding:8px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">REGI<span>·DRILL</span> — 수강신청 스피드런</div>
+    <div class="warn">오프라인 연습 · 실제 서버와 통신하지 않음</div>
+  </div>
+
+  <div class="hero">
+    <div>
+      <div class="tl">Elapsed</div>
+      <div class="timer">07.42<small>s</small></div>
+    </div>
+    <div>
+      <div class="kpis">
+        <div class="kpi good"><b>6</b><i>확보 학점</i></div>
+        <div class="kpi"><b>18</b><i>목표 학점</i></div>
+        <div class="kpi bad"><b>1</b><i>실수</i></div>
+        <div class="kpi"><b>11.8s</b><i>최고 기록</i></div>
+      </div>
+      <div class="prog"><i></i></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>학수번호 입력</h3>
+        <div class="entry">
+          <input value="CSE301-01" autocomplete="off">
+          <div class="hint">Enter 로 신청 · Tab 으로 다음 우선순위 과목 자동 채우기</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>신청 목록 <span style="color:#334155">(매 라운드 순서 무작위)</span></h3>
+        <div class="row done"><span class="cd">CSE301-01</span><span class="nm">운영체제</span><span class="cr">3</span><span class="badge b-ok">성공</span></div>
+        <div class="row done"><span class="cd">MTH201-02</span><span class="nm">공업수학 II</span><span class="cr">3</span><span class="badge b-no">정원초과</span></div>
+        <div class="row"><span class="cd">PHY150-03</span><span class="nm">일반물리학 실험</span><span class="cr">1</span><span class="badge b-wait">처리중</span></div>
+        <div class="row"><span class="cd">HUM110-01</span><span class="nm">과학기술과 사회</span><span class="cr">3</span><button class="go">신청</button></div>
+        <div class="row"><span class="cd">CSE322-02</span><span class="nm">알고리즘 설계</span><span class="cr">3</span><button class="go">신청</button></div>
+        <div class="row"><span class="cd">BIO205-01</span><span class="nm">세포생물학</span><span class="cr">3</span><button class="go ghost">대체</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>랩 타임</h3>
+      <div class="laps">
+        <div class="lap"><span>1 · CSE301-01</span><b class="best">1.34s</b></div>
+        <div class="lap"><span>2 · MTH201-02</span><b>2.07s</b></div>
+        <div class="lap"><span>3 · PHY150-03</span><b>—</b></div>
+        <div class="lap" style="opacity:.4"><span>4 · HUM110-01</span><b>—</b></div>
+        <div class="lap" style="opacity:.4"><span>5 · CSE322-02</span><b>—</b></div>
+        <div class="lap" style="opacity:.4"><span>6 · BIO205-01</span><b>—</b></div>
+      </div>
+      <h3 style="border-top:1px solid #1c2942">로그</h3>
+      <div class="laps" style="font-size:11.5px;color:#64748b;padding:10px 14px;line-height:1.9">
+        05.1s · MTH201-02 정원 초과 → 대체 과목으로<br>
+        03.8s · CSE301-01 신청 성공 (+3학점)<br>
+        01.2s · 조기 클릭 — 아직 열리지 않음
+      </div>
+    </div>
+  </div>
+</div>
+<div class="pv">스타일 B — <b>아케이드 스피드런</b> · 큰 타이머 + 랩타임 + 최고기록. 반복 훈련 동기부여가 가장 큼</div>
+</body>
+</html>

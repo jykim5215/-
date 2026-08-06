@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="수강신청 연습 시뮬레이터">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a5aa8"/>
+      <stop offset="1" stop-color="#0e3c76"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- top button + stem -->
+  <rect x="228" y="60" width="56" height="30" rx="15" fill="#fff"/>
+  <rect x="240" y="86" width="32" height="44" rx="14" fill="#fff"/>
+  <!-- side buttons -->
+  <circle cx="140" cy="176" r="17" fill="#fff"/>
+  <circle cx="372" cy="176" r="17" fill="#fff"/>
+  <!-- stopwatch body -->
+  <circle cx="256" cy="296" r="154" fill="#fff"/>
+  <circle cx="256" cy="296" r="123" fill="#0e3c76"/>
+  <!-- tick marks -->
+  <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="9" stroke-linecap="round">
+    <line x1="256" y1="188" x2="256" y2="212"/>
+    <line x1="256" y1="380" x2="256" y2="404"/>
+    <line x1="148" y1="296" x2="172" y2="296"/>
+    <line x1="340" y1="296" x2="364" y2="296"/>
+    <line x1="333" y1="219" x2="317" y2="235"/>
+    <line x1="179" y1="373" x2="195" y2="357"/>
+    <line x1="179" y1="219" x2="195" y2="235"/>
+    <line x1="333" y1="373" x2="317" y2="357"/>
+  </g>
+  <!-- green check -->
+  <path d="M197 299 L241 342 L326 251" fill="none" stroke="#1b7f3b" stroke-width="30"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

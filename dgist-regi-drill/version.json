@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "released": "2026-08-06",
+  "app_file": "dgist-regi-drill/app.html",
+  "tag_prefix": "drill-v",
+  "changelog": "첫 배포. DGIST 수강신청(sugang.dgist.ac.kr) 흐름을 본뜬 오프라인 연습 시뮬레이터. 과목 목록/우선순위 편집, 카운트다운·서버지연·확인창·보안문자·정원마감·돌발오류 재현, 직접입력/목록클릭/혼합 모드, 가변학점(Capstone) 신청, 소요시간·랩타임·실수 측정과 코칭, 훈련 기록 보관, GitHub 릴리즈 기반 업데이트 확인."
+}

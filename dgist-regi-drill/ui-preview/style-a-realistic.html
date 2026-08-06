@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스타일 A · 실전 클론 — 수강신청 연습</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e8ebef;font:13px/1.5 "맑은 고딕","Malgun Gothic",Dotum,sans-serif;color:#222}
+  .wrap{max-width:940px;margin:0 auto;background:#fff;min-height:100vh;border-left:1px solid #ccd2da;border-right:1px solid #ccd2da}
+  .gnb{background:#0e3c76;color:#fff;padding:0 14px;height:52px;display:flex;align-items:center;justify-content:space-between}
+  .gnb b{font-size:16px;letter-spacing:-.5px}
+  .gnb .who{font-size:12px;opacity:.85}
+  .lnb{background:#1a5aa8;display:flex;gap:1px}
+  .lnb a{color:#dfe9f6;text-decoration:none;padding:9px 16px;font-size:12.5px}
+  .lnb a.on{background:#fff;color:#0e3c76;font-weight:700}
+  .notice{background:#fff8e1;border-bottom:1px solid #e8d9a0;padding:7px 14px;font-size:11.5px;color:#7a5b00}
+  .bar{display:flex;align-items:center;gap:14px;padding:10px 14px;background:#f4f6f9;border-bottom:1px solid #d5dbe3}
+  .clock{font:700 26px/1 Consolas,"D2Coding",monospace;color:#c0272d;letter-spacing:1px}
+  .bar .lbl{font-size:11px;color:#555}
+  .chip{background:#fff;border:1px solid #c8d0da;padding:4px 9px;font-size:11.5px}
+  h2.sec{margin:0;padding:12px 14px 6px;font-size:14px;color:#0e3c76;border-bottom:2px solid #0e3c76}
+  .body{padding:12px 14px 30px}
+  .findbox{border:1px solid #c8d0da;background:#f7f9fb;padding:10px;display:flex;gap:6px;align-items:center;margin-bottom:12px}
+  .findbox label{font-size:12px;color:#333;font-weight:700}
+  .findbox input{border:1px solid #9aa6b4;padding:5px 8px;font:14px Consolas,monospace;width:150px}
+  .btn{background:linear-gradient(#fdfdfd,#e6eaee);border:1px solid #9aa6b4;padding:5px 13px;font-size:12px;cursor:pointer;color:#222}
+  .btn.pri{background:linear-gradient(#3d7fd0,#1a5aa8);border-color:#14468a;color:#fff;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#eef1f5;border:1px solid #d5dbe3;padding:7px 6px;color:#33455c;font-weight:700}
+  td{border:1px solid #d5dbe3;padding:6px;text-align:center}
+  tr:nth-child(even) td{background:#fafbfc}
+  td.l{text-align:left}
+  .code{font-family:Consolas,monospace;color:#0e3c76;font-weight:700}
+  .st-ok{color:#1b7f3b;font-weight:700}
+  .st-no{color:#c0272d;font-weight:700}
+  .log{margin-top:14px;border:1px solid #d5dbe3;background:#fbfcfd}
+  .log h3{margin:0;padding:6px 9px;background:#eef1f5;border-bottom:1px solid #d5dbe3;font-size:12px;color:#33455c}
+  .log ul{margin:0;padding:8px 9px;list-style:none;font-family:Consolas,monospace;font-size:11.5px;color:#444}
+  .log li{padding:2px 0;border-bottom:1px dotted #e2e6eb}
+  .tag{display:inline-block;background:#0e3c76;color:#fff;padding:1px 5px;font-size:10px;margin-right:6px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+  .modal .box{background:#fff;border:2px solid #0e3c76;width:330px}
+  .modal .t{background:#0e3c76;color:#fff;padding:7px 10px;font-size:12.5px;font-weight:700}
+  .modal .c{padding:18px 14px;text-align:center;font-size:13px}
+  .modal .f{padding:0 14px 14px;text-align:center;display:flex;gap:8px;justify-content:center}
+  .pv{position:fixed;left:0;right:0;bottom:0;background:#111;color:#fff;text-align:center;font-size:12px;padding:7px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="gnb"><b>수강신청 연습 시뮬레이터</b><span class="who">연습모드 · 오프라인</span></div>
+  <div class="lnb"><a href="#">준비</a><a href="#" class="on">훈련</a><a href="#">결과</a></div>
+  <div class="notice">※ 이 화면은 오프라인 연습용 모의 화면입니다. 실제 학교 서버와 통신하지 않습니다.</div>
+
+  <div class="bar">
+    <div><div class="lbl">경과</div><div class="clock">00:07.42</div></div>
+    <span class="chip">확보 <b>6</b> / 목표 <b>18</b>학점</span>
+    <span class="chip">실수 <b style="color:#c0272d">1</b></span>
+    <span class="chip">신청 3 / 6</span>
+    <div style="margin-left:auto"><button class="btn">중단</button></div>
+  </div>
+
+  <h2 class="sec">교과목 신청</h2>
+  <div class="body">
+    <div class="findbox">
+      <label for="cd">학수번호</label>
+      <input id="cd" value="CSE301-01" autocomplete="off">
+      <button class="btn pri">신청</button>
+      <span style="font-size:11.5px;color:#777;margin-left:6px">코드를 입력하고 Enter 를 누르세요</span>
+    </div>
+
+    <table>
+      <thead><tr><th style="width:96px">학수번호</th><th>교과목명</th><th style="width:52px">학점</th><th style="width:70px">여석</th><th style="width:88px">상태</th><th style="width:70px">신청</th></tr></thead>
+      <tbody>
+        <tr><td class="code">MTH201-02</td><td class="l">공업수학 II</td><td>3</td><td>0 / 40</td><td class="st-no">정원초과</td><td><button class="btn" disabled>신청</button></td></tr>
+        <tr><td class="code">CSE301-01</td><td class="l">운영체제</td><td>3</td><td>7 / 45</td><td class="st-ok">신청완료</td><td><button class="btn" disabled>완료</button></td></tr>
+        <tr><td class="code">PHY150-03</td><td class="l">일반물리학 실험</td><td>1</td><td>12 / 24</td><td>대기</td><td><button class="btn pri">신청</button></td></tr>
+        <tr><td class="code">HUM110-01</td><td class="l">과학기술과 사회</td><td>3</td><td>3 / 60</td><td>대기</td><td><button class="btn pri">신청</button></td></tr>
+        <tr><td class="code">CSE322-02</td><td class="l">알고리즘 설계</td><td>3</td><td>0 / 40</td><td>대기</td><td><button class="btn pri">신청</button></td></tr>
+        <tr><td class="code">BIO205-01</td><td class="l">세포생물학</td><td>3</td><td>18 / 50</td><td>대기</td><td><button class="btn pri">신청</button></td></tr>
+      </tbody>
+    </table>
+
+    <div class="log">
+      <h3>처리 내역</h3>
+      <ul>
+        <li><span class="tag">07.4s</span> PHY150-03 · 서버 응답 대기 중…</li>
+        <li><span class="tag">05.1s</span> MTH201-02 · <span class="st-no">실패</span> — 수강 정원을 초과하였습니다.</li>
+        <li><span class="tag">03.8s</span> CSE301-01 · <span class="st-ok">성공</span> — 신청되었습니다. (3학점)</li>
+        <li><span class="tag">01.2s</span> 오류 — 아직 신청 시간이 아닙니다. (조기 클릭 1회)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="modal">
+  <div class="box">
+    <div class="t">확인</div>
+    <div class="c"><b>PHY150-03 일반물리학 실험</b><br>해당 교과목을 신청하시겠습니까?</div>
+    <div class="f"><button class="btn pri">확인</button><button class="btn">취소</button></div>
+  </div>
+</div>
+
+<div class="pv">스타일 A — <b>실전 클론</b> · 실제 학사시스템 특유의 관공서풍. 실전 감각(근육기억) 전이가 가장 큼</div>
+</body>
+</html>

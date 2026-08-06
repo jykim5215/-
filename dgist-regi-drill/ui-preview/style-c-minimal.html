@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스타일 C · 미니멀 트레이너 — 수강신청 연습</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#fbfbfa;color:#1c1b19;font:15px/1.6 -apple-system,"Pretendard","Segoe UI",sans-serif}
+  .wrap{max-width:780px;margin:0 auto;padding:34px 26px 80px}
+  header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:30px}
+  header h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.3px}
+  header .sub{font-size:12.5px;color:#8c8880}
+  .timer{text-align:center;padding:6px 0 22px;border-bottom:1px solid #e8e6e1}
+  .timer .n{font:300 76px/1 -apple-system,"Segoe UI",sans-serif;letter-spacing:-4px;font-variant-numeric:tabular-nums}
+  .timer .n small{font-size:26px;font-weight:400;color:#a8a49c;letter-spacing:0}
+  .timer .l{font-size:12px;color:#8c8880;letter-spacing:1.4px;text-transform:uppercase;margin-top:6px}
+  .meta{display:flex;justify-content:center;gap:34px;padding:18px 0 26px;border-bottom:1px solid #e8e6e1}
+  .meta div{text-align:center}
+  .meta b{display:block;font-size:21px;font-weight:600;font-variant-numeric:tabular-nums}
+  .meta span{font-size:11.5px;color:#8c8880}
+  .meta .ok b{color:#1f7a4d}.meta .bad b{color:#b3261e}
+  .field{margin:26px 0 8px}
+  .field label{display:block;font-size:12px;color:#8c8880;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:9px}
+  .field .in{display:flex;gap:10px}
+  .field input{flex:1;border:0;border-bottom:2px solid #1c1b19;background:transparent;font:500 27px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;
+        padding:6px 2px;letter-spacing:1px;outline:none;color:#1c1b19}
+  .field input::placeholder{color:#cfcbc3}
+  .go{border:0;background:#1c1b19;color:#fff;border-radius:9px;padding:0 24px;font-size:14px;font-weight:600;cursor:pointer}
+  .hint{font-size:12.5px;color:#a8a49c;margin-top:8px}
+  h2{font-size:12px;color:#8c8880;letter-spacing:1.2px;text-transform:uppercase;margin:34px 0 4px;font-weight:600}
+  .item{display:flex;align-items:center;gap:14px;padding:13px 2px;border-bottom:1px solid #eeece7}
+  .item .cd{font:600 13.5px ui-monospace,Consolas,monospace;color:#5a5650;width:100px;flex:none}
+  .item .nm{flex:1;font-size:14.5px}
+  .item .cr{font-size:12.5px;color:#a8a49c}
+  .item button{border:1px solid #d5d1c9;background:#fff;border-radius:8px;padding:6px 15px;font-size:13px;cursor:pointer;color:#1c1b19}
+  .item button.p{background:#1c1b19;color:#fff;border-color:#1c1b19}
+  .item.done{color:#b4b0a8}
+  .item.done .nm{text-decoration:line-through}
+  .st{font-size:12px;font-weight:600}
+  .st.ok{color:#1f7a4d}.st.no{color:#b3261e}.st.w{color:#9a6b00}
+  .log{margin-top:8px;font-size:13px;color:#8c8880;line-height:2}
+  .log b{color:#1c1b19;font-weight:600;font-variant-numeric:tabular-nums;font-family:ui-monospace,Consolas,monospace;font-size:12px;margin-right:8px}
+  .note{margin-top:34px;padding:12px 14px;background:#f4f2ed;border-radius:10px;font-size:12.5px;color:#7a766e}
+  .pv{position:fixed;left:0;right:0;bottom:0;background:#1c1b19;color:#fbfbfa;text-align:center;font-size:12px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>수강신청 연습</h1>
+    <div class="sub">오프라인 연습 · 실제 서버와 통신하지 않음</div>
+  </header>
+
+  <div class="timer">
+    <div class="n">07.42<small>s</small></div>
+    <div class="l">경과 시간</div>
+  </div>
+
+  <div class="meta">
+    <div class="ok"><b>6</b><span>확보 학점</span></div>
+    <div><b>18</b><span>목표 학점</span></div>
+    <div><b>3 / 6</b><span>진행</span></div>
+    <div class="bad"><b>1</b><span>실수</span></div>
+    <div><b>11.8s</b><span>최고 기록</span></div>
+  </div>
+
+  <div class="field">
+    <label for="c">학수번호</label>
+    <div class="in">
+      <input id="c" value="CSE301-01" autocomplete="off">
+      <button class="go">신청</button>
+    </div>
+    <div class="hint">Enter 로 신청 · Tab 으로 다음 우선순위 과목 자동 채우기</div>
+  </div>
+
+  <h2>신청 목록</h2>
+  <div class="item done"><span class="cd">CSE301-01</span><span class="nm">운영체제</span><span class="cr">3학점</span><span class="st ok">성공</span></div>
+  <div class="item done"><span class="cd">MTH201-02</span><span class="nm">공업수학 II</span><span class="cr">3학점</span><span class="st no">정원초과</span></div>
+  <div class="item"><span class="cd">PHY150-03</span><span class="nm">일반물리학 실험</span><span class="cr">1학점</span><span class="st w">처리중…</span></div>
+  <div class="item"><span class="cd">HUM110-01</span><span class="nm">과학기술과 사회</span><span class="cr">3학점</span><button class="p">신청</button></div>
+  <div class="item"><span class="cd">CSE322-02</span><span class="nm">알고리즘 설계</span><span class="cr">3학점</span><button class="p">신청</button></div>
+  <div class="item"><span class="cd">BIO205-01</span><span class="nm">세포생물학</span><span class="cr">3학점</span><button>대체</button></div>
+
+  <h2>처리 내역</h2>
+  <div class="log">
+    <div><b>05.1s</b>MTH201-02 정원 초과 — 대체 과목으로 전환</div>
+    <div><b>03.8s</b>CSE301-01 신청 성공 (+3학점)</div>
+    <div><b>01.2s</b>조기 클릭 — 아직 신청 시간이 아닙니다</div>
+  </div>
+
+  <div class="note">연습 목적의 모의 화면입니다. 학교 시스템에 어떤 요청도 보내지 않으며, 입력한 과목 코드는 이 기기에만 저장됩니다.</div>
+</div>
+<div class="pv">스타일 C — <b>미니멀 트레이너</b> · 여백과 큰 타이포. 정보 파악 속도와 눈의 피로도가 가장 좋음</div>
+</body>
+</html>
