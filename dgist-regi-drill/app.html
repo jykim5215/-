@@ -139,6 +139,21 @@
   .chlog{background:#f7f9fb;border:1px solid #d5dbe3;padding:9px;font-size:12px;white-space:pre-wrap;word-break:break-word;
          max-height:210px;overflow-y:auto;text-align:left;font-family:inherit}
 
+  /* ── 모의 로그인 오버레이 ─────────────────────── */
+  .login-ov{position:fixed;inset:0;background:#1a3a63;background-image:linear-gradient(160deg,#1a5aa8,#0e3c76);
+            display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+  .login-card{background:#fff;width:100%;max-width:360px;border-radius:4px;box-shadow:0 18px 50px -18px rgba(0,0,0,.55);overflow:hidden}
+  .login-head{background:#0e3c76;color:#fff;padding:13px 15px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .login-logo{background:#fff;color:#0e3c76;font-weight:800;font-size:12px;padding:2px 6px;border-radius:2px;letter-spacing:.5px}
+  .login-mock{margin-left:auto;font-size:10.5px;font-weight:400;background:#c0272d;padding:2px 7px;border-radius:99px}
+  .login-body{padding:18px 18px 16px}
+  .login-guide{margin:0 0 14px;font-size:11.5px;color:#66707d;line-height:1.5}
+  .login-body label{display:block;font-size:12px;color:#33455c;font-weight:700;margin:0 0 5px}
+  .login-body input{width:100%;border:1px solid #9aa6b4;padding:9px 10px;font:14px inherit;border-radius:2px;margin-bottom:12px}
+  .login-body input:focus{outline:2px solid #7fb0e8;outline-offset:-1px}
+  .login-body .btn.pri{width:100%;padding:10px;font-size:14px}
+  .login-note{margin:12px 0 0;font-size:10.5px;color:#a5642a;background:#fff6e9;border:1px solid #f0d9b5;padding:7px 9px;border-radius:2px;line-height:1.5}
+
   footer{padding:12px 14px 22px;border-top:1px solid #e2e6eb;font-size:11.5px;color:#8a919b;
          display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
   footer a{color:#1a5aa8}
@@ -163,20 +178,21 @@
     <button type="button" data-nav="result" disabled>③ 결과</button>
   </nav>
   <div class="notice">
-    ※ 이 프로그램은 DGIST 수강신청(sugang.dgist.ac.kr)의 진행 흐름을 본떠 만든 <b>오프라인 연습용 모의 화면</b>입니다.
-    학교 서버를 포함한 어떤 외부 시스템에도 신청 요청을 보내지 않고, 실제 수강신청을 대신 수행하지 않으며, 학번·비밀번호를 받지 않습니다.
-    입력한 과목 정보는 이 기기에만 저장됩니다. <b>실전에서는</b> 네이비즘·포이타임 등으로 <b>서버 시각</b>에 맞춰 정각에 신청하세요.
+    ※ 이 프로그램은 DGIST 수강신청(sugang.dgist.ac.kr)의 진행 흐름 <b>[로그인 → 장바구니 → 정각 오픈 → 신청 → 신청내역]</b>을
+    본떠 만든 <b>오프라인 연습용 모의 화면</b>입니다. 학교 서버를 포함한 어떤 외부 시스템에도 요청을 보내지 않고, 실제 수강신청을
+    대신 수행하지 않으며, 학번·비밀번호를 받지 않습니다. 입력한 과목 정보는 이 기기에만 저장됩니다.
+    <b>실전에서는</b> 네이비즘·포이타임 등으로 <b>서버 시각</b>에 맞춰 정각에 신청하세요.
   </div>
 
   <!-- ════════════ ① 준비 ════════════ -->
   <section id="scr-prep">
-    <h2 class="sec">훈련 준비 <span class="sub">노리는 과목을 넣고 난이도를 고른 뒤 시작하세요</span></h2>
+    <h2 class="sec">훈련 준비 <span class="sub">장바구니에 노리는 과목을 넣고, 난이도를 고른 뒤 시작하세요</span></h2>
     <div class="body">
       <div class="cols">
         <div>
           <div class="panel">
             <h3>
-              <span>신청 목록 <span class="muted" id="courseSum"></span></span>
+              <span>장바구니 · 수강신청 목록 <span class="muted" id="courseSum"></span></span>
               <span>
                 <button type="button" class="btn xs" id="btnAdd">+ 과목 추가</button>
                 <button type="button" class="btn xs" id="btnSample">예시 불러오기</button>
@@ -234,6 +250,7 @@
               <div class="frow"><span>보안문자(캡차)</span><label class="ck"><input type="checkbox" id="cfgCaptcha"> 사용</label></div>
               <div class="frow"><span>오픈 시각 오차</span><label class="ck"><input type="checkbox" id="cfgDrift"> ±0.8초</label></div>
               <div class="frow"><span>돌발 오류</span><label class="ck"><input type="checkbox" id="cfgChaos"> 가끔 발생</label></div>
+              <div class="frow"><span>로그인 단계</span><label class="ck"><input type="checkbox" id="cfgLogin"> 포함(모의)</label></div>
             </div>
           </div>
 
@@ -261,6 +278,24 @@
 
   <!-- ════════════ ② 훈련 ════════════ -->
   <section id="scr-drill" class="hide">
+    <!-- 모의 로그인 오버레이 (sugang.dgist.ac.kr 로그인 흐름 재현 · 실제 인증 아님 · 저장 안 함) -->
+    <div id="loginOverlay" class="login-ov hide">
+      <div class="login-card">
+        <div class="login-head">
+          <span class="login-logo">DGIST</span> 수강신청 시스템
+          <span class="login-mock">모의 · 연습용</span>
+        </div>
+        <div class="login-body">
+          <p class="login-guide">학생포털 아이디로 로그인 후 수강신청을 진행합니다. (sugang.dgist.ac.kr)</p>
+          <label for="loginId">학번</label>
+          <input type="text" id="loginId" autocomplete="off" inputmode="numeric" placeholder="예: 20230000">
+          <label for="loginPw">비밀번호</label>
+          <input type="password" id="loginPw" autocomplete="off" placeholder="비밀번호">
+          <button type="button" class="btn pri" id="btnLogin">로그인</button>
+          <p class="login-note">⚠️ 연습용 모의 화면입니다. 입력값은 전송·저장되지 않으며 아무 값이나(빈 값도) 로그인됩니다. 실제 학번·비밀번호를 넣지 마세요.</p>
+        </div>
+      </div>
+    </div>
     <div class="bar">
       <div>
         <div class="lbl" id="clockLbl">신청 시작까지</div>
@@ -276,7 +311,7 @@
     <div class="body">
       <div class="findbox" id="findbox">
         <label for="codeInput">학수번호</label>
-        <input type="text" id="codeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="예: CSE301-01">
+        <input type="text" id="codeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="예: PHY102-01">
         <button type="button" class="btn pri" id="btnSubmitCode">신청</button>
         <span class="hint">Enter 로 신청 · ↑ ↓ 로 남은 과목 코드 자동 채우기</span>
       </div>
@@ -356,7 +391,7 @@
   /* ══════════════════════════════════════════════════════════
      0. 상수 / 설정
      ══════════════════════════════════════════════════════════ */
-  var APP_VERSION = "1.0.0";
+  var APP_VERSION = "1.1.0";
   var REPO_OWNER  = "jykim5215";
   var REPO_NAME   = "-";
   var TAG_PREFIX  = "drill-v";                       // 저장소 내 다른 앱과 태그 충돌 방지
@@ -455,7 +490,7 @@
       preset: "normal", mode: "mixed", target: 18,
       countdown: p.countdown, latMin: p.latMin, latMax: p.latMax,
       confirm: p.confirm, captcha: p.captcha, drift: p.drift, chaos: p.chaos,
-      autoUpdate: true
+      login: true, autoUpdate: true
     };
   }
 
@@ -599,6 +634,7 @@
     $("cfgCaptcha").checked = !!config.captcha;
     $("cfgDrift").checked = !!config.drift;
     $("cfgChaos").checked = !!config.chaos;
+    $("cfgLogin").checked = !!config.login;
     $("cfgAutoUpd").checked = !!config.autoUpdate;
     Array.prototype.forEach.call(document.querySelectorAll("#presets button"), function (b) {
       b.classList.toggle("on", b.dataset.preset === config.preset);
@@ -617,7 +653,7 @@
       if (key === "latMax") config.latMax = clamp(config.latMax, 0, 4000);
       if (config.latMax < config.latMin) config.latMax = config.latMin;
       if (key === "target") config.target = clamp(config.target, 1, 30);
-      if (key !== "autoUpdate") { config.preset = "custom"; }
+      if (key !== "autoUpdate" && key !== "login") { config.preset = "custom"; }
       saveConfig(); renderConfig();
     });
   }
@@ -630,7 +666,13 @@
   bindCfg("cfgCaptcha", "captcha", "bool");
   bindCfg("cfgDrift", "drift", "bool");
   bindCfg("cfgChaos", "chaos", "bool");
+  bindCfg("cfgLogin", "login", "bool");
   bindCfg("cfgAutoUpd", "autoUpdate", "bool");
+
+  // 모의 로그인 버튼/키 (학번·비밀번호는 저장하지 않음)
+  $("btnLogin").addEventListener("click", function () { doLogin(); });
+  $("loginId").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("loginPw").focus(); } });
+  $("loginPw").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doLogin(); } });
 
   // ── 기록 요약 ──
   function renderHistorySummary() {
@@ -661,7 +703,8 @@
     var driftMs = config.drift ? rand(-800, 800) : 0;
     run = {
       startedAt: Date.now(),
-      t0: performance.now() + config.countdown * 1000 + driftMs, // 신청이 실제로 열리는 시각
+      t0: 0, driftMs: driftMs,        // t0(신청이 열리는 시각)는 beginCountdown에서 설정
+      started: false,
       open: false, ended: false, busy: false,
       mistakes: 0, credits: 0, lastLapAt: 0,
       laps: [], logs: [],
@@ -688,12 +731,48 @@
     setAlert("", "none");
     $("logList").innerHTML = '<li class="muted">아직 처리된 내역이 없습니다.</li>';
     $("codeInput").value = "";
+    $("clock").textContent = fmtClock(config.countdown * 1000);
+    $("clock").classList.add("wait");
     navEnabled("drill", true);
     show("drill");
     renderDrill();
     updateHud();
+    // 실제 DGIST 흐름: 먼저 로그인(sugang.dgist.ac.kr) → 대기 → 정각 오픈. 로그인 단계는 시간 측정 전(준비).
+    if (run.cfg.login) { showLogin(); }
+    else { beginCountdown(); }
+  }
+
+  function showLogin() {
+    var ov = $("loginOverlay");
+    if (!ov) { beginCountdown(); return; }
+    $("clockLbl").textContent = "로그인 후 대기";
+    ov.classList.remove("hide");
+    var id = $("loginId"), pw = $("loginPw");
+    if (id) id.value = "";
+    if (pw) pw.value = "";
+    setTimeout(function () { if (id) id.focus(); }, 30);
+  }
+
+  function doLogin() {
+    // 모의 로그인: 학번/비밀번호는 전송·저장하지 않는다. 아무 값이나(빈 값 포함) 통과.
+    var ov = $("loginOverlay");
+    if (ov) ov.classList.add("hide");
+    var id = $("loginId"), pw = $("loginPw");
+    if (id) id.value = "";
+    if (pw) pw.value = "";
+    beginCountdown();
+  }
+
+  function beginCountdown() {
+    if (!run || run.started) return;
+    run.started = true;
+    run.startedAt = Date.now();        // 로그인 이후, 실제 카운트다운이 시작된 시각
+    run.lastLapAt = 0;
+    run.t0 = performance.now() + run.cfg.countdown * 1000 + run.driftMs;
+    $("clockLbl").textContent = "신청 시작까지";
+    $("clock").classList.add("wait");
     tick();
-    if (config.mode !== "click") setTimeout(function () { $("codeInput").focus(); }, 30);
+    if (run.cfg.mode !== "click") setTimeout(function () { var el = $("codeInput"); if (el) el.focus(); }, 30);
   }
 
   function elapsed() { return performance.now() - run.t0; }         // 오픈 이후 경과(ms), 음수면 대기 중
@@ -930,6 +1009,7 @@
     run.ended = true;
     if (rafId) cancelAnimationFrame(rafId);
     run = null;
+    var ov = $("loginOverlay"); if (ov) ov.classList.add("hide");
     navEnabled("drill", false);
     show("prep");
   }

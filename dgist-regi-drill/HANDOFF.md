@@ -241,7 +241,17 @@ Run     { startedAt, totalMs, laps:[{courseId, ms, result}], mistakes, credits, 
 
 ## 8. 현재 상태
 
-- **2026-08-06 / v1.0.0 (구현 완료, 브라우저 검증 완료, 릴리즈 전)**
+- **2026-08-06 / v1.1.0 — 실제 DGIST 흐름 반영 추가 (구현·브라우저 검증 완료, 릴리즈 전)**
+  - 추가: **모의 로그인 단계**(`#loginOverlay`, sugang.dgist.ac.kr 스타일, 학번/비밀번호, **저장·전송 안 함**,
+    설정 `cfgLogin`으로 on/off, 기본 on). 로그인은 시간 측정 전 준비 단계(`showLogin`→`doLogin`→`beginCountdown`).
+  - 실제 용어 반영: **장바구니**(준비 화면 과목 목록), **신청내역**(훈련 표의 신청완료 = 신청내역, 중복 패널 없음),
+    상단 흐름 배너 [로그인 → 장바구니 → 정각 오픈 → 신청 → 신청내역].
+  - 근거: 검색으로 확인된 실제 구조(예비수강신청·장바구니·신청내역 정정, my.dgist.ac.kr 수강포기).
+    이 세션의 네트워크 정책이 dgist.ac.kr·미러 사이트 접근을 403으로 차단해 **라이브 스크래핑은 불가**했고,
+    로그인 뒤 화면은 인증 필요 → 봇 차단/인증 우회 없이 공개 정보로만 반영함.
+  - 스모크 재검증: 로그인 on 전체 흐름, 로그인 off 즉시 카운트다운, **자격증명 localStorage 미유출**,
+    확인+캡차+가변학점 모달 체인, 업데이트 버전비교/XSS 이스케이프, 오프라인 정상 동작 — 모두 통과.
+- **이전: 2026-08-06 / v1.0.0 (구현 완료, 브라우저 검증 완료, 릴리즈 전)**
   - [x] `HANDOFF.md` 작성
   - [x] UI 스타일 후보 3종 → **사용자가 A(실전 클론) 선택**
   - [x] `app.html` 구현 (준비/훈련/결과 3화면, 엔진, 모달, 업데이트 모듈)
@@ -253,9 +263,10 @@ Run     { startedAt, totalMs, laps:[{courseId, ms, result}], mistakes, credits, 
          네트워크 차단 시 앱 정상 동작)
   - [ ] 배포 zip(`dist/`) 생성
   - [ ] 커밋/푸시 · GitHub Release (사용자 확인 후)
-- **GitHub에 올린 마지막 버전**: 아직 없음 (최초 릴리즈 대기 — 사용자 승인 후 `drill-v1.0.0` 태그로 게시 예정)
+- **GitHub에 올린 마지막 버전**: 코드 커밋은 `claude/digest-course-registration-macro-i9o2bz` 브랜치에 푸시됨.
+  **Release/태그는 아직 없음**(비가역 작업이라 사용자 승인 대기) — 승인 시 `drill-v1.1.0` 태그로 게시 예정.
 - **앱 내 업데이트 확인 기능**: **구현 완료.** `checkUpdate(silent)`가 releases API를 호출해 `drill-v*`
-  태그 중 최신 semver를 골라 `APP_VERSION`(현재 1.0.0)과 비교. 새 버전이면 changelog를 textContent로
+  태그 중 최신 semver를 골라 `APP_VERSION`(현재 1.1.0)과 비교. 새 버전이면 changelog를 textContent로
   안전하게 표시하고, 승인 시 raw에서 `app.html`을 받아 다운로드. 실패는 조용히 무시(앱 사용 유지).
   자격증명 하드코딩 없음.
 
