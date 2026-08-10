@@ -62,6 +62,26 @@ GitHub Actions(`.github/workflows/release.yml`)가 `version.json` 변경 시 APK
 이 저장소에는 다른 프로젝트의 릴리즈도 함께 있어서, `releases/latest` 를 그대로 쓰면
 엉뚱한 앱의 APK 를 업데이트로 착각할 수 있기 때문이다.
 
+## Google Play 출시
+
+Play 에는 **`play` 플레이버 번들**을 올린다. Play 정책상 앱이 스스로 APK 를 받아
+설치할 수 없어서, 자체 업데이트 기능과 `REQUEST_INSTALL_PACKAGES` 권한을 뺀 빌드다.
+
+```bash
+VOCA_KEYSTORE=~/vocacard-release.jks VOCA_KEYSTORE_PASSWORD=... \
+VOCA_KEY_ALIAS=vocacard VOCA_KEY_PASSWORD=... scripts/build-bundle.sh
+```
+
+| 문서 | 내용 |
+|---|---|
+| `docs/play/RELEASE_CHECKLIST.md` | 출시 전후 확인 항목(코드로 끝난 것 / 사람이 할 것 구분) |
+| `docs/play/PRIVACY.md` | 개인정보 처리방침 본문(공개 URL 필요) |
+| `docs/play/DATA_SAFETY.md` | 데이터 보안 양식 답안과 근거 |
+| `docs/play/LISTING.md` | 앱 이름·설명 문안, 스크린샷 목록 |
+
+그래픽 자산은 `python3 tools/make_store_assets.py` 로 다시 만들 수 있다.
+스크린샷은 실제 기기에서 `scripts/capture-screenshots.sh` 로 찍는다.
+
 ## 설치 / 바로가기
 
 ```bash

@@ -41,6 +41,33 @@ android {
     }
 
     /*
+     * 배포 채널별 빌드.
+     *
+     * Google Play 는 **앱이 스스로 APK 를 내려받아 설치하는 것을 금지**한다
+     * (Device and Network Abuse 정책). REQUEST_INSTALL_PACKAGES 권한도 앱스토어류가
+     * 아니면 승인되지 않는다. 그래서 자체 업데이트 기능은 github 배포판에만 넣고,
+     * play 배포판에서는 권한과 기능을 통째로 뺀다.
+     */
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SELF_UPDATE", "true")
+        }
+        create("play") {
+            dimension = "distribution"
+            // Play 는 스토어가 업데이트를 책임진다.
+            buildConfigField("boolean", "SELF_UPDATE", "false")
+        }
+    }
+
+    bundle {
+        // 언어 분할을 끄면 기기 언어와 무관하게 한국어 리소스가 항상 포함된다.
+        // 문자열이 작아 크기 이득이 미미한 반면, 언어 변경 시 문구가 비는 사고를 막아 준다.
+        language { enableSplit = false }
+    }
+
+    /*
      * 서명 정보는 **저장소에 두지 않는다.**
      * keystore 경로/비밀번호는 Gradle 프로퍼티(-P) 또는 환경 변수로만 주입하며,
      * 없으면 서명되지 않은 릴리즈로 빌드된다(로컬 개발용).

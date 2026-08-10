@@ -8,6 +8,8 @@ android/captures/
 *.apk
 *.aab
 dist/*.zip
+# 스크린샷은 개인 기기 화면이므로 커밋하지 않는다
+play-assets/screenshots/
 
 # 서명 키·비밀 정보는 절대 커밋하지 않는다
 *.jks

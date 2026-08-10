@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Google Play 배포판.
+
+  자체 업데이트(앱이 APK 를 내려받아 설치)는 Play 정책상 금지이고
+  REQUEST_INSTALL_PACKAGES 권한도 앱스토어류가 아니면 승인되지 않는다.
+  그래서 main 매니페스트에 선언된 이 권한을 여기서 제거한다.
+  기능 자체는 BuildConfig.SELF_UPDATE=false 로 UI 에서도 사라진다.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+</manifest>

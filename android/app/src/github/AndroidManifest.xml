@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GitHub 릴리즈 배포판 — main 매니페스트를 그대로 쓴다.
+  (REQUEST_INSTALL_PACKAGES 유지: 앱 안에서 새 APK 를 받아 설치한다)
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

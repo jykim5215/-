@@ -169,7 +169,7 @@
 ## 6. 현재 상태
 
 - **최종 갱신**: 2026-08-02
-- **단계**: **v1.3.0 구현 완료 (CI 검증 중) / v1.2.0 까지 릴리즈 게시됨**
+- **단계**: **v1.3.0 릴리즈 게시됨 / Play 출시 준비 완료(업로드는 사람이 해야 함)**
   (릴리즈: https://github.com/jykim5215/-/releases/tag/vocacard-v1.1.0 — APK 12.3MB)
 
 ### 확정된 사용자 선택
@@ -211,6 +211,19 @@
 - 업데이트: `update/UpdateChecker.kt` — GitHub 공개 릴리즈 API, 호스트 화이트리스트, FileProvider 설치
 - 배포: `scripts/build.sh`, `scripts/package.sh`(자격증명 혼입 검사), `scripts/install.sh`,
   `.github/workflows/release.yml`(version.json 변경 시 APK 빌드 → `v<version>` 릴리즈 게시)
+
+### Google Play 출시 (v1.4.0 준비)
+- **배포 채널을 플레이버로 분리했다.** `github`(자체 업데이트 있음) / `play`(없음).
+  Play 는 앱이 스스로 APK 를 받아 설치하는 것을 금지하고(Device and Network Abuse),
+  `REQUEST_INSTALL_PACKAGES` 도 앱스토어류가 아니면 승인되지 않는다.
+  play 매니페스트에서 `tools:node="remove"` 로 권한을 빼고 `BuildConfig.SELF_UPDATE=false`
+  로 UI 도 감춘다. Play 업로드는 **반드시 `bundlePlayRelease`**.
+- 문서: `docs/play/` — RELEASE_CHECKLIST / PRIVACY / DATA_SAFETY / LISTING.
+  **데이터 보안 양식은 "수집 없음" 이 아니다** — 사전 조회 때 입력 단어가
+  dictionaryapi.dev 로 전송되므로 "공유: 예(일시적 처리, 선택 사항)" 로 답해야 한다.
+- 자산: `tools/make_store_assets.py` → 512 아이콘 + 1024×500 피처 그래픽(알파 없음).
+  스크린샷은 **실기 캡처만 허용**(합성 금지) → `scripts/capture-screenshots.sh`.
+- 빌드: `scripts/build-bundle.sh`, CI 도 APK(github) + AAB(play) 둘 다 낸다.
 
 ### 알려진 제약 / 다음 할 일
 1. **기기에서 실행해 본 적은 없다.** CI 빌드(컴파일·KSP·lint·패키징·서명)는 전부 통과했지만,

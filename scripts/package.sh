@@ -23,9 +23,16 @@ mkdir -p "$PKG"
 
 cp HANDOFF.md version.json README.md "$PKG/" 2>/dev/null || true
 mkdir -p "$PKG/tools" "$PKG/design" "$PKG/scripts"
-cp tools/build_wordbank.py "$PKG/tools/"
+cp tools/build_wordbank.py tools/make_store_assets.py "$PKG/tools/"
 cp design/index.html "$PKG/design/"
 cp scripts/*.sh "$PKG/scripts/"
+
+# Play 출시 문서와 그래픽 자산도 함께 넣는다(스크린샷은 실기 캡처라 제외).
+if [ -d docs/play ]; then mkdir -p "$PKG/docs" && cp -r docs/play "$PKG/docs/"; fi
+if [ -d play-assets ]; then
+  mkdir -p "$PKG/play-assets"
+  cp play-assets/*.png "$PKG/play-assets/" 2>/dev/null || true
+fi
 
 # 소스 복사 — 빌드 산출물과 비밀 정보가 될 수 있는 파일은 제외
 rsync -a --quiet \

@@ -100,7 +100,7 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           # stdin 을 닫아 어떤 대화형 프롬프트에도 멈추지 않게 한다.
-          ./gradlew --no-daemon assembleRelease < /dev/null 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+          ./gradlew --no-daemon assembleGithubRelease bundlePlayRelease < /dev/null 2>&1 | tee "$RUNNER_TEMP/gradle.log"
 
       # 실패 시 Gradle 스택트레이스에 묻히는 컴파일 오류만 뽑아 로그 끝에 다시 찍는다.
       - name: Surface build failure
@@ -113,13 +113,19 @@ jobs:
           grep -vE "^[[:space:]]+at |^[[:space:]]*\.\.\. [0-9]+ more" \
             "$RUNNER_TEMP/gradle.log" | tail -60 || true
 
-      - name: Rename artifact
+      - name: Rename artifacts
         id: apk
         run: |
-          SRC=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          SRC=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
           DEST="VocaCard-${{ steps.version.outputs.version }}.apk"
           cp "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          # Play 업로드용 번들도 함께 낸다(자체 업데이트 없는 play 플레이버).
+          AAB=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
+          if [ -n "$AAB" ]; then
+            cp "$AAB" "VocaCard-${{ steps.version.outputs.version }}.aab"
+            echo "aab=VocaCard-${{ steps.version.outputs.version }}.aab" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Package distribution zip
         run: |
@@ -130,6 +136,7 @@ jobs:
           name: VocaCard-${{ steps.version.outputs.version }}
           path: |
             ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.aab }}
             dist/*.zip
 
       # 앱의 "업데이트 확인" 기능은 releases/latest 를 읽으므로,
@@ -149,5 +156,6 @@ jobs:
             ${{ steps.sign.outputs.persistent == 'false' && '⚠️ 이 빌드는 임시 키로 서명되었습니다. 이전 버전 위에 덮어 설치하려면 저장소 시크릿에 고정 keystore(VOCA_KEYSTORE_BASE64)를 등록하세요.' || '' }}
           files: |
             ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.aab }}
             version.json
             dist/*.zip

@@ -99,7 +99,8 @@ fun SettingsScreen(
     // 앱 실행 후 설정에 들어왔을 때 자동 확인(하루 1회). 실패해도 조용히 넘어간다.
     LaunchedEffect(settings.autoCheckUpdate) {
         val aDay = 24 * 60 * 60 * 1000L
-        if (settings.autoCheckUpdate &&
+        if (BuildConfig.SELF_UPDATE &&
+            settings.autoCheckUpdate &&
             System.currentTimeMillis() - settings.lastUpdateCheck > aDay
         ) check(silent = true)
     }
@@ -170,6 +171,8 @@ fun SettingsScreen(
                 }
             }
 
+            // Play 배포판에는 자체 업데이트가 없다(스토어가 갱신을 책임진다).
+            if (BuildConfig.SELF_UPDATE) {
             item { SectionHeader("업데이트") }
             item {
                 PaperCard(Modifier.fillMaxWidth()) {
@@ -312,6 +315,27 @@ fun SettingsScreen(
                         description = "하루에 한 번만 확인하며, 실패해도 앱 사용에는 영향이 없어요.",
                         checked = settings.autoCheckUpdate,
                     ) { scope.launch { container.settings.setAutoCheckUpdate(it) } }
+                }
+            }
+            } // BuildConfig.SELF_UPDATE
+
+            // Play 배포판에서는 버전만 조용히 보여 준다.
+            if (!BuildConfig.SELF_UPDATE) {
+                item {
+                    PaperCard(Modifier.fillMaxWidth()) {
+                        Column {
+                            Text(
+                                "버전 ${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = voca.ink,
+                            )
+                            Text(
+                                "업데이트는 Google Play 에서 받습니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = voca.inkSoft,
+                            )
+                        }
+                    }
                 }
             }
 
