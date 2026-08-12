@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>내 물가 (My CPI)</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>내 물가 <span class="en">My CPI</span></h1>
+  <div class="ver" id="ver"></div>
+</header>
+
+<!-- 상시 노출: 이건 공식 물가가 아니다 -->
+<div class="disclaimer">
+  <span aria-hidden="true">⚠️</span>
+  <div>
+    <b>공식 물가가 아닙니다.</b>
+    국가데이터처가 공표한 공식 지수를 사용자 가중치로 다시 가중한 <b>참고값</b>입니다.
+    품목별 지수는 공식 값을 그대로 쓰고 가중치만 교체합니다.
+  </div>
+</div>
+
+<!-- ① 내 물가 --------------------------------------------------------------- -->
+<section id="s1">
+  <div class="head">
+    <h2>내 물가</h2>
+    <span class="idx">①</span>
+  </div>
+  <p class="sub">전년 동월 대비 상승률</p>
+  <div id="s1body"><div class="loading">불러오는 중…</div></div>
+</section>
+
+<!-- ② 왜 -------------------------------------------------------------------- -->
+<section id="s2">
+  <div class="head">
+    <h2>왜 — 분류별 기여도</h2>
+    <span class="idx">②</span>
+  </div>
+  <p class="sub">
+    공식 물가와의 격차(%p)를 분류별로 나눈 것입니다. 막대를 모두 더하면 격차와 정확히 같습니다.
+    내 물가를 <b>낮춘</b> 항목도 함께 표시합니다.
+  </p>
+  <div id="s2body"><div class="loading">불러오는 중…</div></div>
+</section>
+
+<!-- ③ 궤적 ------------------------------------------------------------------ -->
+<section id="s3">
+  <div class="head">
+    <h2>궤적 — 최근 24개월</h2>
+    <span class="idx">③</span>
+  </div>
+  <p class="sub">공식 소비자물가지수 상승률과 내 물가 상승률의 시계열입니다.</p>
+  <div id="s3body"><div class="loading">불러오는 중…</div></div>
+</section>
+
+<!-- ④ 장바구니 -------------------------------------------------------------- -->
+<section id="s4">
+  <div class="head">
+    <h2>장바구니 — 내 가중치 상위 품목</h2>
+    <span class="idx">④</span>
+  </div>
+  <p class="sub">비중이 큰 분류의 최근 가격입니다. 별도 인증키가 필요합니다.</p>
+  <div id="s4body"><div class="loading">불러오는 중…</div></div>
+</section>
+
+<!-- 가중치 입력 -------------------------------------------------------------- -->
+<section id="input">
+  <div class="head">
+    <h2>내 가중치 정하기</h2>
+  </div>
+  <p class="sub">
+    가중치만 바꾸면 됩니다. 품목별 지수는 공식 값을 그대로 씁니다.
+  </p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-level="L0">L0 · 30초 설문</button>
+    <button class="tab" role="tab" aria-selected="false" data-level="L1">L1 · 직접 조정</button>
+    <button class="tab" role="tab" aria-selected="false" data-level="L2">L2 · 카드내역 업로드</button>
+  </div>
+
+  <!-- L0 -->
+  <div id="L0" class="panel">
+    <p class="sub">네 가지만 고르면 결과가 나옵니다. 가입도 업로드도 필요 없습니다.</p>
+    <div class="fields">
+      <div>
+        <label class="f" for="hh">가구원 수</label>
+        <select id="hh">
+          <option value="1">1인</option><option value="2">2인</option>
+          <option value="3" selected>3인</option><option value="4">4인</option>
+          <option value="5">5인 이상</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="dec">소득분위</label>
+        <select id="dec">
+          <option value="1">1분위 (하위 10%)</option><option value="2">2분위</option>
+          <option value="3">3분위</option><option value="4">4분위</option>
+          <option value="5" selected>5분위 (중간)</option><option value="6">6분위</option>
+          <option value="7">7분위</option><option value="8">8분위</option>
+          <option value="9">9분위</option><option value="10">10분위 (상위 10%)</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="house">주거형태</label>
+        <select id="house">
+          <option value="own">자가</option>
+          <option value="jeonse" selected>전세</option>
+          <option value="monthly">월세</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="car">자차</label>
+        <select id="car"><option value="1">있음</option><option value="0" selected>없음</option></select>
+      </div>
+    </div>
+    <button class="primary" id="applySeg">이 조건으로 계산</button>
+    <div id="segMsg"></div>
+  </div>
+
+  <!-- L1 -->
+  <div id="L1" class="panel hidden">
+    <p class="sub">
+      12대 분류를 직접 조정합니다. 합계는 자동으로 1,000으로 정규화되고, 결과와 기여도가 즉시 갱신됩니다.
+    </p>
+    <div id="sliders"></div>
+    <div class="total-line">
+      <span>합계 <span class="num" id="sliderTotal">1,000.0</span> → 1,000으로 정규화</span>
+      <button class="toggle" id="resetW">공식 가중치로 되돌리기</button>
+    </div>
+  </div>
+
+  <!-- L2 -->
+  <div id="L2" class="panel hidden">
+    <div class="privacy">
+      <b>파일은 서버로 전송되지 않습니다.</b>
+      카드 이용내역은 이 브라우저 안에서만 열리고 분석됩니다. 서버로 보내는 것은
+      집계된 <b>12개 분류 가중치 숫자뿐</b>이며, 가맹점명·결제일자·금액은 전송되지 않습니다.
+    </div>
+    <p class="sub">
+      신한·KB·삼성·롯데 카드의 이용내역 엑셀(가맹점명·업종·금액·일자 포함)을 지원합니다.
+      카드 승인은 가맹점 단위라 <b>12대 분류까지만 자동</b>으로 나눕니다. 458개 품목 단위로는 쪼갤 수 없습니다.
+    </p>
+    <input type="file" id="xls" accept=".xlsx,.xls,.csv">
+    <div id="l2out"></div>
+  </div>
+</section>
+
+<footer>
+  <div id="limits"></div>
+  <div style="margin-top:10px">
+    산식: 라스파이레스 가중산술평균 · P<sub>t</sub> = Σ(v<sub>i</sub>×I<sub>i,t</sub>) / Σv<sub>i</sub> ·
+    상승률 = (P<sub>t</sub> / P<sub>t-12</sub> − 1) × 100
+  </div>
+</footer>
+
+</div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
