@@ -496,6 +496,18 @@ function renderBasket(data) {
   });
   body.appendChild(list);
 
+  [data.kamis, data.opinet].forEach((feed) => {
+    (feed.prices || []).forEach((price) => {
+      const row = el('div', { class: 'review-item' });
+      row.appendChild(el('div', { class: 'q' }, price.name + (price.unit ? ` (${price.unit})` : '')));
+      row.appendChild(el('span', { class: 'num' }, won(price.price) + '원'));
+      list.appendChild(row);
+    });
+    if (feed.prices && feed.prices.length) {
+      body.appendChild(sourceLine(feed.prices[0].source));
+    }
+  });
+
   const off = [];
   if (!data.kamis.available) off.push(data.kamis.reason);
   if (!data.opinet.available) off.push(data.opinet.reason);
@@ -794,13 +806,71 @@ async function recompute() {
   api('/api/weights', { weights: state.weights, level: state.level || 'L1' });
 }
 
+/* --- 자체 업데이트 확인 ------------------------------------------------------ */
+
+/** semver 비교. a > b 이면 양수. */
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+
+async function checkUpdate() {
+  const message = $('updateMsg');
+  const button = $('checkUpdate');
+  button.disabled = true;
+  message.textContent = ' 확인 중…';
+
+  const local = state.version || { version: '0.0.0' };
+  const repository = local.repository;
+
+  if (!repository) {
+    message.textContent = ' version.json 에 repository 가 없어 확인할 수 없습니다.';
+    button.disabled = false;
+    return;
+  }
+
+  try {
+    // 공개 저장소의 공개 API만 쓴다. 토큰이나 자격 증명을 담지 않는다.
+    const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!response.ok) throw new Error(`GitHub 응답 ${response.status}`);
+    const release = await response.json();
+    const latest = String(release.tag_name || '').replace(/^v/, '');
+
+    if (compareVersions(latest, local.version) > 0) {
+      message.textContent = '';
+      const box = el('div', { class: 'notice' });
+      box.appendChild(el('b', {}, `새 버전 ${latest} 이 있습니다. (현재 ${local.version})`));
+      box.appendChild(el('div', {}, release.body || release.name || ''));
+      const link = el('a', { href: release.html_url, target: '_blank', rel: 'noopener' },
+        '릴리스 페이지에서 내려받기');
+      link.style.color = C.blue;
+      box.appendChild(link);
+      message.parentElement.appendChild(box);
+    } else {
+      message.textContent = ` 최신 버전입니다 (v${local.version}).`;
+    }
+  } catch (error) {
+    // 확인 실패가 앱 사용 자체를 막으면 안 된다.
+    message.textContent = ` 업데이트를 확인하지 못했습니다: ${error.message}. 기존 버전으로 계속 사용할 수 있습니다.`;
+  }
+  button.disabled = false;
+}
+
 /* --- 초기화 ----------------------------------------------------------------- */
 
 async function init() {
   const [status, divisions] = await Promise.all([api('/api/status'), api('/api/divisions')]);
 
+  state.version = status.version;
   $('ver').textContent =
     `v${status.version.version} · ${status.version.changelog || ''}`;
+  $('checkUpdate').onclick = checkUpdate;
 
   state.divisions = divisions.divisions;
   divisions.divisions.forEach((d) => {

@@ -182,18 +182,68 @@ class CpiService:
                 {"code": code, "name": names.get(code, code), "weight": weight}
                 for code, weight in top
             ],
-            "kamis": {
-                "available": self.settings.has_kamis,
-                "reason": None
-                if self.settings.has_kamis
-                else "aT KAMIS 인증키와 계정 ID가 없습니다(.env: KAMIS_CERT_KEY, KAMIS_CERT_ID).",
-            },
-            "opinet": {
-                "available": self.settings.has_opinet,
-                "reason": None
-                if self.settings.has_opinet
-                else "오피넷 인증키가 없습니다(.env: OPINET_API_KEY). 무료 키는 최근 7일만 제공하므로 시계열은 일별 적재가 필요합니다.",
-            },
+            "kamis": await self._kamis_prices(),
+            "opinet": await self._opinet_prices(),
+        }
+
+    async def _kamis_prices(self) -> dict:
+        from .sources.kamis import KamisClient
+
+        if not self.settings.has_kamis:
+            return {
+                "available": False,
+                "reason": "aT KAMIS 인증키와 계정 ID가 없습니다(.env: KAMIS_CERT_KEY, KAMIS_CERT_ID).",
+                "prices": [],
+            }
+        try:
+            async with KamisClient(
+                self.settings.kamis_cert_key, self.settings.kamis_cert_id
+            ) as client:
+                prices = await client.daily_prices()
+        except DataUnavailable as exc:
+            return {"available": False, "reason": str(exc), "prices": []}
+
+        return {
+            "available": True,
+            "reason": None,
+            "prices": [
+                {
+                    "name": p.item_name,
+                    "unit": p.unit,
+                    "price": p.price,
+                    "source": p.provenance.to_dict(),
+                }
+                for p in prices[:12]
+            ],
+        }
+
+    async def _opinet_prices(self) -> dict:
+        from .sources.opinet import FREE_TIER_DAYS, OpinetClient, store_daily
+
+        if not self.settings.has_opinet:
+            return {
+                "available": False,
+                "reason": (
+                    "오피넷 인증키가 없습니다(.env: OPINET_API_KEY). "
+                    f"무료 키는 최근 {FREE_TIER_DAYS}일만 제공하므로 시계열은 일별 적재가 필요합니다."
+                ),
+                "prices": [],
+            }
+        try:
+            async with OpinetClient(self.settings.opinet_api_key) as client:
+                prices = await client.average_prices()
+            # 무료 키의 7일 제한을 넘기려면 받을 때마다 쌓아야 한다.
+            store_daily(self.conn, prices)
+        except DataUnavailable as exc:
+            return {"available": False, "reason": str(exc), "prices": []}
+
+        return {
+            "available": True,
+            "reason": None,
+            "prices": [
+                {"name": p.product, "unit": "원/L", "price": p.price, "source": p.provenance.to_dict()}
+                for p in prices
+            ],
         }
 
 
