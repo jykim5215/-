@@ -1,0 +1,18 @@
+{
+  "itm": [
+    { "TBL_ID": "TEST_TBL_A", "ITM_ID": "T10", "ITM_NM": "지수" },
+    { "TBL_ID": "TEST_TBL_A", "ITM_ID": "T20", "ITM_NM": "전년동월비" }
+  ],
+  "obj": [
+    { "TBL_ID": "TEST_TBL_A", "OBJ_ID": "D01", "OBJ_NM": "식료품 및 비주류음료", "OBJ_LVL": 1 },
+    { "TBL_ID": "TEST_TBL_A", "OBJ_ID": "D02", "OBJ_NM": "주류 및 담배", "OBJ_LVL": 1 },
+    { "TBL_ID": "TEST_TBL_A", "OBJ_ID": "S001", "OBJ_NM": "하위분류", "OBJ_LVL": 2 }
+  ],
+  "list_tree": [
+    { "TBL_ID": "TEST_TBL_A", "TBL_NM": "품목별 소비자물가지수", "ORG_ID": "101" },
+    { "TBL_ID": "TEST_TBL_B", "TBL_NM": "품목별 소비자물가지수(가중치 포함)", "ORG_ID": "101" }
+  ],
+  "search": [
+    { "TBL_ID": "TEST_TBL_S", "TBL_NM": "품목별 소비자물가지수", "ORG_ID": "101" }
+  ]
+}
