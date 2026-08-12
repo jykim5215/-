@@ -105,6 +105,18 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 
 .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
 
+/* 화면 ① 카드 안에 들어가는 고지. 카드만 잘라내도 의미가 통해야 한다. */
+.inline-note {
+  margin-top: 18px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(177, 140, 250, 0.1);
+  border-left: 2px solid var(--purple);
+  color: #d6cdf3;
+  font-size: 12.5px;
+}
+.inline-note b { color: var(--purple); }
+
 /* 모든 카드 하단의 출처 표기 — 출처 없는 수치는 화면에 없다 */
 .src {
   margin-top: 16px;

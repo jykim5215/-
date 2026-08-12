@@ -191,8 +191,17 @@ function renderHeadline(data) {
   body.appendChild(hero);
 
   body.appendChild(el('p', { class: 'narrative' }, data.narrative));
+
+  // 이 카드만 잘라내도 의미가 통해야 하므로, 고지를 카드 안에도 넣는다.
+  // 위쪽 배너는 스크롤 중에도 보이지만 카드를 잘라내면 따라오지 않는다.
+  const inline = el('div', { class: 'inline-note' });
+  inline.innerHTML =
+    '<b>공식 물가가 아닙니다.</b> 국가데이터처가 공표한 공식 지수를 사용자 가중치로 ' +
+    '재가중한 참고값입니다.';
+  body.appendChild(inline);
+
   body.appendChild(sourceLine(data.source,
-    `가중치: ${state.weightLabel || '내 가중치'} · 공식 지수를 재가중한 참고값`));
+    `가중치: ${state.weightLabel || '내 가중치'}`));
 }
 
 /* --- ② 왜 (발산 막대) ------------------------------------------------------ */
