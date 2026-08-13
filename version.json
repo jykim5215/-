@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "changelog": "첫 공개 버전. KOSIS 클라이언트, 라스파이레스 계산과 기여도 분해, L0~L2 가중치 입력, 화면 4종.",
+  "version": "0.2.0",
+  "changelog": "지면형 UI로 교체. 체감 환산(퍼센트를 살 수 있는 개수로) 추가.",
   "repository": "jykim5215/-",
   "released_at": "2026-08-12"
 }

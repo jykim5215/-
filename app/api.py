@@ -186,6 +186,67 @@ async def trajectory_endpoint(payload: dict = Body(default={})) -> dict:
     return {"ok": True, "points": points, "disclaimer": DISCLAIMER}
 
 
+@router.post("/felt")
+async def felt_endpoint(payload: dict = Body(default={})) -> dict:
+    """체감 환산. 퍼센트를 '작년에 100잔 사던 돈으로 올해 몇 잔'으로 바꾼다."""
+    from .calc.felt import (
+        DEFAULT_UNITS,
+        FeltItem,
+        basket_sentence,
+        item_sentence,
+        units_for_same_money,
+    )
+
+    service = _service()
+    raw = payload.get("weights") or dict(OFFICIAL_WEIGHTS_2022)
+
+    try:
+        weights = _weight_set(raw, "내 가중치", "사용자 입력", 2020)
+        bundle = await service.compute_for(weights, period=payload.get("period"))
+        felt = await service.felt(period=bundle.result.period)
+    except DataUnavailable as exc:
+        return unavailable(str(exc))
+
+    items = []
+    for row in felt["items"]:
+        item = FeltItem(
+            item_name=row["item_name"],
+            unit=row["unit"],
+            rate=row["rate"],
+            base_year=row["base_year"],
+            period=row["period"],
+        )
+        items.append(
+            {
+                **row,
+                "units_for_same_money": item.units_for_same_money,
+                "base_units": DEFAULT_UNITS,
+                "sentence": item_sentence(item),
+            }
+        )
+    items.sort(key=lambda i: i["rate"], reverse=True)
+
+    # 장바구니 환산은 지수의 정의를 그대로 옮긴 것이라 가격 데이터가 필요 없다.
+    basket_amount = float(payload.get("basket_amount") or 100_000)
+
+    return {
+        "ok": True,
+        "period": felt["period"],
+        "source": felt["source"],
+        "items": items,
+        "missing": felt["missing"],
+        "my_rate": bundle.result.my_rate,
+        "official_rate": bundle.result.official_rate,
+        "basket": {
+            "amount": basket_amount,
+            "mine": basket_sentence(basket_amount, bundle.result.my_rate),
+            "official": basket_sentence(basket_amount, bundle.result.official_rate),
+            "units_mine": units_for_same_money(bundle.result.my_rate),
+        },
+        "disclaimer": DISCLAIMER,
+    }
+
+
 @router.post("/basket")
 async def basket_endpoint(payload: dict = Body(default={})) -> dict:
     """화면 ④ 장바구니. 키가 없으면 이 화면만 비활성화된다."""

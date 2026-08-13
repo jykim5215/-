@@ -154,6 +154,138 @@ async def fetch_division_indices(
     return snapshots
 
 
+# ---------------------------------------------------------------------------
+# 체감 품목 — 퍼센트를 손에 잡히는 단위로 바꾸기 위한 개별 품목 지수
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FeltItemSpec:
+    """체감 환산에 쓸 품목.
+
+    keyword 는 KOSIS 품목명을 찾기 위한 검색어일 뿐이다. 화면에는 실제로 찾아낸
+    품목명을 그대로 쓴다. 품목 코드를 추측해 하드코딩하지 않는다.
+    """
+
+    keyword: str
+    unit: str
+
+
+#: 값이 오르면 바로 체감되는 것들. 실제 존재 여부는 런타임에 확인한다.
+FELT_ITEM_SPECS: tuple[FeltItemSpec, ...] = (
+    FeltItemSpec("커피", "잔"),
+    FeltItemSpec("영화관람료", "편"),
+    FeltItemSpec("과자", "봉지"),
+    FeltItemSpec("탄산음료", "캔"),
+    FeltItemSpec("라면", "개"),
+    FeltItemSpec("빵", "개"),
+    FeltItemSpec("아이스크림", "개"),
+    FeltItemSpec("치킨", "마리"),
+    FeltItemSpec("햄버거", "개"),
+    FeltItemSpec("김밥", "줄"),
+    FeltItemSpec("생수", "병"),
+    FeltItemSpec("시내버스료", "번"),
+)
+
+
+def _match_item_name(names: Iterable[str], keyword: str) -> str | None:
+    """분류명 중 키워드에 맞는 품목명을 고른다.
+
+    정확히 같은 것을 우선하고, 없으면 키워드를 포함하는 것 중 가장 짧은 이름을
+    고른다(예: '커피' vs '커피(외식)' 이면 '커피').
+    """
+    candidates = [n for n in names if keyword in n]
+    if not candidates:
+        return None
+    exact = [n for n in candidates if n == keyword]
+    return exact[0] if exact else min(candidates, key=len)
+
+
+async def fetch_felt_items(
+    client: KosisClient, *, period: str, previous_period: str
+) -> tuple[list[dict], Provenance, list[str]]:
+    """체감 품목의 전년동월비를 가져온다.
+
+    Returns:
+        (품목 결과, 출처, 찾지 못한 검색어 목록).
+        찾지 못한 품목은 만들어내지 않고 그대로 보고한다.
+    """
+    table = await client.find_table(keyword=CPI_TABLE_KEYWORD)
+    codes = await client.resolve_codes(table.org_id, table.tbl_id)
+    if not codes.items:
+        raise DataUnavailable(f"통계표 {table.tbl_id} 의 항목 코드를 확인하지 못했습니다.")
+
+    rows = await client.data(
+        org_id=table.org_id,
+        tbl_id=table.tbl_id,
+        itm_id=pick_index_item(codes.items),
+        obj_l1="ALL",
+        obj_l2="ALL",
+        period=PeriodRange(previous_period, period),
+        prd_se="M",
+    )
+
+    # 품목명 -> {시점: (값, 기준연도)}
+    by_name: dict[str, dict[str, tuple[float, int]]] = {}
+    for row in rows:
+        if not row.has_value or row.prd_de not in (period, previous_period):
+            continue
+        base_year = parse_base_year(row.unit_nm) or FALLBACK_BASE_YEAR
+        for name in row.class_names.values():
+            by_name.setdefault(name, {})[row.prd_de] = (row.dt, base_year)
+
+    retrieved_at = datetime.now(KST)
+    results: list[dict] = []
+    missing: list[str] = []
+
+    for spec in FELT_ITEM_SPECS:
+        name = _match_item_name(by_name, spec.keyword)
+        if name is None:
+            missing.append(spec.keyword)
+            continue
+        points = by_name[name]
+        if period not in points or previous_period not in points:
+            missing.append(spec.keyword)
+            continue
+
+        now_value, now_base = points[period]
+        before_value, before_base = points[previous_period]
+        if now_base != before_base:
+            raise DataUnavailable(
+                f"{name}: 두 시점의 기준연도가 다릅니다({before_base} vs {now_base}). "
+                "기준개편 전후 지수를 섞어 계산할 수 없습니다."
+            )
+        if before_value == 0:
+            missing.append(spec.keyword)
+            continue
+
+        results.append(
+            {
+                "item_name": name,
+                "unit": spec.unit,
+                "rate": (now_value / before_value - 1.0) * 100.0,
+                "base_year": now_base,
+                "period": period,
+            }
+        )
+
+    if not results:
+        raise DataUnavailable(
+            "체감 품목 지수를 하나도 찾지 못했습니다. "
+            f"찾으려던 품목: {', '.join(s.keyword for s in FELT_ITEM_SPECS)}"
+        )
+
+    provenance = Provenance(
+        org="국가데이터처",
+        table_id=table.tbl_id,
+        period=period,
+        base_year=results[0]["base_year"],
+        retrieved_at=retrieved_at,
+        note=table.note,
+    )
+    return results, provenance, missing
+
+
 def previous_year_period(period: str) -> str:
     """전년 동월. '202607' -> '202507'."""
     return f"{int(period[:4]) - 1}{period[4:]}"

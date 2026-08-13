@@ -168,6 +168,35 @@ class CpiService:
             raise DataUnavailable("궤적을 그릴 시점이 없습니다.")
         return points
 
+    async def felt(self, *, period: str | None = None) -> dict:
+        """체감 환산 — 퍼센트를 개수로 바꾼다.
+
+        가격을 만들어내지 않는다. 개수 환산은 등락률만으로 계산된다.
+        """
+        from .sources.cpi_index import fetch_felt_items
+
+        snapshots = await self.load_snapshots()
+        period = period or max(snapshots)
+        previous = previous_year_period(period)
+
+        try:
+            async with self.client() as client:
+                items, provenance, missing = await fetch_felt_items(
+                    client, period=period, previous_period=previous
+                )
+        except KosisApiError as exc:
+            raise DataUnavailable(
+                f"체감 품목 조회에 실패했습니다 (err={exc.err}: {exc.err_msg})"
+            ) from exc
+
+        return {
+            "items": items,
+            "missing": missing,
+            "source": provenance.to_dict(),
+            "period": period,
+            "previous_period": previous,
+        }
+
     async def basket(self, weights: WeightSet) -> dict:
         """내 가중치 상위 분류의 최근 가격.
 
