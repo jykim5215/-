@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=부스 배치도 플래너
+Comment=부스 내·외 배치도 평면도 편집기
+Exec=sh -c 'xdg-open "$(dirname "$(readlink -f "%k")")/index.html"'
+Icon=applications-graphics
+Terminal=false
+Categories=Graphics;Office;

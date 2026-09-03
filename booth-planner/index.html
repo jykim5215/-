@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>부스 배치도 플래너</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body data-theme="blueprint">
+
+<header class="topbar">
+  <div class="brand">
+    <img src="icon.svg" alt="" class="brand-icon">
+    <div>
+      <div class="brand-name">부스 배치도 플래너</div>
+      <div class="brand-sub" id="planTitle">새 배치도</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="tgroup" aria-label="파일">
+      <button id="btnNew" title="새 배치도 (모두 지움)">새로 만들기</button>
+      <button id="btnOpen" title="JSON 파일 불러오기">열기</button>
+      <button id="btnSave" title="JSON 파일로 저장">저장</button>
+      <div class="menu">
+        <button id="btnExport" title="이미지로 내보내기">내보내기 ▾</button>
+        <div class="menu-list">
+          <button id="btnPNG">PNG 이미지</button>
+          <button id="btnSVG">SVG 벡터</button>
+          <button id="btnPrint">인쇄 / PDF</button>
+        </div>
+      </div>
+    </div>
+    <div class="tgroup" aria-label="편집">
+      <button id="btnUndo" title="실행 취소 (Ctrl+Z)">↶ 취소</button>
+      <button id="btnRedo" title="다시 실행 (Ctrl+Y)">↷ 재실행</button>
+    </div>
+    <div class="tgroup" aria-label="보기">
+      <label class="chk"><input type="checkbox" id="chkSnap" checked> 격자 스냅</label>
+      <label class="chk"><input type="checkbox" id="chkDims" checked> 치수 표시</label>
+      <select id="selUnit" title="표시 단위">
+        <option value="cm">cm</option>
+        <option value="mm">mm</option>
+        <option value="m">m</option>
+      </select>
+      <button id="btnFit" title="부스가 화면에 맞게">화면 맞춤</button>
+    </div>
+    <div class="tgroup" aria-label="설정">
+      <select id="selTheme" title="테마">
+        <option value="blueprint">블루프린트</option>
+        <option value="paper">페이퍼</option>
+        <option value="studio">스튜디오</option>
+      </select>
+      <button id="btnUpdate" title="GitHub 릴리즈에서 새 버전 확인">업데이트 확인</button>
+      <button id="btnHelp" title="단축키 도움말">?</button>
+    </div>
+  </div>
+</header>
+
+<main class="workspace">
+  <!-- 좌측: 추가 -->
+  <aside class="panel left" id="leftPanel">
+    <section class="block">
+      <h3>부스 (기준 구역)</h3>
+      <div class="row">
+        <label>이름 <input type="text" id="boothName" maxlength="40" placeholder="부스 이름"></label>
+      </div>
+      <div class="row two">
+        <label>너비 <span class="unit-label"></span> <input type="number" id="boothW" min="10" step="any"></label>
+        <label>깊이 <span class="unit-label"></span> <input type="number" id="boothD" min="10" step="any"></label>
+      </div>
+      <div class="row two">
+        <label>격자 <span class="unit-label"></span> <input type="number" id="gridSize" min="1" step="any"></label>
+        <label>배치도 제목 <input type="text" id="planName" maxlength="60" placeholder="예: 2026 박람회 A-12"></label>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3>집기 라이브러리 <small>클릭하면 부스에 추가</small></h3>
+      <div class="preset-grid" id="presetGrid"></div>
+    </section>
+
+    <section class="block">
+      <h3>도형 추가 <small>빈 박스를 만든 뒤 이름·치수 입력</small></h3>
+      <div class="shape-grid" id="shapeGrid"></div>
+    </section>
+
+    <section class="block hint">
+      <p>드래그: 이동 · 모서리: 크기 · 위 핸들: 회전<br>
+      휠: 확대/축소 · 빈 곳 드래그: 화면 이동 · Shift+빈 곳 드래그: 영역 선택<br>
+      Shift+클릭: 여러 개 선택 · 더블클릭: 이름 편집</p>
+    </section>
+  </aside>
+
+  <!-- 중앙: 캔버스 -->
+  <section class="canvas-wrap" id="canvasWrap">
+    <svg id="stage" xmlns="http://www.w3.org/2000/svg" tabindex="0" aria-label="배치도 캔버스"></svg>
+    <div class="zoom-badge" id="zoomBadge">100%</div>
+    <div class="coord-badge" id="coordBadge"></div>
+  </section>
+
+  <!-- 우측: 편집 -->
+  <aside class="panel right" id="rightPanel">
+    <section class="block" id="inspectorEmpty">
+      <h3>선택 항목</h3>
+      <p class="muted">캔버스에서 항목을 클릭하면 여기서 이름·모양·실측 치수를 편집할 수 있습니다.</p>
+      <p class="muted" id="itemCount"></p>
+    </section>
+
+    <section class="block" id="inspector" hidden>
+      <h3>선택 항목 <small id="inspSelCount"></small></h3>
+      <div class="row">
+        <label>이름 <input type="text" id="inName" maxlength="40" placeholder="예: 책상, 의자"></label>
+      </div>
+      <div class="row">
+        <label>모양
+          <select id="inShape">
+            <option value="rect">사각형</option>
+            <option value="round">둥근 사각형</option>
+            <option value="ellipse">원 / 타원</option>
+            <option value="triangle">삼각형</option>
+            <option value="diamond">마름모</option>
+            <option value="semicircle">반원</option>
+            <option value="zone">구역 (점선 외곽선)</option>
+          </select>
+        </label>
+      </div>
+      <div class="row two">
+        <label>너비 <span class="unit-label"></span> <input type="number" id="inW" min="1" step="any"></label>
+        <label>깊이 <span class="unit-label"></span> <input type="number" id="inD" min="1" step="any"></label>
+      </div>
+      <div class="row two">
+        <label>X 위치 <span class="unit-label"></span> <input type="number" id="inX" step="any"></label>
+        <label>Y 위치 <span class="unit-label"></span> <input type="number" id="inY" step="any"></label>
+      </div>
+      <div class="row two">
+        <label>회전 (°) <input type="number" id="inRot" step="1"></label>
+        <label>색상 <input type="color" id="inColor"></label>
+      </div>
+      <div class="row rot-quick">
+        <button data-rot="-90">↺ 90°</button>
+        <button data-rot="45">45°</button>
+        <button data-rot="90">↻ 90°</button>
+        <button data-rot="0" data-abs="1">0°</button>
+      </div>
+      <div class="row">
+        <label>메모 <input type="text" id="inNote" maxlength="80" placeholder="예: 전원 필요, 대여품"></label>
+      </div>
+      <div class="row chks">
+        <label class="chk"><input type="checkbox" id="inShowDim"> 치수 표시</label>
+        <label class="chk"><input type="checkbox" id="inLocked"> 잠금</label>
+      </div>
+      <div class="row actions">
+        <button id="btnDup" title="복제 (Ctrl+D)">복제</button>
+        <button id="btnFront" title="맨 앞으로">맨 앞</button>
+        <button id="btnBack" title="맨 뒤로">맨 뒤</button>
+        <button id="btnDelete" class="danger" title="삭제 (Delete)">삭제</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3>항목 목록</h3>
+      <ul class="item-list" id="itemList"></ul>
+    </section>
+  </aside>
+</main>
+
+<!-- 모달 -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody" class="modal-body"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+
+<script src="app.js"></script>
+</body>
+</html>
