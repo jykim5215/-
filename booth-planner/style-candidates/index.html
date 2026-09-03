@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI 스타일 후보 — 부스 배치도 플래너</title>
+<style>
+  body { font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; margin: 0; background: #f3f4f6; color: #1c2230; }
+  header { padding: 24px 32px 8px; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p.lead { margin: 0; color: #555; line-height: 1.6; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; padding: 20px 32px 40px; }
+  .card { background: #fff; border: 1px solid #e0e3ea; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.06); display: flex; flex-direction: column; }
+  .card img { width: 100%; display: block; border-bottom: 1px solid #e0e3ea; }
+  .card .body { padding: 14px 16px; flex: 1; }
+  .card h2 { margin: 0 0 6px; font-size: 17px; }
+  .card h2 small { font-weight: 400; color: #777; font-size: 12px; margin-left: 6px; }
+  .card p { margin: 0 0 10px; color: #444; line-height: 1.55; font-size: 13px; }
+  .card a { display: inline-block; padding: 8px 14px; border-radius: 8px; background: #1c2230; color: #fff; text-decoration: none; font-size: 13px; }
+  .card a:hover { background: #000; }
+  .sw { display: inline-flex; gap: 4px; margin-bottom: 8px; }
+  .sw i { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
+</style>
+</head>
+<body>
+<header>
+  <h1>UI 스타일 후보 3종</h1>
+  <p class="lead">같은 기능·같은 배치도를 세 가지 스타일로 보여줍니다. 마음에 드는 스타일의 「이 스타일로 열기」를 누르면 앱이 그 테마로 열립니다.<br>
+  앱 안에서도 상단 테마 메뉴로 언제든 바꿀 수 있습니다. (기본값: 블루프린트)</p>
+</header>
+<div class="grid">
+  <div class="card">
+    <img src="blueprint.png" alt="블루프린트 테마 미리보기">
+    <div class="body">
+      <h2>1. 블루프린트 <small>기본값</small></h2>
+      <div class="sw"><i style="background:#0b1626"></i><i style="background:#10203a"></i><i style="background:#4dd3ff"></i><i style="background:#ffd166"></i></div>
+      <p>제도용 청사진 느낌의 어두운 배경. 격자와 부스 외곽선이 시안색으로 또렷하게 보여 도면 작업에 집중하기 좋습니다. 장시간 작업 시 눈이 편합니다.</p>
+      <a href="../index.html#theme=blueprint">이 스타일로 열기</a>
+    </div>
+  </div>
+  <div class="card">
+    <img src="paper.png" alt="페이퍼 테마 미리보기">
+    <div class="body">
+      <h2>2. 페이퍼</h2>
+      <div class="sw"><i style="background:#ece6d9"></i><i style="background:#f8f4ec"></i><i style="background:#c8552c"></i><i style="background:#2b2822"></i></div>
+      <p>따뜻한 도면 용지 톤의 밝은 배경. 인쇄물과 가장 비슷하게 보여, 출력해서 공유하거나 현장에서 볼 배치도를 만들 때 알맞습니다.</p>
+      <a href="../index.html#theme=paper">이 스타일로 열기</a>
+    </div>
+  </div>
+  <div class="card">
+    <img src="studio.png" alt="스튜디오 테마 미리보기">
+    <div class="body">
+      <h2>3. 스튜디오</h2>
+      <div class="sw"><i style="background:#eef0f4"></i><i style="background:#ffffff"></i><i style="background:#4f46e5"></i><i style="background:#1c2230"></i></div>
+      <p>깨끗한 화이트 배경에 인디고 포인트. 일반적인 업무용 웹앱 느낌으로, 색상이 많은 집기를 놓아도 화면이 차분하게 유지됩니다.</p>
+      <a href="../index.html#theme=studio">이 스타일로 열기</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>
