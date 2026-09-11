@@ -85,3 +85,21 @@ keyPassword=<직접 입력>
   로그를 되읽으려면 릴리스마다 버전별로 반드시 보관하세요.
 
 `keystore.properties`가 없으면 릴리스 빌드는 서명 없이 나옵니다. Play는 서명 없는 AAB를 거부합니다.
+
+### 이 컨테이너에서는 빌드가 안 됩니다
+
+개발 컨테이너의 egress 정책이 `dl.google.com`을 막아 안드로이드 SDK를 받을 수 없습니다. 그래서
+AAB는 GitHub Actions에서 만듭니다 — `.github/workflows/play.yml`. 손으로 돌리거나
+`geulbeot-play/` 아래가 바뀌면 자동으로 돕니다.
+
+서명하려면 저장소 시크릿 네 개가 필요합니다. 비밀번호는 사용자가 GitHub 시크릿에 직접 넣고,
+Claude는 그 값을 보지 않습니다.
+
+| 시크릿 | 값 |
+|---|---|
+| `PLAY_UPLOAD_KEYSTORE_BASE64` | `base64 -w0 upload-keystore.jks` 출력 |
+| `PLAY_UPLOAD_STORE_PASSWORD` | 키스토어 비밀번호 |
+| `PLAY_UPLOAD_KEY_ALIAS` | `upload` |
+| `PLAY_UPLOAD_KEY_PASSWORD` | 키 비밀번호 |
+
+시크릿이 없으면 서명 없이 빌드해 **컴파일만 확인**합니다. 그 결과물은 Play에 올릴 수 없습니다.
