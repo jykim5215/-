@@ -9,6 +9,11 @@ on:
     branches: ["main", "claude/**"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "릴리즈로 올릴 태그 (예: v1.0.0). 비워 두면 빌드만 합니다."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -123,13 +128,17 @@ jobs:
           path: out/
           retention-days: 30
 
+      # 태그를 밀어서 돌든, 태그 이름을 입력해 손으로 돌리든 여기로 옵니다. 후자는 개발 환경에서
+      # 태그를 밀 수 없을 때를 위한 길입니다 - gh 가 태그를 이 커밋에 직접 만들어 줍니다.
       - name: 릴리즈에 올리기
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           VARIANT: ${{ steps.signing.outputs.variant }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
+          TAG="${RELEASE_TAG:-$GITHUB_REF_NAME}"
           NOTE=""
           if [ "$VARIANT" = "debug" ]; then
             NOTE=$'\n\n> ⚠️ 이 APK는 **디버그 서명**입니다. 설치해서 쓸 수 있지만, 빌드마다 서명 키가 달라 앱 내 업데이트로 덮어쓸 수 없습니다. 저장소 시크릿에 서명 키를 넣으면 릴리즈 서명으로 바뀝니다.'
@@ -141,7 +150,8 @@ jobs:
           print(v.get("changelog", ""))
           PY
           printf '%s' "$NOTE" >> notes.md
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
             --title "글벗 ${{ steps.apk.outputs.version }}" \
             --notes-file notes.md \
             "${{ steps.apk.outputs.path }}" \
