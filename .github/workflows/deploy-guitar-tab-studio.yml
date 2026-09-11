@@ -1,0 +1,42 @@
+name: Deploy 기타 탭 스튜디오 to Cloudflare Pages
+
+# main 에 올라간 앱 변경만 배포한다. PR 에서는 돌지 않는다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'guitar-tab-studio/**'
+      - '.github/workflows/deploy-guitar-tab-studio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 시크릿이 아직 없으면 조용히 건너뛴다 (워크플로가 빨갛게 실패하지 않도록)
+      - id: guard
+        name: Cloudflare 자격증명 확인
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 시크릿이 없어 배포를 건너뜁니다."
+            echo "저장소 Settings → Secrets and variables → Actions 에서 등록하세요."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cloudflare Pages 배포
+        if: steps.guard.outputs.skip == 'false'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy guitar-tab-studio --project-name=guitar-tab-studio --branch=main

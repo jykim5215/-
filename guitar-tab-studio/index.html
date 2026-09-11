@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기타 탭 스튜디오</title>
+<meta name="description" content="오디오를 분석해 기타 타브 악보를 만들고 PDF 악보집으로 내보냅니다. 기기 안에서만 동작합니다.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a5a2b' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M14.5 3.5 20.5 9.5'/%3E%3Cpath d='M17.5 6.5 9 15'/%3E%3Ccircle cx='7' cy='17' r='4'/%3E%3Cpath d='M4 4h3M4 6h3M4 8h3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./app/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#8a5a2b" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+      <path d="M14.5 3.5 20.5 9.5"/><path d="M17.5 6.5 9 15"/><circle cx="7" cy="17" r="4"/>
+      <path d="M4 4h3M4 6h3M4 8h3"/>
+    </svg>
+    기타 탭 스튜디오
+  </div>
+  <button class="ver" id="verBtn" title="업데이트 확인">v1.1.0</button>
+  <div class="spacer"></div>
+  <button class="tbtn" id="btnSettings">설정</button>
+  <button class="tbtn" id="btnExport" disabled>내보내기</button>
+  <button class="tbtn hot" id="btnImport">＋ 소리 가져오기</button>
+</div>
+
+<div class="shell">
+  <!-- 왼쪽: 악보집 -->
+  <aside class="rail">
+    <div class="sec-h"><span id="libTitle">악보집 목차</span>
+      <button class="mini" id="btnSelectAll">전체선택</button></div>
+    <div class="songs" id="songs"></div>
+    <button class="book-cta" id="btnBook" disabled>선택한 곡 → 악보집 PDF 엮기</button>
+  </aside>
+
+  <!-- 가운데 -->
+  <main class="stage">
+    <nav class="steps">
+      <button class="step on" data-step="1"><span class="n">01</span>소리 가져오기</button>
+      <button class="step" data-step="2" disabled><span class="n">02</span>분석</button>
+      <button class="step" data-step="3" disabled><span class="n">03</span>다듬기</button>
+      <button class="step" data-step="4" disabled><span class="n">04</span>PDF 내보내기</button>
+    </nav>
+
+    <div class="canvas-wrap">
+      <div class="sheet" id="sheet">
+        <!-- 시작 화면 -->
+        <div class="welcome" id="welcome">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#cfc7b2" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M14.5 3.5 20.5 9.5"/><path d="M17.5 6.5 9 15"/><circle cx="7" cy="17" r="4"/>
+            <path d="M4 4h3M4 6h3M4 8h3"/>
+          </svg>
+          <h3>기타 연주를 타브 악보로</h3>
+          <p>유튜브 기타 영상의 소리를 가져오거나 오디오 파일을 넣으면,
+             음을 받아써서 타브 악보로 만들고 인쇄 가능한 PDF 악보집으로 내보냅니다.
+             모든 처리는 이 기기 안에서만 일어납니다.</p>
+          <button class="big" id="btnStart">＋ 소리 가져오기</button>
+          <div class="wsteps">
+            <div class="wstep"><b>01 가져오기</b><span>유튜브 탭 소리를 그대로 캡처하거나 오디오 파일을 드롭</span></div>
+            <div class="wstep"><b>02 분석</b><span>온셋·음정·박자·코드를 찾아 지판 운지까지 자동 배정</span></div>
+            <div class="wstep"><b>03 다듬기</b><span>틀린 음은 클릭해서 바로 수정, 재생으로 확인</span></div>
+            <div class="wstep"><b>04 PDF</b><span>한 곡 악보 또는 여러 곡 묶음 악보집으로 출력</span></div>
+          </div>
+        </div>
+
+        <!-- 분석 진행 -->
+        <div class="progress" id="progress" hidden>
+          <h3 id="progTitle">분석 중…</h3>
+          <div class="msg" id="progMsg">오디오를 준비하고 있습니다.</div>
+          <div class="pbar"><i id="progBar"></i></div>
+        </div>
+
+        <!-- 악보 -->
+        <div id="scoreView" hidden>
+          <div class="sheet-h">
+            <h2 id="shTitle">제목 없는 채보</h2>
+            <div class="sub" id="shArtist"></div>
+            <div class="meta" id="shMeta"></div>
+          </div>
+          <canvas id="tabCanvas"></canvas>
+          <div class="pagefoot">
+            <span>기타 탭 스튜디오 · 개인 연습/학습용 채보</span>
+            <span id="shCount"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 오른쪽: 인스펙터 -->
+  <aside class="insp" id="insp">
+    <div class="conf">
+      <span class="lab">채보 신뢰도</span>
+      <span class="bar"><i id="confBar"></i></span>
+      <b id="confVal" style="font:700 11px var(--mono);color:var(--ok)">–</b>
+    </div>
+
+    <div class="sec-h">곡 정보</div>
+    <div class="fgrp">
+      <div class="f"><label>제목</label><input id="mTitle" placeholder="제목 없는 채보"></div>
+      <div class="f"><label>연주자 / 출처 URL</label><input id="mArtist" placeholder="연주자 이름"></div>
+      <div class="f"><label>출처 링크</label><input id="mSource" placeholder="https://www.youtube.com/watch?v=…"></div>
+      <div class="row2">
+        <div class="f"><label>튜닝</label><select id="mTuning"></select></div>
+        <div class="f"><label>카포</label><select id="mCapo"></select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>BPM</label><input id="mBpm" type="number" min="30" max="260"></div>
+        <div class="f"><label>박자</label><select id="mTime">
+          <option value="4/4">4/4</option><option value="3/4">3/4</option>
+          <option value="2/4">2/4</option><option value="6/8">6/8</option>
+        </select></div>
+      </div>
+    </div>
+
+    <div class="sec-h">선택한 음</div>
+    <div class="fgrp">
+      <div class="row2">
+        <div class="f"><label>줄</label><select id="nString"></select></div>
+        <div class="f"><label>프렛</label><input id="nFret" type="number" min="0" max="24"></div>
+      </div>
+      <div class="f"><label>주법</label><select id="nTech">
+        <option value="">없음</option><option value="h">해머온 (h)</option>
+        <option value="p">풀오프 (p)</option><option value="/">슬라이드 업 (/)</option>
+        <option value="\">슬라이드 다운 (\)</option><option value="b">밴딩 (b)</option>
+        <option value="~">비브라토 (~)</option>
+      </select></div>
+    </div>
+    <div class="note-actions">
+      <button id="nPreview">소리 듣기</button>
+      <button id="nDelete">삭제</button>
+      <button id="nClear">선택 해제</button>
+    </div>
+
+    <div class="sec-h">AI 다듬기 <span style="font:500 10px var(--mono);color:var(--ink3)">선택</span></div>
+    <div class="ai-box">
+      <p id="aiDesc">구간(Intro/Verse/Chorus) 이름 붙이기, 어색한 코드 정정, 연습 팁을 받아옵니다.
+         오디오는 보내지 않고 채보 결과 요약만 보냅니다.</p>
+      <button class="tbtn" id="btnAI" style="width:100%">AI로 다듬기</button>
+    </div>
+
+    <div class="sec-h">연습 메모</div>
+    <div class="fgrp"><div class="f"><textarea id="mNote" placeholder="연습할 때 신경 쓸 점을 적어두세요."></textarea></div></div>
+
+    <div class="hint">
+      <b>편집 단축키</b><br>
+      <kbd>클릭</kbd> 음 선택 · <kbd>↑</kbd><kbd>↓</kbd> 줄 이동 · <kbd>←</kbd><kbd>→</kbd> 프렛 ±1<br>
+      <kbd>0</kbd>–<kbd>9</kbd> 프렛 입력 · <kbd>Del</kbd> 삭제 · <kbd>Space</kbd> 재생/정지<br><br>
+      흐린 숫자는 자동 분석이 자신 없어 하는 음입니다. 거기부터 확인해 보세요.
+    </div>
+  </aside>
+</div>
+
+<!-- 트랜스포트 -->
+<div class="transport">
+  <button class="play" id="btnPlay" disabled>▶</button>
+  <span class="time" id="tTime">00:00 / 00:00</span>
+  <span class="seek" id="seek"><i id="seekFill"></i></span>
+  <button class="chip" id="chipLoop">루프</button>
+  <button class="chip" id="chipSpeed">1.0×</button>
+  <button class="chip" id="chipMetro">메트로놈</button>
+</div>
+
+<!-- ── 가져오기 모달 ── -->
+<div class="mask" id="mImport">
+  <div class="modal">
+    <div class="modal-h"><h3>소리 가져오기</h3><button class="x" data-close>×</button></div>
+    <div class="modal-b">
+      <div class="tabs">
+        <button class="tab on" data-pane="pCapture">유튜브 탭 캡처</button>
+        <button class="tab" data-pane="pFile">오디오 파일</button>
+        <button class="tab" data-pane="pCli">yt-dlp 사용</button>
+      </div>
+
+      <div class="pane on" id="pCapture">
+        <ol class="steps-list">
+          <li>다른 탭에서 <b>기타 영상을 재생</b>해 둡니다 (처음부터 재생될 위치에).</li>
+          <li>아래 <b>캡처 시작</b>을 누르고, 뜨는 창에서 <b>그 탭</b>을 고릅니다.</li>
+          <li>창 아래쪽 <b>“탭 오디오도 공유”를 반드시 체크</b>하고 공유를 누릅니다.</li>
+          <li>영상을 처음부터 재생하고, 다 따고 싶은 구간이 끝나면 정지를 누릅니다.</li>
+        </ol>
+        <div class="callout">화면 내용은 쓰지 않습니다. 영상 트랙은 즉시 끄고 소리만 녹음하며,
+          녹음본은 이 기기 밖으로 나가지 않습니다.</div>
+        <div class="rectime" id="recTime" hidden>00:00</div>
+        <div class="reclevel" id="recLevelWrap" hidden><i id="recLevel"></i></div>
+        <div class="recnote" id="recNote" hidden>소리가 들어오면 막대가 움직입니다. 안 움직이면 “탭 오디오 공유”가 꺼진 것입니다.</div>
+        <div id="capUnsupported" class="callout warn" hidden>
+          이 환경에서는 탭 오디오 캡처를 쓸 수 없습니다. <b>오디오 파일</b> 탭을 이용해주세요.
+        </div>
+      </div>
+
+      <div class="pane" id="pFile">
+        <div class="drop" id="drop">
+          <b>여기에 오디오/영상 파일을 끌어다 놓으세요</b>
+          <span>mp3 · m4a · wav · ogg · mp4 · webm · 최대 15분<br>또는 클릭해서 파일 선택</span>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm" hidden>
+        <div class="callout">기타 소리만 있는 구간일수록 정확합니다. 드럼·보컬이 함께 있으면
+          <b>분석 감도</b>를 낮춰 보세요(설정).</div>
+        <div style="margin-top:12px">
+          <button class="tbtn" id="btnLoadProject" style="width:100%">저장해둔 프로젝트(.json) 불러오기</button>
+          <input type="file" id="projInput" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="pane" id="pCli">
+        <p style="font-size:12.3px;color:var(--ink2);line-height:1.8;margin-top:0">
+          컴퓨터에 <b>yt-dlp</b>가 있으면 URL에서 오디오만 바로 뽑아낼 수 있습니다.
+          뽑은 파일을 <b>오디오 파일</b> 탭에 끌어다 놓으면 됩니다.</p>
+        <pre class="code" id="cliCmd">yt-dlp -x --audio-format m4a -o "%(title)s.%(ext)s" "영상 URL"</pre>
+        <button class="tbtn" id="btnCopyCli" style="margin-top:10px">명령어 복사</button>
+        <div class="callout">동봉된 <code>tools/fetch-youtube.sh</code> (macOS·리눅스) 또는
+          <code>tools/fetch-youtube.ps1</code> (윈도우)을 써도 됩니다.</div>
+        <div class="callout warn">내려받은 음원은 본인이 연습할 채보 용도로만 쓰세요.
+          채보 결과를 배포하면 원곡 저작권 문제가 될 수 있습니다.</div>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="tbtn" data-close>닫기</button>
+      <button class="tbtn hot" id="btnCapture">캡처 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 분석 옵션 모달 ── -->
+<div class="mask" id="mAnalyze">
+  <div class="modal">
+    <div class="modal-h"><h3>분석 설정</h3><button class="x" data-close>×</button></div>
+    <div class="modal-b">
+      <div class="row2">
+        <div class="f"><label>튜닝</label><select id="aTuning"></select></div>
+        <div class="f"><label>카포</label><select id="aCapo"></select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>동시에 잡을 음 수</label><select id="aPoly">
+          <option value="1">1 — 단선율(솔로/리프)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4 — 핑거스타일/코드</option>
+          <option value="5">5</option><option value="6">6 — 스트로크</option>
+        </select></div>
+        <div class="f"><label>감도</label><select id="aSens">
+          <option value="0.25">낮음 — 확실한 음만</option>
+          <option value="0.5" selected>보통</option>
+          <option value="0.75">높음 — 잔음까지</option>
+        </select></div>
+      </div>
+      <div class="f"><label>박자</label><select id="aTime">
+        <option value="4/4">4/4</option><option value="3/4">3/4</option>
+        <option value="2/4">2/4</option><option value="6/8">6/8</option>
+      </select></div>
+      <div class="callout">분석은 이 기기의 CPU만 씁니다. 4분짜리 곡이면 보통 10–40초 걸립니다.
+        결과가 마음에 안 들면 설정만 바꿔서 다시 분석할 수 있습니다.</div>
+    </div>
+    <div class="modal-f">
+      <button class="tbtn" data-close>취소</button>
+      <button class="tbtn hot" id="btnRunAnalyze">분석 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 내보내기 모달 ── -->
+<div class="mask" id="mExport">
+  <div class="modal wide">
+    <div class="modal-h"><h3>내보내기</h3><button class="x" data-close>×</button></div>
+    <div class="modal-b">
+      <div class="exp-grid">
+        <button class="exp primary" id="expPdf">
+          <b>이 곡 · 타브 악보 PDF</b>
+          <span>인쇄용 벡터 악보. 제목·튜닝·카포·BPM 머리글과 페이지 번호가 들어갑니다.</span>
+        </button>
+        <button class="exp primary" id="expBook">
+          <b>악보집 PDF — 선택한 곡 묶음</b>
+          <span>표지 + 목차 + 각 곡 악보를 한 파일로 엮습니다. 왼쪽 목록에서 체크한 곡이 들어갑니다.</span>
+        </button>
+        <button class="exp" id="expTxt"><b>ASCII 타브 (.txt)</b><span>메모장·커뮤니티에 붙여넣기 좋은 형태</span></button>
+        <button class="exp" id="expMid"><b>MIDI (.mid)</b><span>DAW·악보 프로그램에서 열기</span></button>
+        <button class="exp" id="expJson"><b>프로젝트 (.json)</b><span>나중에 이어서 편집할 백업</span></button>
+        <button class="exp" id="expPrint"><b>바로 인쇄</b><span>PDF를 만든 뒤 인쇄 창을 엽니다</span></button>
+      </div>
+      <div style="margin-top:16px">
+        <div class="row2">
+          <div class="f"><label>용지</label><select id="pPage">
+            <option value="a4">A4</option><option value="letter">Letter</option></select></div>
+          <div class="f"><label>한 줄에 넣을 마디 수</label><select id="pPer">
+            <option value="3">3마디 — 크게</option><option value="4" selected>4마디</option>
+            <option value="5">5마디</option><option value="6">6마디 — 촘촘하게</option></select></div>
+        </div>
+        <label class="chk"><input type="checkbox" id="pChords" checked> 코드 이름 표시</label>
+        <label class="chk"><input type="checkbox" id="pTech" checked> 주법 기호(h/p/슬라이드) 표시</label>
+        <label class="chk"><input type="checkbox" id="pCream"> 크림색 종이 배경 (잉크를 더 씁니다)</label>
+        <div class="f" style="margin-top:12px"><label>악보집 제목</label>
+          <input id="pBookTitle" placeholder="기타 타브 악보집"></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="tbtn" data-close>닫기</button></div>
+  </div>
+</div>
+
+<!-- ── 설정 모달 ── -->
+<div class="mask" id="mSettings">
+  <div class="modal">
+    <div class="modal-h"><h3>설정</h3><button class="x" data-close>×</button></div>
+    <div class="modal-b">
+      <div class="f"><label>기본 튜닝</label><select id="sTuning"></select></div>
+      <div class="f"><label>Anthropic API 키 <span style="color:var(--ink3);font-weight:500">— AI 다듬기를 쓸 때만</span></label>
+        <input id="sKey" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
+      <div class="f"><label>AI 모델</label><input id="sModel" placeholder="claude-opus-5"></div>
+      <div class="callout">키는 <b>이 기기의 브라우저 저장소에만</b> 보관되며 api.anthropic.com 외
+        어디로도 전송되지 않습니다. 앱 코드에는 어떤 키도 들어있지 않습니다.
+        키를 지우려면 칸을 비우고 저장하세요.</div>
+      <label class="chk"><input type="checkbox" id="sAutoUpdate" checked> 앱을 열 때 업데이트 자동 확인</label>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--edge)">
+        <button class="tbtn" id="btnWipe" style="color:var(--warn);border-color:var(--warn)">
+          저장된 악보 전부 지우기</button>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="tbtn" data-close>취소</button>
+      <button class="tbtn hot" id="btnSaveSettings">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 업데이트 모달 ── -->
+<div class="mask" id="mUpdate">
+  <div class="modal">
+    <div class="modal-h"><h3>업데이트</h3><button class="x" data-close>×</button></div>
+    <div class="modal-b" id="updBody"></div>
+    <div class="modal-f">
+      <button class="tbtn" data-close>닫기</button>
+      <button class="tbtn hot" id="updReload" hidden>새로고침해서 적용</button>
+      <a class="tbtn hot" id="updLink" target="_blank" rel="noopener" hidden>새 버전 받기</a>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="./app/core/fft.js"></script>
+<script src="./app/core/audio.js"></script>
+<script src="./app/core/transcribe.js"></script>
+<script src="./app/core/fretboard.js"></script>
+<script src="./app/core/tabmodel.js"></script>
+<script src="./app/core/render.js"></script>
+<script src="./app/core/synth.js"></script>
+<script src="./app/core/pdf.js"></script>
+<script src="./app/core/exporters.js"></script>
+<script src="./app/core/library.js"></script>
+<script src="./app/core/ai.js"></script>
+<script src="./app/core/update.js"></script>
+<script src="./app/ui/app.js"></script>
+</body>
+</html>

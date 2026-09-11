@@ -1,0 +1,19 @@
+{
+  "name": "기타 탭 스튜디오",
+  "slug": "guitar-tab-studio",
+  "version": "1.1.0",
+  "released": "2026-09-11",
+  "tagPrefix": "guitar-tab-studio-v",
+  "changelog": "Cloudflare Pages 웹 배포 지원.\n· 정적 사이트로 배포 가능 (_headers 로 CSP·권한 정책 잠금, 외부 스크립트 0개라 아주 좁게 설정)\n· HTTPS 에서 유튜브 탭 오디오 캡처가 file:// 보다 안정적으로 동작\n· 업데이트 확인이 실행 환경을 구분 — 웹이면 '새로고침해서 적용', 로컬 파일이면 기존대로 zip 내려받기\n· GitHub Actions 자동 배포 워크플로와 wrangler 배포 스크립트 추가\n· file:// 로 직접 여는 기존 사용 방식은 그대로 동작",
+  "assets": {
+    "zip": "guitar-tab-studio-1.1.0.zip"
+  },
+  "minBrowser": "Chrome/Edge 100+, Safari 16+, Firefox 110+ (탭 오디오 캡처는 Chrome·Edge 권장)",
+  "deploy": {
+    "cloudflarePages": {
+      "rootDirectory": "guitar-tab-studio",
+      "buildCommand": "(없음)",
+      "outputDirectory": "."
+    }
+  }
+}

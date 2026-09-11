@@ -1,0 +1,7 @@
+# Cloudflare Pages 직접 업로드용 설정
+#   wrangler pages deploy . --project-name=guitar-tab-studio
+#
+# 이 앱은 빌드 스텝이 없다. 이 폴더가 그대로 배포 산출물이다.
+name = "guitar-tab-studio"
+pages_build_output_dir = "."
+compatibility_date = "2026-09-11"
