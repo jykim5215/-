@@ -1,3 +1,7 @@
+// Imported rather than written as java.util.Properties: inside a build script "java" already
+// names the Java plugin extension, so the package of the same name is unreachable by that path.
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,9 +9,9 @@ plugins {
 }
 
 /** Signing credentials, when the machine building this has them. Never in the repository. */
-val keystoreProperties: java.util.Properties? = rootProject.file("keystore.properties")
+val keystoreProperties: Properties? = rootProject.file("keystore.properties")
     .takeIf { it.exists() }
-    ?.let { file -> java.util.Properties().apply { file.inputStream().use { load(it) } } }
+    ?.let { file -> Properties().apply { file.inputStream().use { stream -> load(stream) } } }
 
 android {
     namespace = "kr.geulbeot.app"
