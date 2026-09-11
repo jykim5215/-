@@ -343,7 +343,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.viewTools(
         WideTool(
             label = if (pageLayoutView) "쪽 윤곽 끄기" else "쪽 윤곽 켜기",
             minWidth = 110.dp,
-            onClick = { viewModel.setPageLayoutView(!pageLayoutView) },
+            onClick = { viewModel.setPageLayout(!pageLayoutView) },
         )
     }
 }

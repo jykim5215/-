@@ -803,7 +803,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         zoomPercent = clamped
     }
 
-    fun setPageLayoutView(enabled: Boolean) {
+    // Named setPageLayout, not setPageLayoutView: the latter is the JVM name Kotlin already gives
+    // the property's own setter, and two declarations cannot share one signature.
+    fun setPageLayout(enabled: Boolean) {
         settings.pageLayoutView = enabled
         pageLayoutView = enabled
     }
