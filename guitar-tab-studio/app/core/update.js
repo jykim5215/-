@@ -6,7 +6,7 @@
 (function (GT) {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var OWNER = 'jykim5215';
   var REPO = '-';
   var TAG_PREFIX = 'guitar-tab-studio-v';
@@ -20,6 +20,15 @@
     var A = parseVer(a), B = parseVer(b);
     for (var i = 0; i < 3; i++) { if (A[i] > B[i]) return 1; if (A[i] < B[i]) return -1; }
     return 0;
+  }
+
+  /* 어떻게 실행 중인가: 웹(배포된 사이트)인가, 기기 안의 파일인가?
+     · 웹  → 새 버전이 나오면 새로고침만 하면 된다 (사이트 자체가 갱신됨)
+     · 파일 → 새 버전 zip 을 받아 폴더를 덮어써야 한다 */
+  function runtime() {
+    var p = (window.location && window.location.protocol) || '';
+    if (p === 'http:' || p === 'https:') return 'web';
+    return 'file';
   }
 
   function check(timeoutMs) {
@@ -43,7 +52,8 @@
             return r.tag_name && r.tag_name.indexOf(TAG_PREFIX) === 0 && !r.draft;
           });
           if (!mine.length) {
-            resolve({ current: VERSION, latest: null, hasUpdate: false, message: '아직 게시된 릴리즈가 없습니다.' });
+            resolve({ current: VERSION, runtime: runtime(), latest: null, hasUpdate: false,
+                      message: '아직 게시된 릴리즈가 없습니다.' });
             return;
           }
           mine.sort(function (a, b) { return cmp(b.tag_name.slice(TAG_PREFIX.length), a.tag_name.slice(TAG_PREFIX.length)); });
@@ -51,6 +61,7 @@
           var latest = rel.tag_name.slice(TAG_PREFIX.length);
           resolve({
             current: VERSION,
+            runtime: runtime(),
             latest: latest,
             hasUpdate: cmp(latest, VERSION) > 0,
             changelog: rel.body || '',
@@ -76,7 +87,8 @@
     TAG_PREFIX: TAG_PREFIX,
     repoUrl: 'https://github.com/' + OWNER + '/' + REPO,
     check: check,
-    compare: cmp
+    compare: cmp,
+    runtime: runtime
   };
   GT.VERSION = VERSION;
 })(window.GT = window.GT || {});

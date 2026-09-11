@@ -206,43 +206,57 @@ Book = { title, author, songs:[scoreId], cover:{...} }   // 악보집
 
 ## 6. 현재 상태 (Living — 작업할 때마다 갱신)
 
-> 최종 갱신: 2026-09-11 · **v1.0.0 구현 완료, 실제 브라우저 E2E 검증 통과**
+> 최종 갱신: 2026-09-11 · **v1.1.0 — 구현 완료 + Cloudflare Pages 배포 준비 완료, 브라우저 E2E 검증 통과**
 
 ### 끝난 것
 - **Phase 0** `HANDOFF.md` (코드보다 먼저 작성)
 - **Phase 1** UI 스타일 후보 3종 → 사용자가 **B · 페이퍼 스코어** 선택 → `app/style.css` 로 구현
-- **Phase 2** 코어 엔진 전부: `fft.js` `audio.js` `transcribe.js` `fretboard.js` `tabmodel.js`
+- **Phase 2** 코어 엔진: `fft.js` `audio.js` `transcribe.js` `fretboard.js` `tabmodel.js`
 - **Phase 3** `render.js`(캔버스 + 히트테스트) `synth.js`(Karplus-Strong) `ui/app.js`
 - **Phase 4** `pdf.js` — 의존성 0개 벡터 PDF. 단일 곡 + 악보집(표지·목차·쪽번호). `exporters.js`(ASCII/MIDI/JSON)
-- **Phase 5** `update.js` `library.js`, `tools/*`(바로가기·yt-dlp 헬퍼·아이콘·패키징), `assets/*`, `docs/SECURITY.md`, `dist/guitar-tab-studio-1.0.0.zip`
+- **Phase 5** `update.js` `library.js`, `tools/*`, `assets/*`, `docs/SECURITY.md`, `dist/*.zip`
 - **Phase 6** `ai.js` — 선택 기능. 키 없으면 이 기능만 꺼진다.
+- **Phase 7 (v1.1.0) 웹 배포** — `_headers`(CSP·Permissions-Policy) `_redirects` `wrangler.toml` `.assetsignore`,
+  `tools/deploy-cloudflare.sh`, `.github/workflows/deploy-guitar-tab-studio.yml`(저장소 루트), `docs/DEPLOY.md`
 
-### 검증 결과 (Playwright + Chromium, `file://` 로 실행)
-합성 기타 아르페지오(7.8초, 실제 100 BPM)를 넣어 전 구간을 돌렸다.
-- 모듈 13개 전부 로드, 페이지 에러 0건
-- BPM **99** 추정(실제 100), 조성 Am, 2마디 24음, 신뢰도 63%
-- 단일 PDF 22KB / 1페이지, 악보집 PDF 48KB / 3페이지(표지+목차+악보) — 헤더·xref·`%%EOF` 유효
+### v1.1.0 에서 바뀐 앱 동작
+`app/core/update.js` 에 `runtime()` 추가 — `location.protocol` 로 실행 환경을 구분한다.
+- `web`(http/https) → 업데이트 모달이 **"새로고침해서 적용"** 버튼을 보여준다 (사이트 자체가 갱신되므로)
+- `file` → 기존대로 릴리즈 zip 내려받기 안내
+
+### 검증 결과 (Playwright + Chromium)
+합성 기타 아르페지오(7.8초, 실제 100 BPM)로 **`file://` 와 `http://`(실제 `_headers` CSP 적용) 양쪽에서** 전 구간 실행.
+- 모듈 13개 로드, 페이지 에러 0건, **CSP 위반 0건**
+- BPM 99 추정(실제 100), 조성 Am, 2마디 24음, 신뢰도 63%
+- 단일 PDF 1페이지 / 악보집 PDF 3페이지(표지+목차+악보) — 헤더·xref·`%%EOF` 유효
 - ASCII 타브·MIDI(`MThd`/`MTrk`) 정상
-- 업데이트 확인이 네트워크 문제로 실패해도 **앱은 정상 동작** (요구사항대로 graceful degrade 확인됨)
+- `runtime()` 이 http 에서 `web`, file 에서 `file` 로 정확히 판별됨
+- 업데이트 확인이 네트워크 실패해도 앱은 정상 동작 (요구사항대로 graceful degrade)
+
+### 배포 상태 — **사용자 조치 필요**
+- **Cloudflare Pages: 아직 게시 전.** 설정 파일과 워크플로는 전부 준비됐지만, 계정 자격증명이 없어
+  실제 배포는 실행하지 못했다. `docs/DEPLOY.md` 의 방법 A(대시보드 Git 연결) / B(wrangler) / C(Actions 시크릿) 중 하나 선택 필요.
+  **⚠️ Pages 설정에서 루트 디렉터리를 반드시 `guitar-tab-studio` 로 지정할 것** — 저장소 루트에는 무관한 다른 앱의 `index.html` 이 있다.
+- **GitHub 릴리즈: 아직 게시 전.** 태그 `guitar-tab-studio-v1.1.0` + `dist/guitar-tab-studio-1.1.0.zip` 첨부 예정.
+  계정에 반영되는 작업이라 승인 전에는 올리지 않는다. 릴리즈가 올라가야 앱의 업데이트 확인이 실제로 동작한다.
+- **브랜치**: `claude/vibrant-gauss-ka8kf3` · **PR**: jykim5215/-#7 (draft, mergeable)
+- **앱 내 업데이트 확인**: 구현 완료. **배포 zip**: `dist/guitar-tab-studio-1.1.0.zip` (약 104KB)
 
 ### 알려진 품질 이슈 / 다음에 손볼 것 (우선순위 순)
-1. **다성 채보 정확도** — 감쇠가 긴 아르페지오에서 유령음이 생긴다(16음 연주 → 24음 검출). `transcribe.js` 의 `subtractHarmonics` 감쇠 계수(현재 0.15)와 `trackNotes` 임계값 튜닝 여지가 있다.
-2. **리듬 양자화** — 현재 16분음표 고정 격자(`SUBDIV=4`). 셋잇단(triplet)·스윙을 표현하지 못한다. `tabmodel.js` 에 `subdiv` 를 12로 두는 경로를 추가하면 된다.
-3. **PDF 리듬 표기** — 타브에 음표 길이(기둥/깃발)를 그리지 않는다. `pdf.js` 의 `drawMeasure` 아래쪽에 스템을 그리면 된다.
-4. **마디 수동 편집** — `tabmodel.js` 에 `insertMeasure`/`deleteMeasure` 는 있으나 UI에 노출하지 않았다.
-5. **구간 반복 감지** — 현재는 AI가 있을 때만 구간 라벨이 붙는다. 자기유사도 행렬로 오프라인 검출을 넣으면 AI 없이도 된다.
+1. **다성 채보 정확도** — 감쇠가 긴 아르페지오에서 유령음(16음 연주 → 24음 검출). `transcribe.js` 의
+   `subtractHarmonics` 감쇠 계수(현재 0.15)와 `trackNotes` 임계값 튜닝 여지.
+2. **리듬 양자화** — 16분음표 고정 격자(`SUBDIV=4`). 셋잇단·스윙 미지원. `tabmodel.js` 에 `subdiv=12` 경로 추가하면 된다.
+3. **PDF 리듬 표기** — 타브에 음표 길이(기둥/깃발)를 그리지 않는다. `pdf.js` 의 `drawMeasure` 아래에 스템 추가.
+4. **마디 수동 편집** — `insertMeasure`/`deleteMeasure` 는 있으나 UI 미노출.
+5. **구간 반복 감지** — 현재는 AI 있을 때만 구간 라벨. 자기유사도 행렬로 오프라인 검출 가능.
 
-### 배포 상태
-- **GitHub 마지막 업로드 버전**: v1.0.0 (브랜치 `claude/vibrant-gauss-ka8kf3`). 릴리즈 태그 `guitar-tab-studio-v1.0.0` 는 **아직 게시 전** — 사용자 승인 후 게시할 것.
-- **앱 내 업데이트 확인 기능**: 구현 완료(`update.js`). 상단 버전 배지 클릭 + 실행 1.8초 뒤 자동 확인. 릴리즈가 올라가기 전까지는 "아직 게시된 릴리즈가 없습니다" 로 표시된다.
-- **배포 zip**: `dist/guitar-tab-studio-1.0.0.zip` (약 100KB). `bash tools/package.sh` 로 재생성.
-- **보안 점검**: `docs/SECURITY.md` 참고. 하드코딩 자격증명 0건, 외부 스크립트 0개.
-
-### Codex가 이어받을 때 바로 할 수 있는 일
+### Codex가 이어받을 때
 ```bash
 cd guitar-tab-studio
-python3 tools/make-icons.py     # 아이콘 재생성
-bash tools/package.sh           # 배포 zip + 스크럽 점검
-# 브라우저로 index.html 을 열면 바로 실행된다 (서버 불필요)
+python3 tools/make-icons.py        # 아이콘 재생성
+bash tools/package.sh              # 배포 zip + 스크럽 점검
+bash tools/deploy-cloudflare.sh    # Cloudflare Pages 배포 (wrangler 필요)
+# 브라우저로 index.html 을 열면 서버 없이 바로 실행된다
 ```
-코드 수정 시 `version.json` 의 `version` 과 `app/core/update.js` 의 `VERSION` 상수를 **함께** 올릴 것 (둘이 어긋나면 업데이트 확인이 잘못 동작한다).
+코드 수정 시 **세 곳의 버전을 같이 올릴 것**: `version.json`, `app/core/update.js` 의 `VERSION` 상수,
+`index.html` 의 버전 배지 텍스트. 어긋나면 업데이트 확인이 잘못 동작한다.

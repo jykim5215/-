@@ -79,6 +79,22 @@ powershell -ExecutionPolicy Bypass -File tools\make-shortcut.ps1   # 윈도우
 
 ---
 
+## 웹에 올리기 (선택)
+
+이 앱은 정적 파일이라 그대로 Cloudflare Pages 에 올라갑니다. HTTPS 로 열면
+**유튜브 탭 오디오 캡처가 `file://` 보다 안정적으로 동작**하고, 링크만 있으면 어느 기기에서든 쓸 수 있습니다.
+
+```bash
+npm i -g wrangler && wrangler login
+bash tools/deploy-cloudflare.sh
+```
+
+대시보드에서 GitHub 를 연결하는 방법(토큰 불필요, 푸시하면 자동 배포)과
+보안 헤더 설명은 `docs/DEPLOY.md` 를 보세요.
+**루트 디렉터리를 `guitar-tab-studio` 로 지정해야 합니다** — 저장소 루트에는 다른 앱이 있습니다.
+
+---
+
 ## 업데이트
 
 상단의 버전 배지를 누르면 GitHub 릴리즈를 확인합니다.

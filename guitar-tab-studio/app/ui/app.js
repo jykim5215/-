@@ -615,6 +615,7 @@
     if (!silent) {
       $('updBody').innerHTML = '<p style="margin:0;color:var(--ink2);font-size:12.5px">GitHub에서 확인 중…</p>';
       $('updLink').hidden = true;
+      $('updReload').hidden = true;
       openModal('mUpdate');
     }
     GT.Update.check().then(function (r) {
@@ -629,11 +630,19 @@
         (r.latest ? ' · 최신 버전 <b>v' + esc(r.latest) + '</b>' : '') + '</p>';
       if (r.hasUpdate) {
         html += '<div class="changelog">' + esc(r.changelog || '변경 내역이 없습니다.') + '</div>';
-        html += '<div class="callout">새 버전 zip을 받아 압축을 풀고, 지금 쓰는 폴더의 파일을 덮어쓰면 됩니다. ' +
-          '저장된 악보는 브라우저 안에 있으므로 파일을 바꿔도 남아 있습니다.</div>';
-        var link = r.assets.length ? r.assets[0].url : r.htmlUrl;
-        $('updLink').href = link;
-        $('updLink').hidden = false;
+        if (r.runtime === 'web') {
+          html += '<div class="callout">이 앱은 웹에 올라가 있어서 <b>새로고침만 하면</b> 최신 버전이 적용됩니다. ' +
+            '저장된 악보는 브라우저 안에 있으므로 그대로 남아 있습니다.</div>';
+          $('updLink').hidden = true;
+          $('updReload').hidden = false;
+        } else {
+          html += '<div class="callout">새 버전 zip을 받아 압축을 풀고, 지금 쓰는 폴더의 파일을 덮어쓰면 됩니다. ' +
+            '저장된 악보는 브라우저 안에 있으므로 파일을 바꿔도 남아 있습니다.</div>';
+          var link = r.assets.length ? r.assets[0].url : r.htmlUrl;
+          $('updLink').href = link;
+          $('updLink').hidden = false;
+          $('updReload').hidden = true;
+        }
       } else {
         html += '<div class="callout">' + esc(r.message || '최신 버전을 쓰고 있습니다.') + '</div>';
       }
@@ -771,6 +780,7 @@
     $('btnSettings').addEventListener('click', openSettings);
     $('btnSaveSettings').addEventListener('click', saveSettings);
     $('verBtn').addEventListener('click', function () { checkUpdate(false); });
+    $('updReload').addEventListener('click', function () { window.location.reload(true); });
     $('btnAI').addEventListener('click', runAI);
     $('btnBook').addEventListener('click', function () { openModal('mExport'); setTimeout(doExportBook, 120); });
     $('btnSelectAll').addEventListener('click', function () {
