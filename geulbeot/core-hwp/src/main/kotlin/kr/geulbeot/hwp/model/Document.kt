@@ -223,17 +223,26 @@ class Paragraph(
         items.removeAll { it is TextSpan && it.text.isEmpty() }
     }
 
-    fun copyParagraph(): Paragraph {
+    /**
+     * A faithful copy, including the source record and dirty flag.
+     *
+     * Undo depends on this being faithful: restoring a snapshot must also restore whether the
+     * paragraph had been edited, or an undone edit would still force its records to be regenerated.
+     * Anchored objects are copied deeply so editing a table after a snapshot cannot reach back and
+     * change what the snapshot holds.
+     */
+    fun deepCopy(): Paragraph {
         val p = Paragraph(paraShapeId, styleId)
         p.controlMask = controlMask
         p.breakType = breakType
-        p.dirty = true
+        p.sourceRecord = sourceRecord
+        p.dirty = dirty
         for (item in items) {
             p.items.add(
                 when (item) {
                     is TextSpan -> item.copy()
                     is CharControlSpan -> item.copy()
-                    is ControlSpan -> item.copy()
+                    is ControlSpan -> item.copy(control = item.control?.deepCopyControl())
                 },
             )
         }
@@ -272,6 +281,14 @@ sealed class Control {
      * no page setup at all.
      */
     open val isStructural: Boolean get() = false
+
+    /**
+     * A copy deep enough that editing the original cannot change the copy.
+     *
+     * Only controls whose contents the editor can change need real copying; the rest are immutable
+     * as far as this app is concerned and are shared.
+     */
+    open fun deepCopyControl(): Control = this
 }
 
 class TableControl : Control() {
@@ -291,6 +308,27 @@ class TableControl : Control() {
 
     fun cellAt(row: Int, column: Int): TableCell? =
         rows.getOrNull(row)?.cells?.firstOrNull { it.columnIndex == column }
+
+    override fun deepCopyControl(): Control {
+        val copy = TableControl()
+        copy.sourceRecord = sourceRecord
+        copy.rowCount = rowCount
+        copy.columnCount = columnCount
+        copy.cellSpacing = cellSpacing
+        copy.insideMarginLeft = insideMarginLeft
+        copy.insideMarginRight = insideMarginRight
+        copy.insideMarginTop = insideMarginTop
+        copy.insideMarginBottom = insideMarginBottom
+        copy.borderFillId = borderFillId
+        copy.width = width
+        copy.height = height
+        for (row in rows) {
+            val rowCopy = TableRow()
+            for (cell in row.cells) rowCopy.cells.add(cell.deepCopy())
+            copy.rows.add(rowCopy)
+        }
+        return copy
+    }
 }
 
 class TableRow {
@@ -312,6 +350,23 @@ class TableCell {
     val paragraphs: MutableList<Paragraph> = ArrayList()
 
     val text: String get() = paragraphs.joinToString("\n") { it.text }
+
+    fun deepCopy(): TableCell {
+        val copy = TableCell()
+        copy.columnIndex = columnIndex
+        copy.rowIndex = rowIndex
+        copy.columnSpan = columnSpan
+        copy.rowSpan = rowSpan
+        copy.width = width
+        copy.height = height
+        copy.marginLeft = marginLeft
+        copy.marginRight = marginRight
+        copy.marginTop = marginTop
+        copy.marginBottom = marginBottom
+        copy.borderFillId = borderFillId
+        for (p in paragraphs) copy.paragraphs.add(p.deepCopy())
+        return copy
+    }
 }
 
 class PictureControl : Control() {
@@ -390,6 +445,15 @@ data class PageDef(
 class Section {
     var pageDef: PageDef = PageDef()
     val paragraphs: MutableList<Paragraph> = ArrayList()
+
+    /** A copy of every paragraph, for the undo stack. */
+    fun snapshotParagraphs(): List<Paragraph> = paragraphs.map { it.deepCopy() }
+
+    /** Puts a snapshot back. The section itself keeps its identity so references stay valid. */
+    fun restoreParagraphs(snapshot: List<Paragraph>) {
+        paragraphs.clear()
+        paragraphs.addAll(snapshot.map { it.deepCopy() })
+    }
 
     /** Records read from this section's stream, used to write back what was not modified. */
     var sourceRecords: List<HwpRecord>? = null

@@ -23,3 +23,6 @@ signing.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Distribution archives are build output, not source
+dist/

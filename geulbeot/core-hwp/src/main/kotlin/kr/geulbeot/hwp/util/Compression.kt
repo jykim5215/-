@@ -11,7 +11,16 @@ import java.util.zip.Inflater
  */
 object Compression {
 
-    fun inflateRaw(data: ByteArray): ByteArray {
+    /**
+     * Ceiling on how much a single stream may expand to.
+     *
+     * Deflate can turn a few kilobytes into gigabytes, so a document arriving from anywhere - a
+     * messaging app, a download - could otherwise take the process down just by being opened. No
+     * real HWP stream comes close to this.
+     */
+    const val MAX_INFLATED_BYTES: Int = 256 * 1024 * 1024
+
+    fun inflateRaw(data: ByteArray, limit: Int = MAX_INFLATED_BYTES): ByteArray {
         val inflater = Inflater(true)
         try {
             inflater.setInput(data)
@@ -26,6 +35,11 @@ object Compression {
                 if (n == 0) {
                     if (inflater.needsInput() || inflater.needsDictionary()) break
                 } else {
+                    if (out.size() + n > limit) {
+                        throw HwpFormatException(
+                            "문서의 압축을 푸는 중 크기가 비정상적으로 커졌습니다. 손상되었거나 안전하지 않은 파일일 수 있습니다.",
+                        )
+                    }
                     out.write(chunk, 0, n)
                 }
             }

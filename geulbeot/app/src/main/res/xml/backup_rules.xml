@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!--
+      Settings only.
+
+      The recent-document list is deliberately left out even though it would be convenient to
+      restore: each entry carries the file name and the first line or so of the document, which is
+      document content, and content belongs on the device. The Storage Access Framework grants it
+      refers to are tied to this device anyway, so a restored list would mostly be dead links.
+    -->
+    <include domain="sharedpref" path="geulbeot_settings.xml" />
+    <exclude domain="file" path="recent_documents.json" />
+    <exclude domain="file" path="autosave/" />
+    <exclude domain="cache" path="." />
+</full-backup-content>

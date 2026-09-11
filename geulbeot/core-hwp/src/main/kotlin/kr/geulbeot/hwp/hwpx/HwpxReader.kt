@@ -85,16 +85,32 @@ object HwpxReader {
         false
     }
 
+    /**
+     * Total uncompressed size a `.hwpx` may expand to.
+     *
+     * A ZIP can claim to be a few kilobytes and expand to gigabytes. Opening a document should not
+     * be able to take the app down, so the archive is read under a ceiling no real document reaches.
+     */
+    const val MAX_ARCHIVE_BYTES: Long = 512L * 1024 * 1024
+
     fun readZip(bytes: ByteArray): LinkedHashMap<String, ByteArray> {
         val entries = LinkedHashMap<String, ByteArray>()
+        var total = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (entry.isDirectory) continue
                 // Reject paths that would escape the archive if anything ever writes them out.
                 val name = entry.name
-                if (name.startsWith("/") || name.contains("..")) continue
-                entries[name] = zip.readBytes()
+                if (name.startsWith("/") || name.startsWith("\\") || name.contains("..")) continue
+                val data = zip.readBytes()
+                total += data.size
+                if (total > MAX_ARCHIVE_BYTES) {
+                    throw HwpFormatException(
+                        "문서의 압축을 푸는 중 크기가 비정상적으로 커졌습니다. 손상되었거나 안전하지 않은 파일일 수 있습니다.",
+                    )
+                }
+                entries[name] = data
             }
         }
         return entries
