@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스타일 C · 네오 테이프 — 기타 탭 스튜디오</title>
+<style>
+  :root{
+    --bg:#1a1626; --tile:#241f34; --tile2:#2e2843; --line:#3d3557;
+    --ink:#f4f0ff; --ink2:#b3a8d4; --ink3:#7b6fa0;
+    --neon:#ff4d9d; --lime:#c8ff4d; --sky:#4dd8ff; --amber:#ffc84d;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --disp:"Arial Black","Helvetica Neue",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-size:13px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+    background-image:radial-gradient(circle at 12% 0%,rgba(255,77,157,.13),transparent 42%),
+                     radial-gradient(circle at 88% 100%,rgba(77,216,255,.11),transparent 45%)}
+  .badge-style{position:fixed;left:12px;bottom:12px;z-index:99;background:var(--lime);color:#1a1626;
+    font-weight:900;padding:8px 14px;border-radius:99px;font-size:12px;border:2px solid #1a1626;
+    box-shadow:3px 3px 0 var(--neon)}
+  /* top */
+  .topbar{display:flex;align-items:center;gap:13px;height:54px;padding:0 16px;
+    background:var(--tile);border-bottom:2px solid var(--line)}
+  .logo{display:flex;align-items:center;gap:9px;font-family:var(--disp);font-size:15px;
+    letter-spacing:-.02em;text-transform:uppercase}
+  .logo svg{width:22px;height:22px}
+  .ver{font:800 10px/1 var(--mono);color:#1a1626;background:var(--lime);padding:5px 7px;border-radius:99px}
+  .spacer{flex:1}
+  .tbtn{background:var(--tile2);border:2px solid var(--line);color:var(--ink2);
+    padding:7px 13px;border-radius:99px;font-size:12px;cursor:pointer;font-weight:800}
+  .tbtn:hover{color:var(--ink);border-color:var(--sky)}
+  .tbtn.hot{background:var(--neon);border-color:var(--neon);color:#fff;box-shadow:0 0 20px rgba(255,77,157,.45)}
+  /* layout */
+  .shell{display:grid;grid-template-columns:232px 1fr 266px;height:calc(100vh - 54px - 58px);gap:10px;padding:10px}
+  .rail,.insp{background:var(--tile);border:2px solid var(--line);border-radius:16px;overflow:hidden auto}
+  .sec-h{padding:13px 15px 8px;font-family:var(--disp);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink3)}
+  .sec-h em{font-style:normal;color:var(--lime)}
+  .song{display:flex;gap:9px;align-items:center;margin:0 10px 7px;padding:9px 11px;cursor:pointer;
+    background:var(--tile2);border:2px solid transparent;border-radius:11px}
+  .song:hover{border-color:var(--line)}
+  .song.on{border-color:var(--neon);box-shadow:0 0 16px rgba(255,77,157,.22)}
+  .song input{accent-color:var(--neon);margin:0}
+  .song .t{font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .song .s{font:700 10px var(--mono);color:var(--ink3);margin-top:2px}
+  .book-cta{margin:6px 10px 14px;width:calc(100% - 20px);padding:12px;background:var(--lime);
+    border:2px solid var(--lime);color:#1a1626;border-radius:11px;font-weight:900;
+    cursor:pointer;font-size:12.5px}
+  .book-cta:hover{box-shadow:0 0 22px rgba(200,255,77,.4)}
+  /* center */
+  .stage{display:flex;flex-direction:column;min-width:0;background:var(--tile);
+    border:2px solid var(--line);border-radius:16px;overflow:hidden}
+  .steps{display:flex;gap:7px;padding:11px 13px;border-bottom:2px solid var(--line)}
+  .step{padding:8px 14px;font-size:11.5px;font-weight:800;color:var(--ink3);cursor:pointer;
+    border:2px solid var(--line);border-radius:99px;white-space:nowrap;background:var(--tile2)}
+  .step .n{font:900 10px var(--mono);margin-right:5px}
+  .step.done{color:var(--lime);border-color:rgba(200,255,77,.35)}
+  .step.on{color:#fff;background:var(--neon);border-color:var(--neon)}
+  .canvas-wrap{flex:1;overflow:auto;padding:16px}
+  .sheet{background:#15111f;border:2px solid var(--line);border-radius:14px;padding:18px 20px}
+  .sheet-h{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-bottom:15px;padding-bottom:12px;border-bottom:2px dashed var(--line)}
+  .sheet-h h2{margin:0;font-family:var(--disp);font-size:18px;letter-spacing:-.02em}
+  .tagpill{font:800 10px var(--mono);color:var(--sky);border:2px solid rgba(77,216,255,.3);
+    border-radius:99px;padding:4px 9px}
+  .measure-tag{display:inline-block;font:900 10px var(--mono);color:#1a1626;background:var(--amber);
+    border-radius:99px;padding:4px 10px;margin:14px 0 6px;letter-spacing:.05em}
+  .chordrow{font:800 11px/1.6 var(--mono);color:var(--lime);white-space:pre}
+  .tabline{font:600 12.5px/1.85 var(--mono);white-space:pre;color:#ddd6f2;overflow-x:auto}
+  .tabline .fx{color:var(--neon)}
+  .tabline .low{color:var(--ink3)}
+  /* inspector */
+  .fgrp{padding:4px 14px 12px}
+  .f{margin-bottom:10px}
+  .f label{display:block;font:800 10px var(--mono);color:var(--ink3);margin-bottom:5px;
+    letter-spacing:.06em;text-transform:uppercase}
+  .f input,.f select{width:100%;background:#15111f;border:2px solid var(--line);color:var(--ink);
+    border-radius:9px;padding:8px 9px;font-size:12.5px;font-family:inherit}
+  .f input:focus,.f select:focus{outline:none;border-color:var(--sky)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .conf{display:flex;align-items:center;gap:9px;margin:12px 14px;padding:11px 12px;
+    background:var(--tile2);border-radius:11px;border:2px solid var(--line)}
+  .bar{flex:1;height:7px;background:#15111f;border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;width:78%;background:linear-gradient(90deg,var(--neon),var(--lime))}
+  .hint{padding:4px 15px 18px;font-size:11.5px;color:var(--ink3);line-height:1.65}
+  kbd{background:var(--tile2);border:2px solid var(--line);border-radius:6px;padding:1px 6px;
+    font:800 10px var(--mono);color:var(--ink2)}
+  /* transport */
+  .transport{height:58px;display:flex;align-items:center;gap:12px;margin:0 10px 10px;padding:0 16px;
+    background:var(--tile);border:2px solid var(--line);border-radius:16px}
+  .play{width:38px;height:38px;border-radius:50%;border:none;background:var(--neon);color:#fff;
+    font-size:14px;cursor:pointer;display:grid;place-items:center;box-shadow:0 0 20px rgba(255,77,157,.5)}
+  .time{font:800 12px var(--mono);color:var(--lime);min-width:94px}
+  .seek{flex:1;height:7px;background:#15111f;border-radius:99px;position:relative;border:2px solid var(--line)}
+  .seek i{position:absolute;inset:0 62% 0 0;background:linear-gradient(90deg,var(--sky),var(--neon));border-radius:99px}
+  .seek b{position:absolute;left:38%;top:-4px;width:13px;height:13px;border-radius:9px;background:#fff}
+  .chip{background:var(--tile2);border:2px solid var(--line);color:var(--ink2);border-radius:99px;
+    padding:6px 11px;font:800 11px var(--mono);cursor:pointer}
+  .chip.on{color:#1a1626;background:var(--lime);border-color:var(--lime)}
+  @media(max-width:980px){.shell{grid-template-columns:1fr}.rail,.insp{display:none}}
+</style>
+</head>
+<body>
+<div class="badge-style">스타일 C · 네오 테이프</div>
+
+<div class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#ff4d9d" stroke-width="2" stroke-linecap="round">
+      <path d="M14.5 3.5 20.5 9.5"/><path d="M17.5 6.5 9 15"/><circle cx="7" cy="17" r="4"/>
+      <path d="M4 4h3M4 6h3M4 8h3"/>
+    </svg>
+    Guitar Tab Studio
+  </div>
+  <span class="ver">v1.0.0</span>
+  <div class="spacer"></div>
+  <button class="tbtn">업데이트 확인</button>
+  <button class="tbtn">설정</button>
+  <button class="tbtn hot">＋ 소리 가져오기</button>
+</div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="sec-h">악보집 <em>· 4곡</em></div>
+    <div class="song on"><input type="checkbox" checked><div><div class="t">Untitled Fingerstyle #1</div><div class="s">DADGAD · 92BPM · 3p</div></div></div>
+    <div class="song"><input type="checkbox" checked><div><div class="t">연습곡 — 아르페지오</div><div class="s">STANDARD · 120BPM · 2p</div></div></div>
+    <div class="song"><input type="checkbox"><div><div class="t">Blues Shuffle 습작</div><div class="s">DROP D · 84BPM · 4p</div></div></div>
+    <div class="song"><input type="checkbox" checked><div><div class="t">Intro riff 메모</div><div class="s">STANDARD · 76BPM · 1p</div></div></div>
+    <button class="book-cta">📕 선택 3곡 → 악보집 PDF</button>
+  </aside>
+
+  <main class="stage">
+    <nav class="steps">
+      <div class="step done"><span class="n">01</span>소리 가져오기</div>
+      <div class="step done"><span class="n">02</span>분석</div>
+      <div class="step on"><span class="n">03</span>다듬기</div>
+      <div class="step"><span class="n">04</span>PDF 내보내기</div>
+    </nav>
+    <div class="canvas-wrap">
+      <div class="sheet">
+        <div class="sheet-h">
+          <h2>Untitled Fingerstyle #1</h2>
+          <div><span class="tagpill">DADGAD</span> <span class="tagpill">CAPO 2</span>
+               <span class="tagpill">92 BPM</span> <span class="tagpill">KEY D</span></div>
+        </div>
+        <span class="measure-tag">INTRO · 마디 1–4</span>
+        <div class="chordrow">Dsus2          A/C#           Bm7            G</div>
+<div class="tabline">e|--0-----0-----|--0-----0-----|--2-----2-----|--3-----3-----|
+B|----3-----3---|----2-----2---|----3-----3---|----0-----0---|
+G|------2-------|------2-------|------2-------|------0-------|
+D|--------0-----|--------2-----|--------4-----|--------0-----|
+A|--------------|--4-----------|--2-----------|--2-----------|
+D|--0-----------|--------------|--------------|--3-----------|</div>
+        <span class="measure-tag">VERSE · 마디 5–8</span>
+        <div class="chordrow">D              G/B            A              Dsus4  D</div>
+<div class="tabline">e|--<span class="fx">2h4</span>---0-----|--------------|--0-----0-----|--3-----2-----|
+B|------3-------|--0-----0-----|--2-----2-----|--3-----3-----|
+G|--------2-----|----0-----0---|------2-------|------2-------|
+D|--0-----------|------0-------|--------------|--0-----0-----|
+A|--------------|--2-----------|--0-----------|--------------|
+E|--------------|--<span class="low">3</span>-----------|--------------|--------------|</div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="insp">
+    <div class="conf"><span style="font:800 10px var(--mono);color:var(--ink3)">신뢰도</span>
+      <span class="bar"><i></i></span><b style="font:900 11px var(--mono);color:var(--lime)">78%</b></div>
+    <div class="sec-h">곡 정보</div>
+    <div class="fgrp">
+      <div class="f"><label>제목</label><input value="Untitled Fingerstyle #1"></div>
+      <div class="f"><label>출처</label><input value="youtube.com/watch?v=…"></div>
+      <div class="row2">
+        <div class="f"><label>튜닝</label><select><option>DADGAD</option><option>Standard</option></select></div>
+        <div class="f"><label>카포</label><select><option>2</option><option>0</option></select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>BPM</label><input value="92"></div>
+        <div class="f"><label>박자</label><select><option>4/4</option><option>3/4</option></select></div>
+      </div>
+    </div>
+    <div class="sec-h">선택한 음</div>
+    <div class="fgrp">
+      <div class="row2">
+        <div class="f"><label>줄</label><select><option>1 (e)</option><option>2 (B)</option></select></div>
+        <div class="f"><label>프렛</label><input value="4"></div>
+      </div>
+      <div class="f"><label>주법</label><select><option>해머온 (h)</option><option>없음</option><option>슬라이드 (/)</option></select></div>
+    </div>
+    <div class="hint"><kbd>클릭</kbd> 선택 · <kbd>↑↓</kbd> 줄 · <kbd>←→</kbd> 프렛 · <kbd>Del</kbd> 삭제</div>
+  </aside>
+</div>
+
+<div class="transport">
+  <button class="play">▶</button>
+  <span class="time">01:24 / 04:12</span>
+  <span class="seek"><i></i><b></b></span>
+  <span class="chip on">루프</span><span class="chip">0.75×</span><span class="chip">메트로놈</span><span class="chip">원본 ↔ 채보</span>
+</div>
+</body>
+</html>
