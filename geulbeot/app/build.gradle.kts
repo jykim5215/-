@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+/** Signing credentials, when the machine building this has them. Never in the repository. */
+val keystoreProperties: java.util.Properties? = rootProject.file("keystore.properties")
+    .takeIf { it.exists() }
+    ?.let { file -> java.util.Properties().apply { file.inputStream().use { load(it) } } }
+
 android {
     namespace = "kr.geulbeot.app"
     compileSdk = 35
@@ -25,19 +30,16 @@ android {
     // Without it the release build is simply unsigned - no key material, real or placeholder, is
     // ever committed, because a key in the repository would let anyone sign a package that
     // replaces this app through its own update path.
-    val keystorePropertiesFile = rootProject.file("keystore.properties")
-    val hasReleaseKey = keystorePropertiesFile.exists()
-
-    signingConfigs {
-        if (hasReleaseKey) {
-            create("release") {
-                val properties = java.util.Properties()
-                keystorePropertiesFile.inputStream().use { properties.load(it) }
-                storeFile = rootProject.file(properties.getProperty("storeFile"))
-                storePassword = properties.getProperty("storePassword")
-                keyAlias = properties.getProperty("keyAlias")
-                keyPassword = properties.getProperty("keyPassword")
-            }
+    //
+    // The config is created here and held in a local, rather than looked up from inside the build
+    // type: a build type's DSL scope is not the android extension's, and reaching across is the
+    // shape that breaks.
+    val releaseSigning = keystoreProperties?.let { properties ->
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(properties.getProperty("storeFile"))
+            storePassword = properties.getProperty("storePassword")
+            keyAlias = properties.getProperty("keyAlias")
+            keyPassword = properties.getProperty("keyPassword")
         }
     }
 
@@ -46,7 +48,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigning
         }
         debug {
             // No applicationIdSuffix: the launcher shortcuts in res/xml name the package

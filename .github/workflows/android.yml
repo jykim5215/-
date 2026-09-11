@@ -43,7 +43,7 @@ jobs:
 
       - name: 문서 엔진 테스트
         working-directory: geulbeot
-        run: ./gradlew :core-hwp:test --no-daemon --stacktrace
+        run: ./gradlew :core-hwp:test --no-daemon --console=plain
 
       - name: 서명 준비
         id: signing
@@ -75,9 +75,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ steps.signing.outputs.variant }}" = "release" ]; then
-            ./gradlew :app:assembleRelease --no-daemon --stacktrace
+            ./gradlew :app:assembleRelease --no-daemon --console=plain
           else
-            ./gradlew :app:assembleDebug --no-daemon --stacktrace
+            ./gradlew :app:assembleDebug --no-daemon --console=plain
           fi
 
       - name: 서명 재료 지우기
