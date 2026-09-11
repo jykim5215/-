@@ -105,6 +105,17 @@ jobs:
           echo "path=$TARGET" >> "$GITHUB_OUTPUT"
           ls -la out/
 
+      - name: APK 확인
+        run: |
+          set -euo pipefail
+          # Proof of what actually came out, rather than trusting that a green build means a
+          # usable package: the manifest as the platform will read it, and the signature.
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/aapt2" dump badging "${{ steps.apk.outputs.path }}" \
+            | grep -E "^(package|sdkVersion|targetSdkVersion|application-label|launchable-activity|uses-permission)" || true
+          "$BT/apksigner" verify --print-certs --verbose "${{ steps.apk.outputs.path }}" \
+            | grep -E "^(Verifies|Verified using|Signer #1 certificate (DN|SHA-256))" || true
+
       - name: 내려받을 수 있게 올리기
         uses: actions/upload-artifact@v4
         with:
