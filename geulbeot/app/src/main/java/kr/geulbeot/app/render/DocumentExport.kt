@@ -71,7 +71,7 @@ private class DocumentPrintAdapter(
         oldAttributes: PrintAttributes?,
         newAttributes: PrintAttributes?,
         cancellationSignal: CancellationSignal?,
-        callback: LayoutResultCallback,
+        callback: PrintDocumentAdapter.LayoutResultCallback,
         extras: Bundle?,
     ) {
         if (cancellationSignal?.isCanceled == true) {
@@ -93,7 +93,7 @@ private class DocumentPrintAdapter(
         requestedPages: Array<out PageRange>?,
         destination: ParcelFileDescriptor,
         cancellationSignal: CancellationSignal?,
-        callback: WriteResultCallback,
+        callback: PrintDocumentAdapter.WriteResultCallback,
     ) {
         val pdf = PdfDocument()
         try {

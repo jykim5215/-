@@ -1,6 +1,10 @@
-plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
-}
+// No plugins block here on purpose.
+//
+// Declaring the Kotlin plugin at the root puts it on the build classpath, and a subproject that
+// then asks for a sibling Kotlin plugin *with a version* - `:app` needs kotlin-android - is
+// rejected with "already on the classpath with an unknown version". Each module declares the
+// plugins it needs instead, which also means this file never has to resolve the Android Gradle
+// plugin, so `:core-hwp:test` still runs where Google's Maven repository is unreachable.
 
 /**
  * Builds the distribution archive.

@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.text.Layout
 import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.style.AbsoluteSizeSpan
@@ -295,7 +296,9 @@ class DocumentPainter(private val document: HwpDocument) {
     }
 
     private fun applySpans(builder: SpannableStringBuilder, start: Int, end: Int, shape: CharShape) {
-        val flags = SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE
+        // The constant lives on Spanned. Kotlin will not reach it through an implementing
+        // class the way Java lets you write SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE.
+        val flags = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
         // Font size is stored in 1/100 pt and the canvas is in points, so this is a plain division.
         builder.setSpan(AbsoluteSizeSpan((shape.height / 100f).coerceAtLeast(1f).toInt(), false), start, end, flags)
         builder.setSpan(TypefaceSpan(familyFor(shape)), start, end, flags)

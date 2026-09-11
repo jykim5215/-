@@ -21,12 +21,15 @@ android {
         resourceConfigurations += setOf("ko")
     }
 
+    // Release signing is read from a properties file that is deliberately not in the repository.
+    // Without it the release build is simply unsigned - no key material, real or placeholder, is
+    // ever committed, because a key in the repository would let anyone sign a package that
+    // replaces this app through its own update path.
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val hasReleaseKey = keystorePropertiesFile.exists()
+
     signingConfigs {
-        // Release signing is read from a properties file that is deliberately not in the
-        // repository. Without it the release build is simply unsigned - no key material, real or
-        // placeholder, is ever committed.
-        val keystorePropertiesFile = rootProject.file("keystore.properties")
-        if (keystorePropertiesFile.exists()) {
+        if (hasReleaseKey) {
             create("release") {
                 val properties = java.util.Properties()
                 keystorePropertiesFile.inputStream().use { properties.load(it) }
@@ -43,7 +46,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // No applicationIdSuffix: the launcher shortcuts in res/xml name the package
