@@ -15,29 +15,27 @@ object Protocol {
     const val SAMPLE_RATE = 48000
     const val FRAME_MS = 5
 
-    /** 모든 수신기가 공유하는 사용자 선택 재생 대기 시간. */
-    const val MIN_PLAYOUT_DELAY_MS = 600
+    /**
+     * 모든 수신기가 공유하는 공통 재생 대기 시간(소스 타임스탬프 → 소리).
+     * 기본은 자동: 수신기들이 잰 필요 지연 중 최댓값(DelayAdvisor/DelayCoordinator). 수동이면 사용자 선택값.
+     * 하한 40ms는 출력 버퍼·캡처 묶음을 고려한 물리적 바닥 근처다(LATENCY_POLICY.md).
+     */
+    const val MIN_PLAYOUT_DELAY_MS = 40
     const val MAX_PLAYOUT_DELAY_MS = 2000
-    const val PLAYOUT_DELAY_STEP_MS = 200
-    const val DEFAULT_PLAYOUT_DELAY_MS = MIN_PLAYOUT_DELAY_MS
+    const val PLAYOUT_DELAY_STEP_MS = 10
+    const val DEFAULT_PLAYOUT_DELAY_MS = 200
+    /** 자동 모드가 측정 전 처음 쓰는 값 — 측정되면 필요한 만큼으로 내려간다 */
+    const val AUTO_START_DELAY_MS = 250
     const val MAX_EXTRA_DELAY_MS = 300
+    /** 음향 싱크 보정으로 정해지는 기기별 추가 지연 상한 (µs) */
+    const val MAX_CALIBRATION_US = 300_000L
 
-    /** 범위 밖이거나 200ms 눈금 사이인 값을 가장 가까운 지원값으로 맞춘다. */
+    /** 범위 밖이거나 눈금 사이인 값을 가장 가까운 지원값으로 맞춘다. */
     fun normalizePlayoutDelayMs(value: Int): Int {
         val clamped = value.coerceIn(MIN_PLAYOUT_DELAY_MS, MAX_PLAYOUT_DELAY_MS)
         val stepIndex = (clamped - MIN_PLAYOUT_DELAY_MS + PLAYOUT_DELAY_STEP_MS / 2) /
             PLAYOUT_DELAY_STEP_MS
         return MIN_PLAYOUT_DELAY_MS + stepIndex * PLAYOUT_DELAY_STEP_MS
-    }
-
-    /** 음향 왕복 측정값에 출력/DSP 변동 여유 400ms를 더하고, 부족하지 않게 위 단계로 올린다. */
-    fun recommendedPlayoutDelayMs(acousticOneWayMs: Int): Int {
-        val desired = acousticOneWayMs.coerceAtLeast(0) + 400
-        if (desired <= MIN_PLAYOUT_DELAY_MS) return MIN_PLAYOUT_DELAY_MS
-        val stepIndex = (desired - MIN_PLAYOUT_DELAY_MS + PLAYOUT_DELAY_STEP_MS - 1) /
-            PLAYOUT_DELAY_STEP_MS
-        return (MIN_PLAYOUT_DELAY_MS + stepIndex * PLAYOUT_DELAY_STEP_MS)
-            .coerceAtMost(MAX_PLAYOUT_DELAY_MS)
     }
 
     /** 5ms 프레임의 페이로드 바이트 수 (PCM16). */

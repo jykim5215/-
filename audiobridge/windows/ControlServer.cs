@@ -67,7 +67,6 @@ public sealed class ControlServer
         private long _lastPongMs = Environment.TickCount64;
         private ModeASender? _senderA;
         private ModeBPlayer? _playerB;
-        private AcousticCalibrationResponder? _calibration;
 
         public Session(TcpClient client, int modeAPort, int modeBPort)
         {
@@ -86,6 +85,7 @@ public sealed class ControlServer
             new Thread(ReadLoop) { IsBackground = true, Name = "ab-ctl-read" }.Start();
             new Thread(PingLoop) { IsBackground = true, Name = "ab-ctl-ping" }.Start();
             new Thread(ClockLoop) { IsBackground = true, Name = "ab-ctl-clock" }.Start();
+            new Thread(NeedLoop) { IsBackground = true, Name = "ab-ctl-need" }.Start();
             Console.WriteLine($"[연결] 휴대폰 연결 · {_phone}");
         }
 
@@ -153,31 +153,40 @@ public sealed class ControlServer
                 case "modeB":
                     HandleModeB(message);
                     break;
-                case "cal":
-                    HandleCalibration(message);
+                case "delay":
+                    _playerB?.SetDelayMs(GetInt(message, "ms", Protocol.DefaultPlayoutDelayMs));
+                    break;
+                case "sync":
+                    HandleSync(message);
                     break;
             }
         }
 
-        private void HandleCalibration(JsonElement message)
+        /// <summary>스피커 소리 맞추기: 소스 폰이 정한 시각에 시험음을 내고(재생 경로 그대로), 결과 보정값을 저장한다.</summary>
+        private void HandleSync(JsonElement message)
         {
-            string action = GetString(message, "action") ?? "";
-            if (action != "prepare") return;
-            string id = GetString(message, "id") ?? "";
-            if (id.Length is 0 or > 64) return;
-            if (_senderA != null || _playerB != null)
+            switch (GetString(message, "action"))
             {
-                Send(new { type = "cal", action = "error", id, message = "Windows에서 오디오가 재생 중이에요. 먼저 소리를 꺼 주세요." });
-                return;
+                case "tones":
+                    if (message.TryGetProperty("at", out var at) && at.ValueKind == JsonValueKind.Array)
+                    {
+                        int n = 0;
+                        foreach (var t in at.EnumerateArray())
+                        {
+                            if (n++ >= 16) break;
+                            if (t.TryGetInt64(out long us)) _playerB?.ScheduleSyncTone(us);
+                        }
+                    }
+                    string id = GetString(message, "id") ?? "";
+                    long cal = Config.CalibrationUs;
+                    Send(new { type = "sync", action = "ack", id = id.Length > 64 ? id[..64] : id, calUs = cal, extraUs = cal });
+                    break;
+                case "set":
+                    long v = Math.Clamp(GetLong(message, "calUs", 0), 0, Protocol.MaxCalibrationUs);
+                    Config.SaveCalibrationUs(v);
+                    Console.WriteLine($"[싱크] 스피커 소리 맞추기: 이 PC를 {v / 1000.0:0.0}ms 늦춥니다");
+                    break;
             }
-
-            _calibration?.Dispose();
-            var calibration = new AcousticCalibrationResponder(
-                id,
-                GetInt(message, "holdMs", 350),
-                Send);
-            _calibration = calibration;
-            calibration.Start();
         }
 
         private void HandleModeA(JsonElement message)
@@ -191,8 +200,6 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
-            _calibration?.Dispose();
-            _calibration = null;
             if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
                 Send(new { type = "modeA", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
@@ -234,8 +241,6 @@ public sealed class ControlServer
                 return;
             }
             if (action != "start") return;
-            _calibration?.Dispose();
-            _calibration = null;
             if (GetInt(message, "codec", 0) != Protocol.CodecPcm16)
             {
                 Send(new { type = "modeB", status = "error", message = "지원하지 않는 코덱입니다. PCM16만 지원합니다." });
@@ -279,6 +284,16 @@ public sealed class ControlServer
             }
         }
 
+        /// <summary>재생 중이면 2초마다 "끊김 없이 쓸 수 있는 최소 공통 지연"을 소스에 보고한다 (자동 공통 지연).</summary>
+        private void NeedLoop()
+        {
+            while (!_closed)
+            {
+                Thread.Sleep(2_000);
+                if (_playerB?.NeedMs() is int need) Send(new { type = "need", ms = need });
+            }
+        }
+
         private void ClockLoop()
         {
             Thread.Sleep(200);
@@ -314,8 +329,6 @@ public sealed class ControlServer
             _senderA = null;
             _playerB?.Dispose();
             _playerB = null;
-            _calibration?.Dispose();
-            _calibration = null;
             try { _client.Close(); } catch { }
         }
 

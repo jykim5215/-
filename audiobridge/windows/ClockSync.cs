@@ -9,9 +9,9 @@ namespace AudioBridge.Win;
 public sealed class ClockSync
 {
     public const int FastTickMs = 250;
-    public const int TickMs = 1_000;
+    public const int TickMs = 250;
     private const int LockSamples = 8;
-    private const int MaxSamples = 120;
+    private const int MaxSamples = 360;
     private const long WindowUs = 90_000_000;
     private const int MinFitSamples = 4;
     private const long MinSlopeSpanUs = 5_000_000;
@@ -35,7 +35,7 @@ public sealed class ClockSync
         }
     }
 
-    /// <summary>다음 clk 질의까지 기다릴 시간: 맞추는 동안 빠르게, 이후 1초.</summary>
+    /// <summary>다음 clk 질의까지 기다릴 시간 (250ms: 표본이 많을수록 오프셋 치우침이 준다).</summary>
     public int NextTickDelayMs()
     {
         lock (_gate) return _samples.Count < LockSamples ? FastTickMs : TickMs;

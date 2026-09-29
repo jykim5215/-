@@ -2,8 +2,12 @@ package sim.sync
 
 import android.os.SystemClock
 import app.audiobridge.audio.CaptureTimeline
+import app.audiobridge.audio.DelayAdvisor
+import app.audiobridge.audio.DelayCoordinator
 import app.audiobridge.audio.JitterBuffer
 import app.audiobridge.audio.PlayoutScheduler
+import app.audiobridge.audio.SyncCalibration
+import app.audiobridge.audio.SyncChirp
 import app.audiobridge.net.ClockSync
 import app.audiobridge.net.PacketInfo
 import java.util.PriorityQueue
@@ -121,8 +125,11 @@ interface ClockAdapter {
     fun tick(); fun onReply(t0: Long, t1: Long); val offsetUs: Long?; fun nextTickDelayMs(): Long
 }
 
-/** 스피커 내부(DSP) 지연 차이 보정: 없음 / 앱의 '추가 지연'(1ms 단위) / 정밀(µs) */
-enum class Comp { NONE, MS, EXACT }
+/** 공통 지연을 자동으로 정하는 설정값 (Config.delayMs에 넣는다) */
+const val AUTO = -1
+
+/** 스피커 내부(DSP) 지연 차이 보정: 없음 / 앱의 '추가 지연'(1ms 단위) / 정밀(µs, 안다고 가정) / 음향 보정으로 잰 값 */
+enum class Comp { NONE, MS, EXACT, MEASURED }
 
 class Config(
     val net: NetProfile, val delayMs: Int, val srcTs: SrcTs, val sched: Sched,
@@ -134,6 +141,9 @@ class Result(
     val lateGlitchPerMin: Double, val lossGlitchPerMin: Double, val coverage: Double,
     /** 도착은 했는데 늦어서 소리로 못 낸 프레임 비율 (손실 제외) */
     val lateFraction: Double,
+    /** 자동 모드에서 측정 구간 동안 쓴 공통 지연 (최소~최대)과 바뀐 횟수(바뀔 때마다 한 번 건너뜀) */
+    val delayRange: IntRange,
+    val delayChanges: Int,
 )
 
 private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: Random, nFrames: Int) {
@@ -170,6 +180,11 @@ private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: R
     var cursor = 0
     var fallbackOffset: Long? = null
     var extraUs = 0.0
+    var delayMs = if (cfg.delayMs == AUTO) app.audiobridge.net.Protocol.AUTO_START_DELAY_MS else cfg.delayMs
+    val advisor = DelayAdvisor()
+    val toneQueue = ArrayDeque<Long>()
+    val toneEmissions = ArrayList<Double>()
+    val delayLog = ArrayList<Int>()
     val arrived = BooleanArray(nFrames)
     val emission = DoubleArray(nFrames) { Double.NaN }
     var lastWasAudio = false
@@ -229,7 +244,7 @@ private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: R
     fun legacyStep(t: Double): Double {
         val head = jitter.peek()
         if (head == null) { countGap(t, loss = false); return write(t, FRAME, -1, 0) }
-        val target = head.tsUs + offsetFor(head.tsUs, t) + cfg.delayMs * 1000L + extraUs.roundToLong()
+        val target = head.tsUs + offsetFor(head.tsUs, t) + delayMs * 1000L + extraUs.roundToLong()
         val lead = target - presentLocalUs(t)
         return when {
             lead > 5_000 -> { if (lastWasAudio) countGap(t, loss = false); write(t, FRAME, -1, 0) }
@@ -249,7 +264,7 @@ private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: R
             val d = sched.decide(null, 0)
             countGap(t, loss = false); return write(t, d.samples, -1, 0)
         }
-        val target = head.tsUs + offsetFor(head.tsUs, t) + cfg.delayMs * 1000L + extraUs.roundToLong() +
+        val target = head.tsUs + offsetFor(head.tsUs, t) + delayMs * 1000L + extraUs.roundToLong() +
             (cursor * US_PER_SAMPLE).roundToLong()
         val d = sched.decide(presentLocalUs(t) - target, FRAME - cursor)
         val k = frameOf(head.data)
@@ -263,6 +278,19 @@ private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: R
             PlayoutScheduler.Kind.PLAY -> {
                 jitter.poll()
                 val from = cursor; cursor = 0
+                // 음향 보정 시험음: 이 조각이 예약된 소스 시각을 품고 있으면 그 샘플이 실제로 소리 나는 시각을 기록
+                toneQueue.firstOrNull()?.let { at ->
+                    val chunkSrcUs = head.tsUs + from * US_PER_SAMPLE
+                    val idx = (at - chunkSrcUs) / US_PER_SAMPLE
+                    if (idx < d.samples + d.adjust) {
+                        toneQueue.removeFirst()
+                        if (idx >= 0) {
+                            updatePos(t)
+                            val startT = if (pos < written) t + (written - pos) / rate else t
+                            toneEmissions += startT + idx / rate + spec.dspUs
+                        } else toneEmissions += Double.NaN   // 이미 지나감(건너뛴 구간) → 못 들림
+                    }
+                }
                 if (k < 0) { countGap(t, loss = true); write(t, d.samples, -1, 0) }
                 else write(t, max(0, d.samples + d.adjust), k, from)
             }
@@ -270,6 +298,7 @@ private class Rx(val spec: DeviceSpec, val cfg: Config, val sim: Sim, seedRng: R
     }
 
     fun step(t: Double) {
+        advisor.onOutputDepth(local(t).toLong(), ((written - pos) * US_PER_SAMPLE).toLong())
         val next = if (cfg.sched == Sched.LEGACY) legacyStep(t) else sampleStep(t)
         sim.at(next) { step(sim.now) }
     }
@@ -292,8 +321,9 @@ fun simulate(cfg: Config): Result {
             it.extraUs = if (cfg.comp == Comp.MS) (need / 1000).roundToInt() * 1000.0 else need
         }
     }
-    val warmup = streamStart + 10e6
-    rxs.forEach { it.measureFrom = warmup; it.measureTo = totalUs - cfg.delayMs * 1000.0 - 200_000 }
+    val warmup = streamStart + if (cfg.comp == Comp.MEASURED) 20e6 else 10e6
+    val tailUs = (if (cfg.delayMs == AUTO) 1_000 else cfg.delayMs) * 1000.0
+    rxs.forEach { it.measureFrom = warmup; it.measureTo = totalUs - tailUs - 200_000 }
 
     // 시계 동기: 수신기가 clk를 보내고 소스가 자기 시계로 답한다
     for (rx in rxs) {
@@ -349,6 +379,10 @@ fun simulate(cfg: Config): Result {
                 val arr = audioLinks[i].deliver(sendT) ?: continue
                 sim.at(arr) {
                     rx.arrived[kk] = true
+                    rx.onThisDevice { rx.clock.offsetUs }?.let { off ->
+                        val now = rx.local(sim.now).toLong()
+                        rx.advisor.onArrival(now, now - (ts + off))
+                    }
                     rx.jitter.push(info, payload)
                     if (!started[i]) { started[i] = true; rx.posT = sim.now; rx.step(sim.now) }
                 }
@@ -357,6 +391,40 @@ fun simulate(cfg: Config): Result {
         sim.at(streamStart + (j + 2) * framesPerPeriod * FRAME / adcRate) { period(j + 1) }
     }
     sim.at(streamStart) { period(0) }
+    // 자동 공통 지연: 수신기가 2초마다 필요 지연을 보고 → 송신기가 최댓값으로 정해 모두에게 알림 (메시지도 Wi-Fi를 탄다)
+    if (cfg.delayMs == AUTO) {
+        val coordinator = DelayCoordinator()
+        val ctlUp = rxs.map { Link(cfg.net, Random(rng.nextInt())) }
+        val ctlDown = rxs.map { Link(cfg.net, Random(rng.nextInt())) }
+        fun report() {
+            for ((i, rx) in rxs.withIndex()) {
+                val need = rx.advisor.needMs(rx.local(sim.now).toLong()) ?: continue
+                ctlUp[i].deliver(sim.now)?.let { atSrc ->
+                    sim.at(atSrc) {
+                        coordinator.report(i, need, (srcLocal(sim.now) / 1000).toLong())?.let { d ->
+                            for ((j, r) in rxs.withIndex()) ctlDown[j].deliver(sim.now)?.let { back -> sim.at(back) { r.delayMs = d } }
+                        }
+                    }
+                }
+            }
+            for (rx in rxs) rx.delayLog += rx.delayMs
+            sim.at(sim.now + DelayCoordinator.REPORT_INTERVAL_MS * 1000.0) { report() }
+        }
+        sim.at(streamStart + 2e6) { report() }
+    }
+    // 음향 보정: 스피커를 송신 폰 옆에 모아 두고, 스피커마다 다른 소스 시각에 시험음 → 송신 폰 마이크 녹음에서 도착 시각 검출
+    if (cfg.comp == Comp.MEASURED) {
+        val calRng = Random(rng.nextInt())
+        sim.at(streamStart + 8e6) {
+            val base = srcLocal(sim.now).toLong() + SyncCalibration.LEAD_US
+            val at = rxs.indices.map { i -> (0 until SyncCalibration.ROUNDS).map { r -> SyncCalibration.toneAtUs(base, rxs.size, i, r) } }
+            rxs.forEachIndexed { i, rx -> rx.toneQueue.addAll(at[i]) }
+            val total = SyncCalibration.LEAD_US + SyncCalibration.ROUNDS * rxs.size * SyncCalibration.SPACING_US
+            sim.at(sim.now + total + rxs.maxOf { it.delayMs } * 1000.0 + 700_000) {
+                calibrateAcoustically(rxs, at, ::srcLocal, calRng)
+            }
+        }
+    }
     fun sampleClock() {
         if (sim.now > warmup) for (rx in rxs) {
             val est = rx.onThisDevice { rx.clock.offsetUs } ?: continue
@@ -369,8 +437,8 @@ fun simulate(cfg: Config): Result {
     if (cfg.diag) {
         fun pr(a: List<Double>) = a.sorted().let { x -> if (x.isEmpty()) "-" else
             "p1 ${f2(x[x.size / 100] / 1000)} / p50 ${f2(x[x.size / 2] / 1000)} / p99 ${f2(x[x.size * 99 / 100] / 1000)}ms" }
-        val errs = rxs.map { rx -> (0 until k).filter { captureTrue[it] in warmup..(totalUs - cfg.delayMs * 1000.0 - 500_000) && !rx.emission[it].isNaN() }
-            .map { rx.emission[it] - (captureTrue[it] + cfg.delayMs * 1000.0 + rx.extraUs + rx.spec.dspUs) } }
+        val errs = rxs.map { rx -> (0 until k).filter { captureTrue[it] in warmup..(totalUs - tailUs - 500_000) && !rx.emission[it].isNaN() }
+            .map { rx.emission[it] - (captureTrue[it] + rx.delayMs * 1000.0 + rx.extraUs + rx.spec.dspUs) } }
         val center = errs.flatten().sorted().let { it[it.size / 2] }
         for ((i, rx) in rxs.withIndex()) {
             println("    [진단] ${rx.spec.name}: 시계 오프셋 오차 ${pr(rx.clockErrUs)} · 소리 시각 오차 ${pr(errs[i].map { it - center })}")
@@ -383,7 +451,7 @@ fun simulate(cfg: Config): Result {
     var arrivedCount = 0; var lateCount = 0
     for (f in 0 until k) {
         val c = captureTrue[f]
-        if (c < warmup || c > totalUs - cfg.delayMs * 1000.0 - 500_000) continue
+        if (c < warmup || c > totalUs - tailUs - 500_000) continue
         eligible++
         for (rx in rxs) if (rx.arrived[f]) { arrivedCount++; if (rx.emission[f].isNaN()) lateCount++ }
         val e = rxs.map { it.emission[f] }
@@ -401,7 +469,58 @@ fun simulate(cfg: Config): Result {
         lossGlitchPerMin = rxs.sumOf { it.lossGlitches } / minutes / rxs.size,
         coverage = if (eligible == 0) 0.0 else spreads.size.toDouble() / eligible,
         lateFraction = if (arrivedCount == 0) 1.0 else lateCount.toDouble() / arrivedCount,
+        delayRange = rxs.first().delayLog.drop(5).let { if (it.isEmpty()) cfg.delayMs..cfg.delayMs else it.min()..it.max() },
+        delayChanges = rxs.first().delayLog.zipWithNext().count { (a, b) -> a != b },
     )
+}
+
+/**
+ * 가상 마이크 녹음을 만들고 실제 앱 코드(SyncChirp.find → SyncCalibration.compute)로 보정값을 구해 적용한다.
+ * 녹음 = 스피커별 시험음(스피커마다 음색이 다름) + 벽 반사 두 번 + 잡음. 기기들이 붙어 있어 공기 중 거리 차는 0.3ms 이내.
+ */
+private fun calibrateAcoustically(rxs: List<Rx>, atSrcUs: List<List<Long>>, srcLocal: (Double) -> Double, rng: Random) {
+    // 기기를 송신 폰 옆에 붙여 둠: 스피커마다 공기 중 거리 차 0~0.3ms(약 10cm), 음색·음량·반사는 제각각
+    val airUs = rxs.map { rng.nextDouble(0.0, 300.0) }
+    val color = rxs.map { Triple(rng.nextDouble(0.15, 1.0), rng.nextDouble(0.2, 0.8),
+        listOf(rng.nextDouble(3_000.0, 5_000.0) to 0.45, rng.nextDouble(6_000.0, 9_000.0) to 0.25)) }
+    val emitSrc = rxs.mapIndexed { i, rx -> rx.toneEmissions.map { srcLocal(it) + airUs[i] } }
+    val recStart = atSrcUs.flatten().min() - 50_000.0
+    val recEnd = emitSrc.flatten().filter { !it.isNaN() }.max() + 400_000
+    val n = ((recEnd - recStart) / US_PER_SAMPLE).toInt()
+    val mic = FloatArray(n)
+    for ((i, emits) in emitSrc.withIndex()) {
+        val (gain, lp, echoes) = color[i]
+        val raw = FloatArray(n)
+        for (e in emits) {
+            if (e.isNaN()) continue
+            for ((delay, g) in listOf(0.0 to 1.0) + echoes) {
+                val t0 = e + delay
+                val j0 = ((t0 - recStart) / US_PER_SAMPLE).toInt().coerceAtLeast(0)
+                val j1 = min(n, j0 + (SyncChirp.DURATION_US / US_PER_SAMPLE).toInt() + 2)
+                for (j in j0 until j1) raw[j] += (gain * g * SyncChirp.value(recStart + j * US_PER_SAMPLE - t0)).toFloat()
+            }
+        }
+        var y = 0f
+        for (j in 0 until n) { y += (raw[j] - y) * lp.toFloat(); mic[j] += y }
+    }
+    for (j in 0 until n) mic[j] += (rng.nextDouble(-1.0, 1.0) * 0.02).toFloat()
+
+    // 앱과 같은 계산: 스피커·회차마다 검출 → 스피커별 중앙값 → 새 보정값
+    val template = SyncChirp.template(FS)
+    val late = HashMap<Int, Double>()
+    for ((i, rx) in rxs.withIndex()) {
+        late[i] = SyncCalibration.measureLateUs(mic, recStart, FS, atSrcUs[i], rx.delayMs * 1000.0 + rx.extraUs, template)
+            ?: error("${rx.spec.name} 시험음을 못 찾음")
+    }
+    val cal = SyncCalibration.compute(late, rxs.indices.associateWith { rxs[it].extraUs.toLong() })
+    rxs.forEachIndexed { i, rx -> rx.extraUs = cal.getValue(i).toDouble() }
+    if (System.getenv("SYNC_DIAG") != null) {
+        val maxDsp = rxs.maxOf { it.spec.dspUs }
+        val ideal = rxs.map { maxDsp - it.spec.dspUs }
+        val got = rxs.map { it.extraUs }
+        val shift = (got.zip(ideal).sumOf { it.first - it.second }) / rxs.size
+        println("    [보정 진단] " + rxs.indices.joinToString(" / ") { "${rxs[it].spec.name} 오차 ${f2((got[it] - ideal[it] - shift) / 1000)}ms (거리 ${f2(airUs[it] / 1000)}ms)" })
+    }
 }
 
 // ───────────────────────── 보고 ─────────────────────────
@@ -422,7 +541,7 @@ fun main(args: Array<String>) {
     })
     println("싱크 오차 = 같은 소스 샘플이 세 스피커에서 실제 소리로 나온 시각의 최대-최소. 목표 ≤ 1ms")
 
-    println("\n[1] 무엇이 싱크를 깨는가 — 보통 가정 Wi-Fi, 공통 지연 600ms(현재 기본값), ${longSec / 60.0}분")
+    println("\n[1] 무엇이 싱크를 깨는가 — 보통 가정 Wi-Fi, 공통 지연 600ms(v2.8 기본값), ${longSec / 60.0}분")
     println("| 구성 | 싱크 오차 중앙값 | p99 | 최대 | 끊김(지연)/분 | 끊김(손실)/분 |")
     println("|---|---:|---:|---:|---:|---:|")
     val rows = listOf(
@@ -435,18 +554,21 @@ fun main(args: Array<String>) {
         "새 방식 + 보정(1ms 단위, 현재 UI)" to Config(HOME, 600, SrcTs.HW, Sched.SAMPLE, Comp.MS, longSec),
         "새 방식 + 정밀 보정" to Config(HOME, 600, SrcTs.HW, Sched.SAMPLE, Comp.EXACT, longSec, diag = diag),
         "새 방식(하드웨어 시각 없는 기기) + 정밀 보정" to Config(HOME, 600, SrcTs.ENVELOPE, Sched.SAMPLE, Comp.EXACT, longSec),
+        "새 방식 + 음향 보정(기기 붙여 놓고 잰 값)" to Config(HOME, 600, SrcTs.HW, Sched.SAMPLE, Comp.MEASURED, longSec),
+        "새 방식 + 음향 보정 + 자동 지연" to Config(HOME, AUTO, SrcTs.HW, Sched.SAMPLE, Comp.MEASURED, longSec),
     )
     val results = rows.map { (label, cfg) ->
         simulate(cfg).also { r ->
             println("| $label | ${f2(r.syncP50)}ms | ${f2(r.syncP99)}ms | ${f2(r.syncMax)}ms | ${f2(r.lateGlitchPerMin)} | ${f2(r.lossGlitchPerMin)} |")
         }
     }
-    for (i in listOf(7, 8)) {
+    for (i in listOf(7, 8, 9)) {
         val r = results[i]
         if (!(r.syncP99 <= 1.0)) failures += "${rows[i].first.trim()}: 싱크 오차 p99 ${f2(r.syncP99)}ms > 1ms"
         if (r.lateGlitchPerMin != 0.0) failures += "${rows[i].first.trim()}: 600ms에서 지연 끊김 발생"
     }
     if (!(results[7].syncP99 < results[0].syncP99)) failures += "새 방식이 현재 앱보다 싱크가 나쁨"
+    if (!(results[10].syncP99 <= 1.0)) failures += "음향 보정 + 자동 지연: 싱크 오차 p99 ${f2(results[10].syncP99)}ms > 1ms"
 
     println("\n[2] 지연을 얼마나 줄일 수 있나 — 새 방식 + 정밀 보정, 공통 지연별 ${sweepSec / 60.0}분씩")
     println("    끊김/분(지연 탓) · 늦어서 못 낸 프레임 % · 싱크 p99(ms) · 녹음→소리 지연(ms)")
@@ -468,6 +590,16 @@ fun main(args: Array<String>) {
     }
     val good = minDelay[GOOD.label]
     if (good == null || good.first > 150) failures += "좋은 Wi-Fi에서도 150ms 이하로 끊김 없이 못 줄임"
+
+    println("\n[3] 자동 공통 지연 — 수신기가 잰 필요 지연을 송신기가 모아 정함 (새 방식 + 정밀 보정, ${longSec / 60.0}분)")
+    println("| 네트워크 | 자동이 고른 지연 | 지연 변경 횟수 | 녹음→소리 중앙값 | 지연 탓 끊김/분 | 못 낸 % | 싱크 p99 |")
+    println("|---|---:|---:|---:|---:|---:|---:|")
+    for (net in listOf(GOOD, HOME, BUSY)) {
+        val r = simulate(Config(net, AUTO, SrcTs.HW, Sched.SAMPLE, Comp.EXACT, longSec))
+        println("| ${net.label} | ${r.delayRange.first}~${r.delayRange.last}ms | ${r.delayChanges} | ${f1(r.latencyMs)}ms | ${f2(r.lateGlitchPerMin)} | ${f2(r.lateFraction * 100)} | ${f2(r.syncP99)}ms |")
+        if (net === GOOD && (r.latencyMs > 150 || r.lateFraction > 0.005)) failures += "자동 지연: 좋은 Wi-Fi에서 150ms 이하·못 낸 프레임 0.5% 미만을 못 지킴"
+        if (!(r.syncP99 <= 2.0)) failures += "자동 지연: ${net.label} 싱크 p99 ${f2(r.syncP99)}ms > 2ms"
+    }
 
     println()
     if (failures.isEmpty()) println("판정: 통과")

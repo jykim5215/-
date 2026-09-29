@@ -18,7 +18,12 @@ public sealed class ModeBPlayer : IDisposable
 
     private readonly IPAddress _phone;
     private readonly bool _useTcp;
-    private readonly int _delayMs;
+    private volatile int _delayMs;
+    private readonly DelayAdvisor _advisor = new();
+    /** 스피커 소리 맞추기 시험음을 낼 소스 시각들 (µs) */
+    private readonly System.Collections.Concurrent.ConcurrentQueue<long> _syncTones = new();
+    /** WASAPI 공유 모드 버퍼(30ms) + 믹서 주기 — 프레임이 목표 시각보다 이만큼 먼저 와 있어야 한다 */
+    private const long OutputLatencyUs = 40_000;
     private readonly Func<long?> _offsetUsProvider;
     private readonly object _queueGate = new();
     private readonly object _outputGate = new();
@@ -39,6 +44,15 @@ public sealed class ModeBPlayer : IDisposable
     private volatile float _gain = 1f;
 
     public void SetGain(int percent) => _gain = Math.Clamp(percent, 0, 100) / 100f;
+
+    /** 소스가 자동으로 정한 공통 지연 ("delay" 메시지) */
+    public void SetDelayMs(int ms) => _delayMs = Protocol.NormalizePlayoutDelayMs(ms);
+
+    /** 끊김 없이 쓸 수 있는 최소 공통 지연(ms) — 소스에 "need"로 보고한다 */
+    public int? NeedMs() => _advisor.NeedMs(Clock.Us);
+
+    /** 소스 시각 atSourceUs부터 50ms를 시험음으로 낸다 (스피커 소리 맞추기) */
+    public void ScheduleSyncTone(long atSourceUs) => _syncTones.Enqueue(atSourceUs);
 
     public ModeBPlayer(
         IPAddress phone,
@@ -164,6 +178,11 @@ public sealed class ModeBPlayer : IDisposable
         if (!EnsureOutput(info)) return;
         if (_format!.SampleRate != info.SampleRate || _format.Channels != info.Channels) return;
 
+        if (_offsetUsProvider() is long offset)
+        {
+            long now = Clock.Us;
+            _advisor.OnArrival(now, now - (info.TimestampUs + offset));
+        }
         var data = payload.ToArray();
         ApplyGain(data, _gain);
         lock (_queueGate)
@@ -258,8 +277,10 @@ public sealed class ModeBPlayer : IDisposable
 
             long offset = _offsetUsProvider() ?? GetFallbackOffset(head.TimestampUs);
             // 머리 프레임에서 다음에 쓸 샘플의 목표 재생 시각 vs 지금 쓰면 실제로 나올 시각
-            long targetUs = head.TimestampUs + offset + _delayMs * 1_000L + cursor * 1_000_000L / format.SampleRate;
+            long targetUs = head.TimestampUs + offset + _delayMs * 1_000L + Config.CalibrationUs +
+                cursor * 1_000_000L / format.SampleRate;
             long nextWritePlaysAtUs = Clock.Us + PendingDeviceUs(format);
+            _advisor.OnOutputDepth(Clock.Us, OutputLatencyUs);
             int headSamples = head.Data.Length / bytesPerSampleFrame;
             var decision = scheduler.Decide(nextWritePlaysAtUs - targetUs, headSamples - cursor);
 
@@ -294,9 +315,36 @@ public sealed class ModeBPlayer : IDisposable
                         Buffer.BlockCopy(chunk, length - bytesPerSampleFrame, chunk, length, bytesPerSampleFrame);
                         length += bytesPerSampleFrame;
                     }
+                    if (!_syncTones.IsEmpty)
+                        InjectSyncTones(chunk, length, frame.TimestampUs + from / bytesPerSampleFrame * 1_000_000L / format.SampleRate, format);
                     WriteToDeviceQueue(chunk, length);
                     _lastPlayedTimestampUs = frame.TimestampUs;
                     break;
+            }
+        }
+    }
+
+    /** chunk 첫 샘플이 소스 시각 chunkSrcUs일 때, 예약된 시험음 구간의 샘플을 시험음으로 바꾼다 (볼륨과 무관한 고정 크기). */
+    private void InjectSyncTones(byte[] chunk, int length, long chunkSrcUs, WaveFormat format)
+    {
+        while (_syncTones.TryPeek(out long first) && first + SyncChirp.DurationUs < chunkSrcUs) _syncTones.TryDequeue(out _);
+        int bytesPerSampleFrame = 2 * format.Channels;
+        int samples = length / bytesPerSampleFrame;
+        double usPerSample = 1_000_000d / format.SampleRate;
+        foreach (long at in _syncTones)
+        {
+            if (at > chunkSrcUs + samples * usPerSample) continue;
+            for (int j = 0; j < samples; j++)
+            {
+                double t = chunkSrcUs + j * usPerSample - at;
+                if (t < 0 || t >= SyncChirp.DurationUs) continue;
+                short v = (short)(SyncChirp.Value(t) * 32767);
+                for (int c = 0; c < format.Channels; c++)
+                {
+                    int i = j * bytesPerSampleFrame + c * 2;
+                    chunk[i] = (byte)v;
+                    chunk[i + 1] = (byte)(v >> 8);
+                }
             }
         }
     }

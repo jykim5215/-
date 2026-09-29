@@ -236,12 +236,28 @@ audiobridge/
   +5ms~−20ms 어긋남을 방치 ③ 시계 동기가 3초 간격·RTT 허용폭 넓음·2점 드리프트로 ±1.6ms 흔들림.
   조치(Android·Windows 모두): **CaptureTimeline**(AudioRecord.getTimestamp BOOTTIME, 없으면 하한선 추정 — Windows 루프백도),
   **PlayoutScheduler**(샘플 단위 정렬 + 5ms마다 1~2샘플 빼기/반복으로 클럭 속도 차 추종, 10ms 넘으면 재정렬),
-  **ClockSync 재작성**(최근 90초 중 왕복 짧은 1/4로 오프셋·기울기 직선 맞춤, 250ms→1초 간격, 점프 시 재잠금).
+  **ClockSync 재작성**(최근 90초 중 왕복 짧은 1/4로 오프셋·기울기 직선 맞춤, 250ms 간격, 점프 시 재잠금).
   결과(보통 가정 Wi-Fi·600ms·10분): 새 방식 + 정밀 보정 싱크 오차 p99 **0.76ms**, 지연 끊김 0. 최소 공통 지연: 좋은 5GHz
   100ms / 보통 200ms / 혼잡 450ms. 변이 검사(속도 차 보정 끄기) → p99 8.4ms로 실패 확인. CI는 `run.sh --quick` 실행.
   sim.py의 옛 시계·다기기 절은 실제 코드와 달라 삭제. **남은 결정**: 공통 지연 하한 600ms(Protocol.MIN_PLAYOUT_DELAY_MS)를
   낮출지·자동으로 고를지, 추가 지연 1ms 단위(반올림 0.5ms 남음)를 더 잘게 할지, 음향 맞춤을 기기별 보정으로 바꿀지.
   C#은 이 환경에서 컴파일 불가 → CI로 확인. 실기기 청취 검증은 아직 없음.
+- [x] v2.10 (사용자: "600ms 그대로 두지 마 — 억지로든, 사용자가든, 스피커를 붙여 놓고든 맞춰"): 세 층으로 구현.
+  ① **자동 공통 지연(기본)** — `audio/DelayAdvisor.kt`: 스피커가 (도착 지연 + 출력 버퍼)의 60초 최댓값+15ms를 2초마다
+  `need`로 보고 → 소스 `DelayCoordinator`가 최댓값을 `delay`로 배포(늘림 즉시·줄임 20초 유지 후). 혼자 들을 땐 자기 need.
+  Protocol 하한 600→40ms, 단위 200→10ms, 수동 기본 200ms, 자동 시작 250ms. Windows는 출력 깊이로 WASAPI 40ms 고정
+  (미리 채우는 큐를 쓰면 need=D가 되어 올라가기만 하는 되먹임이 생김).
+  ② **스피커 소리 맞추기** — 스피커 목록의 버튼(2대 이상 송신 중): 소스가 음악을 무음으로 바꾸고 `sync tones`로 스피커마다
+  600ms 간격 3회 처프(1.5→6kHz, 50ms)를 재생 경로 그대로 내게 함 → 소스 마이크(마이크 송신이면 ModeBSender.micTap,
+  미디어 송신이면 SyncMicRecorder) 녹음에서 `SyncChirp.find`(정합 필터+포물선 보간) 중앙값 → `SyncCalibration.compute`로
+  가장 늦은 스피커 기준 `calUs`를 `sync set`으로 저장(Android prefs `calibrationUs`, Windows `%APPDATA%\AudioBridge\sync.txt`).
+  옛 음향 왕복 보정(AcousticCalibrator·AcousticCalibrationResponder, `cal` 메시지)은 삭제.
+  ③ **수동** — 설정: 공통 지연 자동 스위치("지금 ○○ms"), 끄면 40–2000ms 슬라이더(재생 중에도 즉시 적용), 보정값 표시·초기화,
+  기존 기기별 추가 지연 0–300ms 유지.
+  시계 동기 질의를 250ms 간격으로 고정(1초 대비 오프셋 치우침 감소, 정밀 보정 p99 0.88→0.38ms).
+  시뮬(10분): 스피커 소리 맞추기(녹음 합성·반사·거리차 포함) 싱크 p99 **0.41ms**, 자동 지연 좋은 5GHz 114ms/보통 194ms/혼잡
+  374ms에서 지연 탓 끊김 0.3–0.7회/분. LATENCY_POLICY.md 전면 재작성, PROTOCOL(need/delay/sync), README 갱신.
+  **실기기 미검증**: 시험음 끼우기(ModeAPlayer/ModeBPlayer), 실제 마이크 검출 성공률, 기기별 getTimestamp 품질.
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
@@ -306,8 +322,8 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
    `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
 3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
    수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
-4. 지연 정책 불변식: 공통 초기값은 600ms, 사용자 범위는 600–2000ms/200ms 단위이고 수신기 보정은
-   0–300ms 추가 지연만 가능하다. 자동 음향 맞춤 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
+4. 지연 정책 불변식: 공통 지연은 기본 자동(스피커 need 최댓값), 수동 40–2000ms/10ms. 스피커별로는 음향 보정 calUs(0–300ms)
+   + 사용자 추가 지연(0–300ms)으로 늦추기만 가능하다. 스피커 소리 맞추기 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
 5. 가상 시뮬레이션: `python3 audiobridge/sim/sim.py`(프로토콜·지터·역할), `bash audiobridge/sim/sync/run.sh`(동기 재생 — 실제 코드),
    `bash audiobridge/sim/p2p/run.sh`(Wi-Fi Direct 가상 폰). 동기 코드를 바꾸면 Kotlin·C# 판을 함께 바꾸고 sync 시뮬을 돌린다.

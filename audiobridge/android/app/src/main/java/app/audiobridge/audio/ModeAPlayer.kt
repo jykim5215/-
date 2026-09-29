@@ -33,8 +33,27 @@ class ModeAPlayer(
     private val onStats: (lossPct: Double, level: Float, bufferedMs: Int) -> Unit,
     private val onError: (String) -> Unit,
     private val gainProvider: () -> Float = { 1f },
+    /** 음향 싱크 보정으로 정해진 이 기기의 추가 지연 (µs) */
+    private val calibrationUsProvider: () -> Long = { 0L },
 ) {
     private val jitter = JitterBuffer()
+    private val advisor = DelayAdvisor()
+    /** 음향 싱크 보정 시험음을 낼 소스 시각들 (µs, 소스 시계) */
+    private val syncTones = java.util.concurrent.ConcurrentLinkedQueue<Long>()
+
+    /** 끊김 없이 쓸 수 있는 최소 공통 지연(ms) — 송신기에 보고한다. 자료가 모자라면 null. */
+    fun needMs(): Int? = advisor.needMs(nowUs())
+
+    /** 소스 시각 [atSourceUs]부터 50ms를 음악 대신 시험음으로 낸다 (실제 재생 경로 그대로 — 음향 보정용). */
+    fun scheduleSyncTone(atSourceUs: Long) {
+        syncTones.add(atSourceUs)
+    }
+
+    private fun onPacket(timestampUs: Long) {
+        val offset = offsetUsProvider() ?: return
+        val now = nowUs()
+        advisor.onArrival(now, now - (timestampUs + offset))
+    }
     @Volatile private var running = false
     private var udpSocket: DatagramSocket? = null
     private var tcpSocket: Socket? = null
@@ -134,6 +153,7 @@ class ModeAPlayer(
             if (pkt.address != allowed) continue // 페어링된 상대 외 무시
             val info = Protocol.parseHeader(buf) ?: continue
             if (Protocol.HEADER_SIZE + info.payloadLen != pkt.length) continue
+            onPacket(info.timestampUs)
             jitter.push(info, buf.copyOfRange(Protocol.HEADER_SIZE, Protocol.HEADER_SIZE + info.payloadLen))
         }
     }
@@ -148,6 +168,7 @@ class ModeAPlayer(
                 val info = Protocol.parseHeader(header) ?: break
                 val payload = ByteArray(info.payloadLen)
                 input.readFully(payload)
+                onPacket(info.timestampUs)
                 jitter.push(info, payload)
             }
         } catch (e: Exception) {
@@ -166,6 +187,30 @@ class ModeAPlayer(
             data[i] = v.toByte()
             data[i + 1] = (v shr 8).toByte()
             i += 2
+        }
+    }
+
+    /** [chunk]의 첫 샘플이 소스 시각 [chunkSrcUs]일 때, 예약된 시험음 구간의 샘플을 시험음으로 바꾼다 (볼륨과 무관한 고정 크기). */
+    private fun injectSyncTones(chunk: ByteArray, length: Int, chunkSrcUs: Long, fmt: StreamFormat) {
+        while (true) {
+            val at = syncTones.peek() ?: return
+            if (at + SyncChirp.DURATION_US < chunkSrcUs) syncTones.poll() else break
+        }
+        val bytesPerFrameUnit = 2 * fmt.channels
+        val samples = length / bytesPerFrameUnit
+        val usPerSample = 1_000_000.0 / fmt.sampleRate
+        for (at in syncTones) {
+            if (at > chunkSrcUs + samples * usPerSample) continue
+            for (j in 0 until samples) {
+                val t = chunkSrcUs + j * usPerSample - at
+                if (t < 0 || t >= SyncChirp.DURATION_US) continue
+                val v = (SyncChirp.value(t) * 32767).toInt()
+                for (c in 0 until fmt.channels) {
+                    val i = j * bytesPerFrameUnit + c * 2
+                    chunk[i] = v.toByte()
+                    chunk[i + 1] = (v shr 8).toByte()
+                }
+            }
         }
     }
 
@@ -263,6 +308,8 @@ class ModeAPlayer(
                     writtenFrames,
                     fmt.sampleRate,
                 )
+                val nowForDepth = nowUs()
+                advisor.onOutputDepth(nowForDepth, playAtUs - nowForDepth)
                 val head = jitter.peek()
                 if (head == null) {
                     // 데이터 없음 — 무음으로 트랙을 채우며 대기 (write가 실시간 페이스 유지)
@@ -279,6 +326,7 @@ class ModeAPlayer(
                 val targetUs = head.tsUs + offset +
                     Protocol.normalizePlayoutDelayMs(delayMsProvider()) * 1000L +
                     extraDelayMsProvider().coerceIn(0, Protocol.MAX_EXTRA_DELAY_MS) * 1000L +
+                    calibrationUsProvider().coerceIn(0L, Protocol.MAX_CALIBRATION_US) +
                     cursor * 1_000_000L / fmt.sampleRate
                 val headSamples = head.data.size / bytesPerFrameUnit
                 val d = scheduler.decide(playAtUs - targetUs, headSamples - cursor)
@@ -311,6 +359,9 @@ class ModeAPlayer(
                             }
                         }
                         applyGain(chunk, length, gainProvider())
+                        if (syncTones.isNotEmpty()) {
+                            injectSyncTones(chunk, length, frame.tsUs + from / bytesPerFrameUnit * 1_000_000L / fmt.sampleRate, fmt)
+                        }
                         val written = writeFully(track, chunk, length)
                         writtenFrames += written / bytesPerFrameUnit
                         var peak = 0

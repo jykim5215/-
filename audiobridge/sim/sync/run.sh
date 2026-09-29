@@ -24,6 +24,6 @@ rm -rf "$OUT" && mkdir -p "$OUT/stubs" "$OUT/app"
 javac -nowarn -d "$OUT/stubs" $(find "$HERE/android-stubs" -name '*.java')
 "$KOTLINC" -nowarn -cp "$OUT/stubs" -d "$OUT/app" \
   "$APP/net/Protocol.kt" "$APP/net/ClockSync.kt" "$APP/audio/JitterBuffer.kt" \
-  "$APP/audio/PlayoutScheduler.kt" "$APP/audio/CaptureTimeline.kt" "$HERE/baseline/ClockSyncV28.kt" "$HERE/SyncSim.kt" 2>&1 \
+  "$APP/audio/PlayoutScheduler.kt" "$APP/audio/CaptureTimeline.kt" "$APP/audio/DelayAdvisor.kt" "$APP/audio/SyncChirp.kt" "$HERE/baseline/ClockSyncV28.kt" "$HERE/SyncSim.kt" 2>&1 \
   | grep -v '^warning: unable to find kotlin-stdlib' || true
 java -Dstdout.encoding=UTF-8 -Dfile.encoding=UTF-8 -cp "$OUT/stubs:$OUT/app:$KHOME/lib/kotlin-stdlib.jar" sim.sync.SyncSimKt "$@"

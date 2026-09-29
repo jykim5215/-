@@ -44,6 +44,15 @@ class ModeBSender(
 
     val channels: Int get() = if (source == CaptureSource.INTERNAL) 2 else 1
 
+    /** 마이크로 담는 중인가 (음향 보정이 이 녹음을 그대로 쓸 수 있다) */
+    val capturesMic: Boolean get() = source == CaptureSource.MIC
+
+    /** 음향 싱크 보정 중: 스피커로 보내는 소리를 무음으로 (시험음만 들리게) */
+    @Volatile var muted = false
+
+    /** 마이크로 담는 중이면 담은 프레임(모노, -1..1)과 첫 샘플의 녹음 시각을 넘긴다 — 음향 보정 녹음용 */
+    @Volatile var micTap: ((FloatArray, Long) -> Unit)? = null
+
     fun start(): Boolean {
         val rec = try {
             createRecord()
@@ -97,6 +106,19 @@ class ModeBSender(
                 .setAudioFormat(format)
                 .setBufferSizeInBytes(bufSize)
                 .build()
+        }
+    }
+
+    /** 16bit LE 인터리브 → 모노 float(-1..1) */
+    private fun toMono(frame: ByteArray, frameBytes: Int, ch: Int): FloatArray {
+        val n = frameBytes / (2 * ch)
+        return FloatArray(n) { i ->
+            var sum = 0
+            for (c in 0 until ch) {
+                val b = (i * ch + c) * 2
+                sum += (frame[b].toInt() and 0xFF) or (frame[b + 1].toInt() shl 8)
+            }
+            sum / ch / 32768f
         }
     }
 
@@ -166,6 +188,8 @@ class ModeBSender(
                     if (hwOk) hwTs.nanoTime / 1000 else null,
                 )
                 frameStart += frameSamples
+                if (capturesMic) micTap?.invoke(toMono(frame, frameBytes, channels), tsUs)
+                if (muted) java.util.Arrays.fill(frame, 0.toByte())
                 if (tcpOut != null) {
                     val len = Protocol.buildPacket(
                         packet, frame, frameBytes, seq, Protocol.SAMPLE_RATE, channels, flags, tsUs

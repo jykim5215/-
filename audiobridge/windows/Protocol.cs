@@ -15,10 +15,13 @@ public static class Protocol
 
     public const int SampleRate = 48000;
     public const int FrameMs = 5;
-    public const int MinPlayoutDelayMs = 600;
+    // 공통 재생 대기 — android/.../net/Protocol.kt와 같은 값 (기본은 소스가 자동으로 정해 "delay"로 알려 준다)
+    public const int MinPlayoutDelayMs = 40;
     public const int MaxPlayoutDelayMs = 2000;
-    public const int PlayoutDelayStepMs = 200;
-    public const int DefaultPlayoutDelayMs = MinPlayoutDelayMs;
+    public const int PlayoutDelayStepMs = 10;
+    public const int DefaultPlayoutDelayMs = 200;
+    /** 스피커 소리 맞추기로 정해지는 이 기기의 추가 지연 상한 (µs) */
+    public const long MaxCalibrationUs = 300_000;
 
     public static int NormalizePlayoutDelayMs(int value)
     {
