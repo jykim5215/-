@@ -35,9 +35,10 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: 가상 시뮬레이션 (프로토콜·동기 sim.py + Wi-Fi Direct 가상 폰)
+      - name: 가상 시뮬레이션 (프로토콜 sim.py + 동기 재생 + Wi-Fi Direct 가상 폰)
         run: |
           python3 audiobridge/sim/sim.py
+          bash audiobridge/sim/sync/run.sh --quick
           bash audiobridge/sim/p2p/run.sh
 
       - name: Release keystore (optional, Play 스토어용 시크릿)

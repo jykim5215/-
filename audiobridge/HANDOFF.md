@@ -228,6 +228,20 @@ audiobridge/
   바뀌는 것도 확인. `sim.py`는 실패 시 종료 코드 1을 내도록 수정, CI는 빌드 전에 두 시뮬레이션을 실행(실패 시 릴리스 중단).
   한계: 무선 구간·제조사별 P2P 편차·권한 대화상자는 흉내 내지 않음 → 실기기 확인은 여전히 필요.
 
+- [x] v2.9 (사용자 목표 재정의: **"레이턴시 없이 소리를 싱크"** → 동기 재생 가상 시뮬 재작성 + 동기 코드 개선):
+  `sim/sync/` — 실제 ClockSync·JitterBuffer·Protocol + 새 PlayoutScheduler·CaptureTimeline을 가상 기기 3대(출력 버퍼·
+  스피커 내부 지연·클럭 ppm 제각각)와 가상 Wi-Fi(지터·스파이크·멈춤·손실) 위에서 돌려, 같은 소스 샘플이 실제로
+  소리 나는 시각의 기기 간 차이를 잰다. 발견: v2.8은 600ms에서도 싱크 오차 중앙값 8.3ms·최대 16.7ms, 분당 25회 끊김.
+  원인 ① 송신 타임스탬프가 read 완료 시각이라 캡처 드라이버의 20ms 묶음만큼 흔들림 ② 재생 판단이 5ms 프레임 단위이고
+  +5ms~−20ms 어긋남을 방치 ③ 시계 동기가 3초 간격·RTT 허용폭 넓음·2점 드리프트로 ±1.6ms 흔들림.
+  조치(Android·Windows 모두): **CaptureTimeline**(AudioRecord.getTimestamp BOOTTIME, 없으면 하한선 추정 — Windows 루프백도),
+  **PlayoutScheduler**(샘플 단위 정렬 + 5ms마다 1~2샘플 빼기/반복으로 클럭 속도 차 추종, 10ms 넘으면 재정렬),
+  **ClockSync 재작성**(최근 90초 중 왕복 짧은 1/4로 오프셋·기울기 직선 맞춤, 250ms→1초 간격, 점프 시 재잠금).
+  결과(보통 가정 Wi-Fi·600ms·10분): 새 방식 + 정밀 보정 싱크 오차 p99 **0.76ms**, 지연 끊김 0. 최소 공통 지연: 좋은 5GHz
+  100ms / 보통 200ms / 혼잡 450ms. 변이 검사(속도 차 보정 끄기) → p99 8.4ms로 실패 확인. CI는 `run.sh --quick` 실행.
+  sim.py의 옛 시계·다기기 절은 실제 코드와 달라 삭제. **남은 결정**: 공통 지연 하한 600ms(Protocol.MIN_PLAYOUT_DELAY_MS)를
+  낮출지·자동으로 고를지, 추가 지연 1ms 단위(반올림 0.5ms 남음)를 더 잘게 할지, 음향 맞춤을 기기별 보정으로 바꿀지.
+  C#은 이 환경에서 컴파일 불가 → CI로 확인. 실기기 청취 검증은 아직 없음.
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
@@ -295,7 +309,8 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
 4. 지연 정책 불변식: 공통 초기값은 600ms, 사용자 범위는 600–2000ms/200ms 단위이고 수신기 보정은
    0–300ms 추가 지연만 가능하다. 자동 음향 맞춤 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
-5. 가상 시뮬레이션: `python3 audiobridge/sim/sim.py`(프로토콜·동기), `bash audiobridge/sim/p2p/run.sh`(Wi-Fi Direct 가상 폰).
+5. 가상 시뮬레이션: `python3 audiobridge/sim/sim.py`(프로토콜·지터·역할), `bash audiobridge/sim/sync/run.sh`(동기 재생 — 실제 코드),
+   `bash audiobridge/sim/p2p/run.sh`(Wi-Fi Direct 가상 폰). 동기 코드를 바꾸면 Kotlin·C# 판을 함께 바꾸고 sync 시뮬을 돌린다.
    최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
 6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를

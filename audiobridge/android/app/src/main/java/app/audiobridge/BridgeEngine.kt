@@ -190,7 +190,7 @@ object BridgeEngine {
         }
     }
 
-    /** 재생 중인 쪽이 주기적으로 시계 동기 질의를 보낸다. 오프셋 확보 전엔 빠르게(버스트). */
+    /** 재생 중인 쪽이 주기적으로 시계 동기 질의를 보낸다. 간격은 ClockSync가 정한다(맞추는 동안 빠르게). */
     private fun startClockTicker() {
         scope.launch {
             while (true) {
@@ -199,7 +199,7 @@ object BridgeEngine {
                     val clock = if (BridgeState.isServerSession.value) serverClock
                     else mainLinks().firstOrNull()?.clock
                     clock?.tick()
-                    if (clock?.offsetUs == null) interval = 400L
+                    if (clock != null) interval = clock.nextTickDelayMs()
                 }
                 delay(interval)
             }

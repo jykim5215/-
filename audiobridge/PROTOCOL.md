@@ -70,7 +70,7 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
 6       2    payloadLen    페이로드 바이트 수 (≤ 1400)
 8       4    seq           패킷 시퀀스 번호 (0부터, 랩어라운드)
 12      4    sampleRate    Hz (기본 48000)
-16      8    timestampUs   송신측 단조시계 마이크로초 (동기 예약 재생의 기준 시각)
+16      8    timestampUs   이 패킷 첫 샘플이 녹음된 시각, 송신측 단조시계 µs (동기 예약 재생의 기준 시각)
 24      -    payload       PCM 샘플 (LE, 인터리브)
 ```
 
@@ -112,15 +112,21 @@ ABDISC!{"name":"MY-PC","version":1,"ctlPort":48550}
   각 수신기의 UDP 포트로 복제 송신**할 수 있다 (다대일, UDP 전용).
 - **clk 메시지**: 수신(재생) 측이 컨트롤 채널로 `{"type":"clk","t0":<내 시계 µs>}`를 보내면
   상대(소스)는 즉시 `{"type":"clk","t0":<에코>,"t1":<소스 시계 µs>}`로 응답한다.
-  수신측은 시작 직후 400ms 간격으로 빠르게 잠근 뒤 3초마다 계속 측정한다. 왕복시간이 짧은
-  샘플을 우선해 오프셋을 추정하고, 연속 표본의 변화율로 시계 드리프트(±250ppm 제한)를 완만하게 추적한다:
+  수신측은 표본 8개를 모을 때까지 250ms 간격, 이후 1초마다 측정한다. 최근 90초 표본 중 왕복시간이
+  가장 짧은 1/4로 오프셋과 시계 속도 차(±500ppm 제한)를 직선 맞춤한다. 왕복은 정상인데 200ms 넘게
+  어긋나면(절전 복귀 등) 기록을 버리고 다시 맞춘다:
   `offset = (t0 + t2)/2 − t1`, `toLocal(srcTs) = srcTs + offset`.
 - **소스 시계 = 오디오 패킷 timestampUs와 같은 단조 시계**여야 한다
   (안드로이드: elapsedRealtimeNanos/1000, 윈도우: 전역 Stopwatch µs).
+- timestampUs는 read()가 끝난 시각이 아니라 **그 프레임 첫 샘플이 녹음된 시각**이다. Android는
+  `AudioRecord.getTimestamp(TIMEBASE_BOOTTIME)`의 하드웨어 캡처 시각에서 샘플 수로 환산하고, 없으면
+  (Windows 루프백 포함) 데이터를 받은 시각의 하한선을 따라가는 추정(`CaptureTimeline`)을 쓴다.
 - 수신기는 각 프레임을 `toLocal(timestampUs) + delayMs + extraDelayMs` 시점에 재생한다.
   Android는 `AudioTrack.getTimestamp(AudioTimestamp)`의 하드웨어 표시 시각, Windows는
   `WasapiOut.GetPosition()`의 장치 재생 헤드를 기준으로 **다음에 쓸 프레임이 실제 출력될 시각**을 계산한다.
-  이르면 무음 삽입, 20ms 이상 늦으면 폐기한다. 오프셋이 없으면(clk 미지원 상대) 첫 패킷
+  판단은 샘플 단위(`PlayoutScheduler`)다: 맞추기 전엔 이른 만큼 정확히 무음을 넣거나 늦은 만큼 정확히
+  건너뛰고, 맞춘 뒤엔 오차가 ±120µs를 넘으면 5ms마다 1~2샘플을 빼거나 반복해 오디오 클럭 속도 차를
+  끊김 없이 따라간다. 10ms 넘게 어긋나면 다시 맞춘다. 오프셋이 없으면(clk 미지원 상대) 첫 패킷
   도착 시각 기준 잠정 오프셋으로 동작한다(단독 재생과 동일).
 - 이 방식은 OS 믹서/HAL 버퍼 크기가 달라도 동일한 음향 시각을 목표로 하며, 장시간 재생 중 시계 속도
   차이도 재동기화한다. 남는 기기별 음향 경로 오차는 더 빠르게 들리는 수신기의 단방향 추가 지연

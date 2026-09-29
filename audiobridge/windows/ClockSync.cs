@@ -1,43 +1,44 @@
 namespace AudioBridge.Win;
 
 /// <summary>
-/// Continuously maps the source device monotonic clock to this PC's monotonic clock.
-/// Low-RTT samples establish the offset; a bounded drift estimate prevents speakers
-/// from slowly separating during long playback sessions.
+/// 소스 기기의 단조시계를 이 PC의 단조시계로 옮기는 오프셋 — android/.../net/ClockSync.kt와 같은 알고리즘.
+/// 응답 하나의 오차는 왕복 시간의 절반 이하이므로 가장 빠른 왕복만 믿는다: 최근 90초 표본 중
+/// 왕복이 짧은 1/4로 오프셋과 클럭 속도 차(기울기)를 직선 맞춤한다. 왕복은 정상인데 200ms 넘게
+/// 어긋나면 실제로 시계가 튄 것(절전 복귀 등)이므로 기록을 버리고 다시 맞춘다.
 /// </summary>
 public sealed class ClockSync
 {
+    public const int FastTickMs = 250;
+    public const int TickMs = 1_000;
+    private const int LockSamples = 8;
+    private const int MaxSamples = 120;
+    private const long WindowUs = 90_000_000;
+    private const int MinFitSamples = 4;
+    private const long MinSlopeSpanUs = 5_000_000;
+    private const double JumpUs = 200_000;
+    private const double MaxDrift = 500e-6;
+
+    private readonly record struct Sample(long LocalUs, double OffsetUs, long RttUs);
+    private sealed record Model(long T0, double OffsetAtT0, double Slope);
+
     private readonly object _gate = new();
-    private long _bestRttUs = long.MaxValue;
-    private long _anchorLocalUs;
-    private double _anchorOffsetUs;
-    private double _driftPpm;
-    private bool _ready;
-    private long _lastSampleLocalUs;
-    private double _lastSampleOffsetUs;
+    private readonly LinkedList<Sample> _samples = new();
+    private volatile Model? _model;
 
     public long? OffsetUs
     {
         get
         {
-            lock (_gate)
-            {
-                if (!_ready) return null;
-                long now = Clock.Us;
-                double predicted = _anchorOffsetUs +
-                    (now - _anchorLocalUs) * _driftPpm / 1_000_000d;
-                return (long)Math.Round(predicted);
-            }
+            var m = _model;
+            if (m == null) return null;
+            return (long)Math.Round(m.OffsetAtT0 + (Clock.Us - m.T0) * m.Slope);
         }
     }
 
-    public void AgeBestSample()
+    /// <summary>다음 clk 질의까지 기다릴 시간: 맞추는 동안 빠르게, 이후 1초.</summary>
+    public int NextTickDelayMs()
     {
-        lock (_gate)
-        {
-            if (_bestRttUs != long.MaxValue)
-                _bestRttUs = Math.Min(_bestRttUs + 2_000, 200_000);
-        }
+        lock (_gate) return _samples.Count < LockSamples ? FastTickMs : TickMs;
     }
 
     public void OnReply(long t0, long sourceT1)
@@ -45,66 +46,45 @@ public sealed class ClockSync
         long t2 = Clock.Us;
         long rtt = t2 - t0;
         if (rtt < 0 || rtt > 2_000_000) return;
-        double measuredOffset = (t0 + t2) / 2d - sourceT1;
+        double measured = (t0 + t2) / 2d - sourceT1;
 
         lock (_gate)
         {
-            if (_bestRttUs != long.MaxValue && rtt > _bestRttUs + 5_000) return;
-            _bestRttUs = Math.Min(_bestRttUs, rtt);
-
-            if (!_ready)
+            var m = _model;
+            if (m != null && rtt <= _samples.Min(s => s.RttUs) + 5_000 &&
+                Math.Abs(measured - (m.OffsetAtT0 + (t2 - m.T0) * m.Slope)) > JumpUs)
             {
-                _anchorLocalUs = t2;
-                _anchorOffsetUs = measuredOffset;
-                _lastSampleLocalUs = t2;
-                _lastSampleOffsetUs = measuredOffset;
-                _ready = true;
-                return;
+                _samples.Clear();
             }
-
-            double predicted = _anchorOffsetUs +
-                (t2 - _anchorLocalUs) * _driftPpm / 1_000_000d;
-            double residual = measuredOffset - predicted;
-
-            // Resume/sleep can move the relationship abruptly. Re-lock instead of
-            // spending minutes slewing toward a stale offset.
-            if (Math.Abs(residual) > 200_000)
-            {
-                _anchorLocalUs = t2;
-                _anchorOffsetUs = measuredOffset;
-                _driftPpm = 0;
-                _lastSampleLocalUs = t2;
-                _lastSampleOffsetUs = measuredOffset;
-            }
-            else
-            {
-                long sampleSpan = t2 - _lastSampleLocalUs;
-                if (sampleSpan >= 5_000_000)
-                {
-                    double measuredPpm = (measuredOffset - _lastSampleOffsetUs) *
-                        1_000_000d / sampleSpan;
-                    measuredPpm = Math.Clamp(measuredPpm, -250d, 250d);
-                    _driftPpm = _driftPpm * 0.9d + measuredPpm * 0.1d;
-                    _lastSampleLocalUs = t2;
-                    _lastSampleOffsetUs = measuredOffset;
-                }
-                _anchorLocalUs = t2;
-                _anchorOffsetUs = predicted + residual * 0.2d;
-            }
+            _samples.AddLast(new Sample(t2, measured, rtt));
+            while (_samples.Count > MaxSamples || t2 - _samples.First!.Value.LocalUs > WindowUs) _samples.RemoveFirst();
+            _model = Fit(m?.Slope ?? 0d);
         }
+    }
+
+    private Model Fit(double previousSlope)
+    {
+        var best = _samples.OrderBy(s => s.RttUs).Take(Math.Max(MinFitSamples, _samples.Count / 4)).ToList();
+        double n = best.Count;
+        double meanT = best.Sum(s => (double)s.LocalUs) / n;
+        double meanO = best.Sum(s => s.OffsetUs) / n;
+        long span = best.Max(s => s.LocalUs) - best.Min(s => s.LocalUs);
+        double slope = previousSlope;
+        if (best.Count >= MinFitSamples && span >= MinSlopeSpanUs)
+        {
+            double sxx = best.Sum(s => (s.LocalUs - meanT) * (s.LocalUs - meanT));
+            double sxy = best.Sum(s => (s.LocalUs - meanT) * (s.OffsetUs - meanO));
+            slope = Math.Clamp(sxy / sxx, -MaxDrift, MaxDrift);
+        }
+        return new Model((long)Math.Round(meanT), meanO, slope);
     }
 
     public void Reset()
     {
         lock (_gate)
         {
-            _bestRttUs = long.MaxValue;
-            _anchorLocalUs = 0;
-            _anchorOffsetUs = 0;
-            _driftPpm = 0;
-            _ready = false;
-            _lastSampleLocalUs = 0;
-            _lastSampleOffsetUs = 0;
+            _samples.Clear();
+            _model = null;
         }
     }
 }

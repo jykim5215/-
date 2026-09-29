@@ -166,35 +166,43 @@ public sealed class ModeASender : IDisposable
     private void SendLoop()
     {
         int frameBytes = Protocol.FrameBytes(2);
+        int frameSamples = frameBytes / 4;
         var frame = new byte[frameBytes];
         var packet = new byte[Protocol.HeaderSize + frameBytes];
         long lastReal = _clock.ElapsedMilliseconds;
         long lastSilence = 0;
+        // 타임스탬프 = 프레임 첫 샘플이 실제로 녹음된 시각의 추정 (꺼낸 시각은 캡처 주기만큼 몰려서 흔들린다)
+        var timeline = new CaptureTimeline(Protocol.SampleRate);
+        long runSample = 0; // 끊김 없는 캡처 구간 시작부터 센 샘플 번호
         while (_running)
         {
             if (_ring.Read(frame, frameBytes))
             {
-                SendFrame(frame, packet);
+                long ts = timeline.FrameStartUs(runSample, frameSamples, Clock.Us);
+                runSample += frameSamples;
+                SendFrame(frame, packet, ts);
                 lastReal = _clock.ElapsedMilliseconds;
                 continue;
             }
             long now = _clock.ElapsedMilliseconds;
             if (now - lastReal > 100 && now - lastSilence >= Protocol.FrameMs)
             {
-                // 재생 중인 소리가 없으면 무음으로 스트림 유지
+                // 재생 중인 소리가 없으면 무음으로 스트림 유지 — 캡처 구간이 끊겼으니 추정도 새로 시작
                 Array.Clear(frame);
-                SendFrame(frame, packet);
+                SendFrame(frame, packet, Clock.Us);
+                timeline.Reset();
+                runSample = 0;
                 lastSilence = now;
             }
             Thread.Sleep(2);
         }
     }
 
-    private void SendFrame(byte[] frame, byte[] packet)
+    private void SendFrame(byte[] frame, byte[] packet, long timestampUs)
     {
         int flags = _firstPacket ? Protocol.FlagFirst : 0;
         _firstPacket = false;
-        int len = Protocol.BuildPacket(packet, frame, _seq++, Protocol.SampleRate, 2, flags, Clock.Us);
+        int len = Protocol.BuildPacket(packet, frame, _seq++, Protocol.SampleRate, 2, flags, timestampUs);
         try
         {
             if (_useTcp)

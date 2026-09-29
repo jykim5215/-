@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.AudioTimestamp
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
@@ -139,6 +140,11 @@ class ModeBSender(
             var seq = 0
             var level = 0f
             var lastLevel = 0L
+            // 타임스탬프 = 이 프레임 첫 샘플이 실제로 녹음된 시각 (read 완료 시각은 드라이버가 몰아서 줘서 흔들린다)
+            val frameSamples = frameBytes / (2 * channels)
+            val timeline = CaptureTimeline(Protocol.SAMPLE_RATE)
+            val hwTs = AudioTimestamp()
+            var frameStart = 0L // 녹음 시작부터 센 이 프레임 첫 샘플 번호
             while (running) {
                 var off = 0
                 while (off < frameBytes && running) {
@@ -151,7 +157,15 @@ class ModeBSender(
                 }
                 if (!running) break
                 val flags = if (seq == 0) Protocol.FLAG_FIRST else 0
-                val tsUs = SystemClock.elapsedRealtimeNanos() / 1000
+                val readDoneUs = SystemClock.elapsedRealtimeNanos() / 1000
+                // BOOTTIME = elapsedRealtimeNanos와 같은 시계 (수신기의 시계 동기 기준과 일치)
+                val hwOk = rec.getTimestamp(hwTs, AudioTimestamp.TIMEBASE_BOOTTIME) == AudioRecord.SUCCESS
+                val tsUs = timeline.frameStartUs(
+                    frameStart, frameSamples, readDoneUs,
+                    if (hwOk) hwTs.framePosition else null,
+                    if (hwOk) hwTs.nanoTime / 1000 else null,
+                )
+                frameStart += frameSamples
                 if (tcpOut != null) {
                     val len = Protocol.buildPacket(
                         packet, frame, frameBytes, seq, Protocol.SAMPLE_RATE, channels, flags, tsUs

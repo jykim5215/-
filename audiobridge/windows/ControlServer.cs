@@ -284,9 +284,8 @@ public sealed class ControlServer
             Thread.Sleep(200);
             while (!_closed)
             {
-                _clock.AgeBestSample();
                 Send(new { type = "clk", t0 = Clock.Us });
-                Thread.Sleep(_clock.OffsetUs == null ? 400 : 3_000);
+                Thread.Sleep(_clock.NextTickDelayMs());
             }
         }
 
