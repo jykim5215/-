@@ -48,8 +48,9 @@ class WifiDirect(
     private val connectTimeout = Runnable {
         // 상대가 초대를 거절하거나 응답이 없으면 일부 기기는 아무 브로드캐스트도 주지 않는다.
         connecting = false
+        val mgr = manager
         val ch = channel
-        if (manager != null && ch != null) runCatching { manager.cancelConnect(ch, null) }
+        if (mgr != null && ch != null) runCatching { mgr.cancelConnect(ch, null) }
         onStatus(null)
         onError("상대 폰이 응답하지 않아요 — 상대 화면의 연결 요청을 수락했는지 확인해 주세요")
     }
