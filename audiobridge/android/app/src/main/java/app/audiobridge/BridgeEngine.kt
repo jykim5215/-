@@ -329,6 +329,8 @@ object BridgeEngine {
                     BridgeState.notify("상대 주소를 확인할 수 없어요")
                     return@post
                 }
+                // 이미 그 그룹장에 붙어 있으면 다시 연결하지 않는다(중복 링크 방지)
+                if (mainLinks().any { it.host == host }) return@post
                 connect(host, Protocol.DEFAULT_CTL_PORT)
             }
         }

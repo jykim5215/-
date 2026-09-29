@@ -203,6 +203,25 @@ audiobridge/
   양쪽 권한 흐름을 처리하고, Android↔Windows는 Windows가 UI 노출 없이 백그라운드로 응답한다.
   실패·시간초과 시 기존 설정은 유지되며 스트리밍 중과 다중 링크에서는 실행하지 않는다.
 
+- [x] v2.8 (사용자 선택 A: Wi-Fi Direct 옵션 추가 — 블루투스는 A2DP sink 불가로 대체):
+  net/WifiDirect.kt(WifiP2pManager 래퍼: discoverPeers/connect/requestConnectionInfo,
+  리시버는 액티비티 onResume/onPause에서 register/unregister, ContextCompat.RECEIVER_NOT_EXPORTED).
+  그룹 형성 시 BridgeEngine.onWifiDirectConnected(isGO, goHost): 비-GO는 기존 connect(goHost,48550)
+  재사용, GO는 상시 서버가 수신 → 오디오·동기·다대일 로직 무변경. UI: DiscoveryCard에
+  "Wi-Fi Direct로 연결" 섹션(P2P 피어 목록). 권한: NEARBY_WIFI_DEVICES(33+)/ACCESS_FINE_LOCATION(≤32),
+  CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE. BridgeState에 p2p* 상태 추가.
+  주의: Wi-Fi Direct는 기기 편차 크고 이 환경에서 테스트 불가 — CI 컴파일만 검증, 실기기 확인 필요.
+  블루투스(RFCOMM) 미채택 이유: 폰을 BT 스피커로 만드는 A2DP sink를 앱에 안 열어 줌.
+- [x] v2.8.1 (Wi-Fi Direct 실기기 대비 결함 수정 — 코드 리뷰로 발견, 실기기 미검증):
+  ① **중복 연결 버그**: `WIFI_P2P_CONNECTION_CHANGED`는 sticky 브로드캐스트라 onResume 재등록마다 다시
+  전달돼, 비그룹장이 다른 앱에 갔다 올 때마다 같은 그룹장에 링크가 하나씩 추가됐다 → WifiDirect가 형성된
+  그룹(그룹장 여부+주소)을 기억해 새 그룹일 때만 onConnected, BridgeEngine도 이미 붙은 호스트면 무시.
+  ② 검색 실패(`discoverPeers` onFailure)·주변 기기 0대일 때 "찾는 중…"이 영원히 남던 문제 → 실패 시
+  즉시 해제 + 20초 타임아웃, 빈 목록 알림으로는 끄지 않음. ③ 상대가 초대를 거절/무응답이면 "연결 중…"이
+  고착되던 문제 → 45초 타임아웃(cancelConnect + 안내). ④ onResume마다 `initialize()`로 채널이 쌓이던 것 →
+  채널 1회 생성, 프레임워크가 끊으면 재생성. ⑤ CI: `pull_request` 트리거 추가(빌드만, 롤링 태그·릴리스
+  단계는 PR에서 건너뜀, 동시성 그룹 분리) + 버전 문자열 2.7.x → 2.8.x.
+
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
@@ -251,7 +270,9 @@ digest에 모두 일치했다. 실제 Android↔Android 및 Android↔Windows �
 **GitHub Actions**(`.github/workflows/build.yml`)가 APK/AAB/단일 EXE를 같은 버전으로 만들고 롤링
 릴리스를 교체하는 유일한 기준이며, 로컬 산출물만으로 배포 완료를 주장하지 않는다.
 
-**다음 할 일:** GitHub Actions v2.7 배포와 공개 APK/EXE 해시 확인 → Android 두 대 및
+**다음 할 일:** v2.8.1 PR(빌드 전용 CI) 통과 → PR #2 브랜치로 병합해 롤링 릴리스 게시·공개 APK/EXE 해시 확인
+→ **Wi-Fi Direct 실기기 확인**(폰 두 대: 검색→초대 수락→그룹장/비그룹장 양쪽에서 스트림 시작, 앱 전환 후
+복귀해도 스피커 목록이 1대로 유지되는지, 거절 시 45초 안에 "연결 중" 해제) → Android 두 대 및
 Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·실패 보존 동작 확인 → 소스 기기를
 음소거하고 10분 이상 재생하며 선택한 공통 지연과 기기별 추가 지연의 체감 시차/드리프트 측정.
 
@@ -272,12 +293,3 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
 6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
    완료로 표기하지 않는다.
-- [x] v2.8 (사용자 선택 A: Wi-Fi Direct 옵션 추가 — 블루투스는 A2DP sink 불가로 대체):
-  net/WifiDirect.kt(WifiP2pManager 래퍼: discoverPeers/connect/requestConnectionInfo,
-  리시버는 액티비티 onResume/onPause에서 register/unregister, ContextCompat.RECEIVER_NOT_EXPORTED).
-  그룹 형성 시 BridgeEngine.onWifiDirectConnected(isGO, goHost): 비-GO는 기존 connect(goHost,48550)
-  재사용, GO는 상시 서버가 수신 → 오디오·동기·다대일 로직 무변경. UI: DiscoveryCard에
-  "Wi-Fi Direct로 연결" 섹션(P2P 피어 목록). 권한: NEARBY_WIFI_DEVICES(33+)/ACCESS_FINE_LOCATION(≤32),
-  CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE. BridgeState에 p2p* 상태 추가.
-  주의: Wi-Fi Direct는 기기 편차 크고 이 환경에서 테스트 불가 — CI 컴파일만 검증, 실기기 확인 필요.
-  블루투스(RFCOMM) 미채택 이유: 폰을 BT 스피커로 만드는 A2DP sink를 앱에 안 열어 줌.

@@ -82,8 +82,8 @@ class MainActivity : ComponentActivity() {
             context = applicationContext,
             onPeers = { list ->
                 BridgeState.p2pPeers.value = list.map { app.audiobridge.P2pDevice(it.first, it.second) }
-                BridgeState.p2pDiscovering.value = false
             },
+            onDiscovering = { BridgeState.p2pDiscovering.value = it },
             onStatus = { BridgeState.p2pStatus.value = it },
             onConnected = { go, host -> BridgeEngine.onWifiDirectConnected(go, host) },
             onUnsupported = { BridgeState.p2pSupported.value = false },
@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
         wifiDirect = wd
         // UI가 접근하는 컨트롤러 훅
         BridgeEngine.wifiDirect = object : BridgeEngine.WifiDirectController {
-            override fun discover() { BridgeState.p2pDiscovering.value = true; wd.discover() }
+            override fun discover() = wd.discover()
             override fun connect(deviceAddress: String) = wd.connect(deviceAddress)
             override fun disconnect() = wd.disconnect()
         }
