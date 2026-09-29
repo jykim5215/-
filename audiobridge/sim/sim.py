@@ -245,5 +245,6 @@ if __name__=="__main__":
     if FAIL:
         print(f"실패 {len(FAIL)}건:")
         for f in FAIL: print("  ✗", f)
+        raise SystemExit(1)
     else:
         print("전체 통과 ✓")

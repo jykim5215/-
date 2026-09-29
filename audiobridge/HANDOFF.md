@@ -221,6 +221,12 @@ audiobridge/
   고착되던 문제 → 45초 타임아웃(cancelConnect + 안내). ④ onResume마다 `initialize()`로 채널이 쌓이던 것 →
   채널 1회 생성, 프레임워크가 끊으면 재생성. ⑤ CI: `pull_request` 트리거 추가(빌드만, 롤링 태그·릴리스
   단계는 PR에서 건너뜀, 동시성 그룹 분리) + 버전 문자열 2.7.x → 2.8.x.
+- [x] v2.8.1 가상 시뮬레이션 (사용자 요청: 실기기 대신 가상 환경): `sim/p2p/` — 실제 `WifiDirect.kt`를 그대로
+  컴파일해 가상 Android(WifiP2pManager·Context·Handler 대역 + 가상 시계) 위 가상 폰 2대로 13개 시나리오 실행,
+  v2.8 원본과 나란히 비교. 결과: **v2.8.1 13/13 통과**, v2.8은 9개 시나리오에서 결함 재현(앱 전환 5회 → 링크 6개,
+  그룹장 안내 6회, BUSY·주변 기기 없음 시 '찾는 중' 고착, 채널 11개 등). 변이 검사(그룹 중복 검사 제거)에서 FAIL로
+  바뀌는 것도 확인. `sim.py`는 실패 시 종료 코드 1을 내도록 수정, CI는 빌드 전에 두 시뮬레이션을 실행(실패 시 릴리스 중단).
+  한계: 무선 구간·제조사별 P2P 편차·권한 대화상자는 흉내 내지 않음 → 실기기 확인은 여전히 필요.
 
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
@@ -289,7 +295,8 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
 4. 지연 정책 불변식: 공통 초기값은 600ms, 사용자 범위는 600–2000ms/200ms 단위이고 수신기 보정은
    0–300ms 추가 지연만 가능하다. 자동 음향 맞춤 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
-5. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
+5. 가상 시뮬레이션: `python3 audiobridge/sim/sim.py`(프로토콜·동기), `bash audiobridge/sim/p2p/run.sh`(Wi-Fi Direct 가상 폰).
+   최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
 6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
    완료로 표기하지 않는다.
