@@ -40,12 +40,14 @@ class ControlServer(
 
         /** 시계 동기 응답 수신 (내가 보낸 질의의 에코) */
         fun onClkReply(t0: Long, t1: Long)
-        /** modeB start의 재생 지연 지시값(ms, 없으면 -1) — 재생 시작 전에 호출됨 */
+        /** 공통 지연 지시값(ms, 없으면 -1) — modeB start와, 소스가 자동으로 바꿀 때("delay") 호출됨 */
         fun onPlayDelay(delayMs: Int)
-        fun onCalibration(message: JSONObject)
+        /** 스피커 소리 맞추기로 소스가 정해 준 이 기기의 음향 보정값 */
+        fun onSyncCalibration(us: Long)
         /** 재생 스케줄용 파라미터 제공 */
         fun playbackDelayMs(): Int
         fun playbackExtraDelayMs(): Int
+        fun playbackCalibrationUs(): Long
         fun playbackOffsetUs(): Long?
     }
 
@@ -112,7 +114,7 @@ class ControlServer(
         @Volatile private var helloDone = false
         @Volatile private var gain = 1f // 원격 볼륨 (소스가 vol 메시지로 지정)
         private var writer: BufferedWriter? = null
-        private var player: ModeAPlayer? = null
+        @Volatile private var player: ModeAPlayer? = null
 
         fun start() {
             thread(name = "ab-srv-read") { readLoop() }
@@ -125,6 +127,7 @@ class ControlServer(
                 writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
                 startPing()
+                startNeedReports()
                 while (!closed) {
                     val line = reader.readLine() ?: break
                     if (line.length > 4096) break
@@ -177,7 +180,8 @@ class ControlServer(
                     }
                 }
                 "modeB" -> handleModeB(m)
-                "cal" -> callbacks.onCalibration(JSONObject(m.toString()))
+                "delay" -> callbacks.onPlayDelay(m.optInt("ms", -1))
+                "sync" -> handleSync(m)
             }
         }
 
@@ -213,6 +217,7 @@ class ControlServer(
                 onStats = { _, level, _ -> callbacks.onLevel(level) },
                 onError = { msg -> callbacks.onError(msg) },
                 gainProvider = { gain },
+                calibrationUsProvider = { callbacks.playbackCalibrationUs() },
             )
             val ok = if (tcp) p.startTcpServer(audioPort, peerHost) else p.startUdp(audioPort, peerHost)
             if (!ok) {
@@ -230,11 +235,43 @@ class ControlServer(
             callbacks.onPlaying(true)
         }
 
+        /** 스피커 소리 맞추기: 소스가 정한 시각에 시험음을 내고(재생 경로 그대로), 결과 보정값을 받는다 */
+        private fun handleSync(m: JSONObject) {
+            when (m.optString("action")) {
+                "tones" -> {
+                    val at = m.optJSONArray("at") ?: return
+                    val p = player
+                    for (i in 0 until minOf(at.length(), 16)) p?.scheduleSyncTone(at.optLong(i))
+                    val cal = callbacks.playbackCalibrationUs()
+                    send(
+                        JSONObject().put("type", "sync").put("action", "ack").put("id", m.optString("id").take(64))
+                            .put("calUs", cal)
+                            .put("extraUs", callbacks.playbackExtraDelayMs() * 1000L + cal)
+                    )
+                }
+                "set" -> callbacks.onSyncCalibration(m.optLong("calUs", 0L).coerceIn(0L, Protocol.MAX_CALIBRATION_US))
+            }
+        }
+
         fun stopPlayer() {
             val p = player
             player = null
             p?.stop()
             if (p != null) callbacks.onPlaying(false)
+        }
+
+        /** 재생 중이면 2초마다 "끊김 없이 쓸 수 있는 최소 공통 지연"을 소스에 보고한다 (자동 공통 지연) */
+        private fun startNeedReports() {
+            thread(name = "ab-srv-need") {
+                while (!closed) {
+                    try {
+                        Thread.sleep(2000)
+                    } catch (_: InterruptedException) {
+                        return@thread
+                    }
+                    player?.needMs()?.let { send(JSONObject().put("type", "need").put("ms", it)) }
+                }
+            }
         }
 
         private fun startPing() {

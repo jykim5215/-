@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.AudioTimestamp
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
@@ -42,6 +43,15 @@ class ModeBSender(
     @Volatile private var running = false
 
     val channels: Int get() = if (source == CaptureSource.INTERNAL) 2 else 1
+
+    /** 마이크로 담는 중인가 (음향 보정이 이 녹음을 그대로 쓸 수 있다) */
+    val capturesMic: Boolean get() = source == CaptureSource.MIC
+
+    /** 음향 싱크 보정 중: 스피커로 보내는 소리를 무음으로 (시험음만 들리게) */
+    @Volatile var muted = false
+
+    /** 마이크로 담는 중이면 담은 프레임(모노, -1..1)과 첫 샘플의 녹음 시각을 넘긴다 — 음향 보정 녹음용 */
+    @Volatile var micTap: ((FloatArray, Long) -> Unit)? = null
 
     fun start(): Boolean {
         val rec = try {
@@ -99,6 +109,19 @@ class ModeBSender(
         }
     }
 
+    /** 16bit LE 인터리브 → 모노 float(-1..1) */
+    private fun toMono(frame: ByteArray, frameBytes: Int, ch: Int): FloatArray {
+        val n = frameBytes / (2 * ch)
+        return FloatArray(n) { i ->
+            var sum = 0
+            for (c in 0 until ch) {
+                val b = (i * ch + c) * 2
+                sum += (frame[b].toInt() and 0xFF) or (frame[b + 1].toInt() shl 8)
+            }
+            sum / ch / 32768f
+        }
+    }
+
     /** 스테레오 인터리브 16bit 프레임에서 한 채널만 뽑아 모노 페이로드 생성. */
     private fun extractChannel(frame: ByteArray, frameBytes: Int, chIdx: Int): ByteArray {
         val out = ByteArray(frameBytes / 2)
@@ -139,6 +162,11 @@ class ModeBSender(
             var seq = 0
             var level = 0f
             var lastLevel = 0L
+            // 타임스탬프 = 이 프레임 첫 샘플이 실제로 녹음된 시각 (read 완료 시각은 드라이버가 몰아서 줘서 흔들린다)
+            val frameSamples = frameBytes / (2 * channels)
+            val timeline = CaptureTimeline(Protocol.SAMPLE_RATE)
+            val hwTs = AudioTimestamp()
+            var frameStart = 0L // 녹음 시작부터 센 이 프레임 첫 샘플 번호
             while (running) {
                 var off = 0
                 while (off < frameBytes && running) {
@@ -151,7 +179,17 @@ class ModeBSender(
                 }
                 if (!running) break
                 val flags = if (seq == 0) Protocol.FLAG_FIRST else 0
-                val tsUs = SystemClock.elapsedRealtimeNanos() / 1000
+                val readDoneUs = SystemClock.elapsedRealtimeNanos() / 1000
+                // BOOTTIME = elapsedRealtimeNanos와 같은 시계 (수신기의 시계 동기 기준과 일치)
+                val hwOk = rec.getTimestamp(hwTs, AudioTimestamp.TIMEBASE_BOOTTIME) == AudioRecord.SUCCESS
+                val tsUs = timeline.frameStartUs(
+                    frameStart, frameSamples, readDoneUs,
+                    if (hwOk) hwTs.framePosition else null,
+                    if (hwOk) hwTs.nanoTime / 1000 else null,
+                )
+                frameStart += frameSamples
+                if (capturesMic) micTap?.invoke(toMono(frame, frameBytes, channels), tsUs)
+                if (muted) java.util.Arrays.fill(frame, 0.toByte())
                 if (tcpOut != null) {
                     val len = Protocol.buildPacket(
                         packet, frame, frameBytes, seq, Protocol.SAMPLE_RATE, channels, flags, tsUs

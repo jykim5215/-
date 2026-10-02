@@ -47,7 +47,12 @@ object BridgeState {
 
     // 설정
     val bSource = MutableStateFlow(CaptureSource.MIC)
+    /** 공통 지연을 자동으로 정한다 (기본). 끄면 [bufferMs](사용자가 고른 값)를 쓴다 */
+    val autoDelay = MutableStateFlow(true)
+    /** 사용자가 고른 공통 지연 (수동 모드) */
     val bufferMs = MutableStateFlow(Protocol.DEFAULT_PLAYOUT_DELAY_MS)
+    /** 지금 실제로 쓰고 있는 공통 지연 (자동이면 측정으로 바뀐다) */
+    val activeDelayMs = MutableStateFlow(Protocol.AUTO_START_DELAY_MS)
     val transportTcp = MutableStateFlow(false)
     val modeAPort = MutableStateFlow(Protocol.DEFAULT_MODE_A_PORT)
 
@@ -55,6 +60,9 @@ object BridgeState {
     val speakers = MutableStateFlow<List<SpeakerInfo>>(emptyList())
     // 공통 재생 시각보다 이 기기만 더 늦추는 보정 (ms, 0..300)
     val extraDelayMs = MutableStateFlow(0)
+    /** 스피커 소리 맞추기(음향 보정)로 정해진 이 기기의 추가 지연 (µs) — 스피커 내부 처리 지연 차이를 메운다 */
+    val calibrationUs = MutableStateFlow(0L)
+    /** 스피커 소리 맞추기 진행 중 */
     val calibrationRunning = MutableStateFlow(false)
 
     // 검색
@@ -75,7 +83,7 @@ object BridgeState {
 
     /** 엔진이 "보내기 준비(권한·화면녹화 동의)"를 UI에 요청할 때 발행 */
     val sendSetup = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
-    /** 상대 기기의 물리 보정 요청을 받았으나 마이크 권한이 없을 때 UI가 권한 창을 연다. */
+    /** 스피커 소리 맞추기에 마이크 권한이 필요할 때 UI가 권한 창을 연다. */
     val calibrationPermissionRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
 
     fun notify(msg: String) {

@@ -7,9 +7,10 @@ using NAudio.Wave;
 namespace AudioBridge.Win;
 
 /// <summary>
-/// Receives phone audio and schedules every frame against the shared source clock.
+/// Receives phone audio and schedules every sample against the shared source clock.
 /// WasapiOut.GetPosition is used as the hardware playout head, so different endpoint
-/// buffer sizes do not turn into different audible start times.
+/// buffer sizes do not turn into different audible start times; PlayoutScheduler aligns
+/// to the sample and follows the clock-rate difference by dropping/repeating single samples.
 /// </summary>
 public sealed class ModeBPlayer : IDisposable
 {
@@ -17,7 +18,12 @@ public sealed class ModeBPlayer : IDisposable
 
     private readonly IPAddress _phone;
     private readonly bool _useTcp;
-    private readonly int _delayMs;
+    private volatile int _delayMs;
+    private readonly DelayAdvisor _advisor = new();
+    /** 스피커 소리 맞추기 시험음을 낼 소스 시각들 (µs) */
+    private readonly System.Collections.Concurrent.ConcurrentQueue<long> _syncTones = new();
+    /** WASAPI 공유 모드 버퍼(30ms) + 믹서 주기 — 프레임이 목표 시각보다 이만큼 먼저 와 있어야 한다 */
+    private const long OutputLatencyUs = 40_000;
     private readonly Func<long?> _offsetUsProvider;
     private readonly object _queueGate = new();
     private readonly object _outputGate = new();
@@ -38,6 +44,15 @@ public sealed class ModeBPlayer : IDisposable
     private volatile float _gain = 1f;
 
     public void SetGain(int percent) => _gain = Math.Clamp(percent, 0, 100) / 100f;
+
+    /** 소스가 자동으로 정한 공통 지연 ("delay" 메시지) */
+    public void SetDelayMs(int ms) => _delayMs = Protocol.NormalizePlayoutDelayMs(ms);
+
+    /** 끊김 없이 쓸 수 있는 최소 공통 지연(ms) — 소스에 "need"로 보고한다 */
+    public int? NeedMs() => _advisor.NeedMs(Clock.Us);
+
+    /** 소스 시각 atSourceUs부터 50ms를 시험음으로 낸다 (스피커 소리 맞추기) */
+    public void ScheduleSyncTone(long atSourceUs) => _syncTones.Enqueue(atSourceUs);
 
     public ModeBPlayer(
         IPAddress phone,
@@ -163,6 +178,11 @@ public sealed class ModeBPlayer : IDisposable
         if (!EnsureOutput(info)) return;
         if (_format!.SampleRate != info.SampleRate || _format.Channels != info.Channels) return;
 
+        if (_offsetUsProvider() is long offset)
+        {
+            long now = Clock.Us;
+            _advisor.OnArrival(now, now - (info.TimestampUs + offset));
+        }
         var data = payload.ToArray();
         ApplyGain(data, _gain);
         lock (_queueGate)
@@ -225,9 +245,14 @@ public sealed class ModeBPlayer : IDisposable
     private void PlayLoop()
     {
         var format = _format!;
+        int bytesPerSampleFrame = 2 * format.Channels;
         int frameBytes = Protocol.FrameBytes(format.Channels);
-        long frameDurationUs = Protocol.FrameMs * 1_000L;
+        int frameSamples = frameBytes / bytesPerSampleFrame;
         var silence = new byte[frameBytes];
+        // 한 프레임 + 반복 샘플(최대 2개)을 담을 작업 버퍼
+        var chunk = new byte[frameBytes + 2 * bytesPerSampleFrame];
+        var scheduler = new PlayoutScheduler(format.SampleRate, frameSamples);
+        int cursor = 0; // 머리 프레임에서 이미 쓰거나 건너뛴 샘플 수
 
         while (_running)
         {
@@ -240,32 +265,86 @@ public sealed class ModeBPlayer : IDisposable
 
             if (head == null)
             {
-                if (PendingDeviceUs(format) < 30_000) WriteToDeviceQueue(silence);
+                // 출력 대기열이 바닥나기 직전에만 무음으로 채운다 (실제로 끊긴 것 → 다음 데이터에서 다시 맞춤)
+                if (PendingDeviceUs(format) < 30_000)
+                {
+                    var gap = scheduler.Decide(null, 0);
+                    WriteToDeviceQueue(silence, gap.Samples * bytesPerSampleFrame);
+                }
                 else Thread.Sleep(1);
                 continue;
             }
 
             long offset = _offsetUsProvider() ?? GetFallbackOffset(head.TimestampUs);
-            long targetUs = head.TimestampUs + offset + _delayMs * 1_000L;
+            // 머리 프레임에서 다음에 쓸 샘플의 목표 재생 시각 vs 지금 쓰면 실제로 나올 시각
+            long targetUs = head.TimestampUs + offset + _delayMs * 1_000L + Config.CalibrationUs +
+                cursor * 1_000_000L / format.SampleRate;
             long nextWritePlaysAtUs = Clock.Us + PendingDeviceUs(format);
-            long leadUs = targetUs - nextWritePlaysAtUs;
+            _advisor.OnOutputDepth(Clock.Us, OutputLatencyUs);
+            int headSamples = head.Data.Length / bytesPerSampleFrame;
+            var decision = scheduler.Decide(nextWritePlaysAtUs - targetUs, headSamples - cursor);
 
-            if (leadUs > frameDurationUs)
+            switch (decision.Kind)
             {
-                WriteToDeviceQueue(silence);
-                continue;
-            }
-            if (leadUs < -20_000)
-            {
-                DequeueHead(head.TimestampUs);
-                continue;
-            }
+                case PlayoutScheduler.Kind.Silence:
+                    // 아직 이르다 — 정확히 모자란 만큼만 무음
+                    WriteToDeviceQueue(silence, decision.Samples * bytesPerSampleFrame);
+                    break;
 
-            var frame = DequeueHead(head.TimestampUs);
-            if (frame != null)
+                case PlayoutScheduler.Kind.Skip:
+                    // 늦었다 — 정확히 늦은 만큼만 건너뛴다
+                    cursor += decision.Samples;
+                    if (cursor >= headSamples)
+                    {
+                        DequeueHead(head.TimestampUs);
+                        cursor = 0;
+                    }
+                    break;
+
+                case PlayoutScheduler.Kind.Play:
+                    var frame = DequeueHead(head.TimestampUs);
+                    int from = cursor * bytesPerSampleFrame;
+                    cursor = 0;
+                    if (frame == null) break;
+                    // Adjust<0: 끝 샘플을 빼서 따라잡기, >0: 마지막 샘플을 반복해 기다리기 (클럭 속도 차 보정)
+                    int body = Math.Max(0, frame.Data.Length - from + Math.Min(0, decision.Adjust) * bytesPerSampleFrame);
+                    Buffer.BlockCopy(frame.Data, from, chunk, 0, body);
+                    int length = body;
+                    for (int i = 0; i < decision.Adjust && length >= bytesPerSampleFrame; i++)
+                    {
+                        Buffer.BlockCopy(chunk, length - bytesPerSampleFrame, chunk, length, bytesPerSampleFrame);
+                        length += bytesPerSampleFrame;
+                    }
+                    if (!_syncTones.IsEmpty)
+                        InjectSyncTones(chunk, length, frame.TimestampUs + from / bytesPerSampleFrame * 1_000_000L / format.SampleRate, format);
+                    WriteToDeviceQueue(chunk, length);
+                    _lastPlayedTimestampUs = frame.TimestampUs;
+                    break;
+            }
+        }
+    }
+
+    /** chunk 첫 샘플이 소스 시각 chunkSrcUs일 때, 예약된 시험음 구간의 샘플을 시험음으로 바꾼다 (볼륨과 무관한 고정 크기). */
+    private void InjectSyncTones(byte[] chunk, int length, long chunkSrcUs, WaveFormat format)
+    {
+        while (_syncTones.TryPeek(out long first) && first + SyncChirp.DurationUs < chunkSrcUs) _syncTones.TryDequeue(out _);
+        int bytesPerSampleFrame = 2 * format.Channels;
+        int samples = length / bytesPerSampleFrame;
+        double usPerSample = 1_000_000d / format.SampleRate;
+        foreach (long at in _syncTones)
+        {
+            if (at > chunkSrcUs + samples * usPerSample) continue;
+            for (int j = 0; j < samples; j++)
             {
-                WriteToDeviceQueue(frame.Data);
-                _lastPlayedTimestampUs = frame.TimestampUs;
+                double t = chunkSrcUs + j * usPerSample - at;
+                if (t < 0 || t >= SyncChirp.DurationUs) continue;
+                short v = (short)(SyncChirp.Value(t) * 32767);
+                for (int c = 0; c < format.Channels; c++)
+                {
+                    int i = j * bytesPerSampleFrame + c * 2;
+                    chunk[i] = (byte)v;
+                    chunk[i + 1] = (byte)(v >> 8);
+                }
             }
         }
     }
@@ -301,10 +380,13 @@ public sealed class ModeBPlayer : IDisposable
         return pendingBytes * 1_000_000L / format.AverageBytesPerSecond;
     }
 
-    private void WriteToDeviceQueue(byte[] data)
+    private void WriteToDeviceQueue(byte[] data) => WriteToDeviceQueue(data, data.Length);
+
+    private void WriteToDeviceQueue(byte[] data, int length)
     {
-        _provider!.AddSamples(data, 0, data.Length);
-        Interlocked.Add(ref _writtenBytes, data.Length);
+        if (length <= 0) return;
+        _provider!.AddSamples(data, 0, length);
+        Interlocked.Add(ref _writtenBytes, length);
     }
 
     private static void ApplyGain(byte[] data, float gain)

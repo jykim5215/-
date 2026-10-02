@@ -203,6 +203,65 @@ audiobridge/
   양쪽 권한 흐름을 처리하고, Android↔Windows는 Windows가 UI 노출 없이 백그라운드로 응답한다.
   실패·시간초과 시 기존 설정은 유지되며 스트리밍 중과 다중 링크에서는 실행하지 않는다.
 
+- [x] v2.8 (사용자 선택 A: Wi-Fi Direct 옵션 추가 — 블루투스는 A2DP sink 불가로 대체):
+  net/WifiDirect.kt(WifiP2pManager 래퍼: discoverPeers/connect/requestConnectionInfo,
+  리시버는 액티비티 onResume/onPause에서 register/unregister, ContextCompat.RECEIVER_NOT_EXPORTED).
+  그룹 형성 시 BridgeEngine.onWifiDirectConnected(isGO, goHost): 비-GO는 기존 connect(goHost,48550)
+  재사용, GO는 상시 서버가 수신 → 오디오·동기·다대일 로직 무변경. UI: DiscoveryCard에
+  "Wi-Fi Direct로 연결" 섹션(P2P 피어 목록). 권한: NEARBY_WIFI_DEVICES(33+)/ACCESS_FINE_LOCATION(≤32),
+  CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE. BridgeState에 p2p* 상태 추가.
+  주의: Wi-Fi Direct는 기기 편차 크고 이 환경에서 테스트 불가 — CI 컴파일만 검증, 실기기 확인 필요.
+  블루투스(RFCOMM) 미채택 이유: 폰을 BT 스피커로 만드는 A2DP sink를 앱에 안 열어 줌.
+- [x] v2.8.1 (Wi-Fi Direct 실기기 대비 결함 수정 — 코드 리뷰로 발견, 실기기 미검증):
+  ① **중복 연결 버그**: `WIFI_P2P_CONNECTION_CHANGED`는 sticky 브로드캐스트라 onResume 재등록마다 다시
+  전달돼, 비그룹장이 다른 앱에 갔다 올 때마다 같은 그룹장에 링크가 하나씩 추가됐다 → WifiDirect가 형성된
+  그룹(그룹장 여부+주소)을 기억해 새 그룹일 때만 onConnected, BridgeEngine도 이미 붙은 호스트면 무시.
+  ② 검색 실패(`discoverPeers` onFailure)·주변 기기 0대일 때 "찾는 중…"이 영원히 남던 문제 → 실패 시
+  즉시 해제 + 20초 타임아웃, 빈 목록 알림으로는 끄지 않음. ③ 상대가 초대를 거절/무응답이면 "연결 중…"이
+  고착되던 문제 → 45초 타임아웃(cancelConnect + 안내). ④ onResume마다 `initialize()`로 채널이 쌓이던 것 →
+  채널 1회 생성, 프레임워크가 끊으면 재생성. ⑤ CI: `pull_request` 트리거 추가(빌드만, 롤링 태그·릴리스
+  단계는 PR에서 건너뜀, 동시성 그룹 분리) + 버전 문자열 2.7.x → 2.8.x.
+- [x] v2.8.1 가상 시뮬레이션 (사용자 요청: 실기기 대신 가상 환경): `sim/p2p/` — 실제 `WifiDirect.kt`를 그대로
+  컴파일해 가상 Android(WifiP2pManager·Context·Handler 대역 + 가상 시계) 위 가상 폰 2대로 13개 시나리오 실행,
+  v2.8 원본과 나란히 비교. 결과: **v2.8.1 13/13 통과**, v2.8은 9개 시나리오에서 결함 재현(앱 전환 5회 → 링크 6개,
+  그룹장 안내 6회, BUSY·주변 기기 없음 시 '찾는 중' 고착, 채널 11개 등). 변이 검사(그룹 중복 검사 제거)에서 FAIL로
+  바뀌는 것도 확인. `sim.py`는 실패 시 종료 코드 1을 내도록 수정, CI는 빌드 전에 두 시뮬레이션을 실행(실패 시 릴리스 중단).
+  한계: 무선 구간·제조사별 P2P 편차·권한 대화상자는 흉내 내지 않음 → 실기기 확인은 여전히 필요.
+
+- [x] v2.9 (사용자 목표 재정의: **"레이턴시 없이 소리를 싱크"** → 동기 재생 가상 시뮬 재작성 + 동기 코드 개선):
+  `sim/sync/` — 실제 ClockSync·JitterBuffer·Protocol + 새 PlayoutScheduler·CaptureTimeline을 가상 기기 3대(출력 버퍼·
+  스피커 내부 지연·클럭 ppm 제각각)와 가상 Wi-Fi(지터·스파이크·멈춤·손실) 위에서 돌려, 같은 소스 샘플이 실제로
+  소리 나는 시각의 기기 간 차이를 잰다. 발견: v2.8은 600ms에서도 싱크 오차 중앙값 8.3ms·최대 16.7ms, 분당 25회 끊김.
+  원인 ① 송신 타임스탬프가 read 완료 시각이라 캡처 드라이버의 20ms 묶음만큼 흔들림 ② 재생 판단이 5ms 프레임 단위이고
+  +5ms~−20ms 어긋남을 방치 ③ 시계 동기가 3초 간격·RTT 허용폭 넓음·2점 드리프트로 ±1.6ms 흔들림.
+  조치(Android·Windows 모두): **CaptureTimeline**(AudioRecord.getTimestamp BOOTTIME, 없으면 하한선 추정 — Windows 루프백도),
+  **PlayoutScheduler**(샘플 단위 정렬 + 5ms마다 1~2샘플 빼기/반복으로 클럭 속도 차 추종, 10ms 넘으면 재정렬),
+  **ClockSync 재작성**(최근 90초 중 왕복 짧은 1/4로 오프셋·기울기 직선 맞춤, 250ms 간격, 점프 시 재잠금).
+  결과(보통 가정 Wi-Fi·600ms·10분): 새 방식 + 정밀 보정 싱크 오차 p99 **0.76ms**, 지연 끊김 0. 최소 공통 지연: 좋은 5GHz
+  100ms / 보통 200ms / 혼잡 450ms. 변이 검사(속도 차 보정 끄기) → p99 8.4ms로 실패 확인. CI는 `run.sh --quick` 실행.
+  sim.py의 옛 시계·다기기 절은 실제 코드와 달라 삭제. **남은 결정**: 공통 지연 하한 600ms(Protocol.MIN_PLAYOUT_DELAY_MS)를
+  낮출지·자동으로 고를지, 추가 지연 1ms 단위(반올림 0.5ms 남음)를 더 잘게 할지, 음향 맞춤을 기기별 보정으로 바꿀지.
+  C#은 이 환경에서 컴파일 불가 → CI로 확인. 실기기 청취 검증은 아직 없음.
+- [x] v2.10 (사용자: "600ms 그대로 두지 마 — 억지로든, 사용자가든, 스피커를 붙여 놓고든 맞춰"): 세 층으로 구현.
+  ① **자동 공통 지연(기본)** — `audio/DelayAdvisor.kt`: 스피커가 (도착 지연 + 출력 버퍼)의 60초 최댓값+15ms를 2초마다
+  `need`로 보고 → 소스 `DelayCoordinator`가 최댓값을 `delay`로 배포(늘림 즉시·줄임 20초 유지 후). 혼자 들을 땐 자기 need.
+  Protocol 하한 600→40ms, 단위 200→10ms, 수동 기본 200ms, 자동 시작 250ms. Windows는 출력 깊이로 WASAPI 40ms 고정
+  (미리 채우는 큐를 쓰면 need=D가 되어 올라가기만 하는 되먹임이 생김).
+  ② **스피커 소리 맞추기** — 스피커 목록의 버튼(2대 이상 송신 중): 소스가 음악을 무음으로 바꾸고 `sync tones`로 스피커마다
+  600ms 간격 3회 처프(1.5→6kHz, 50ms)를 재생 경로 그대로 내게 함 → 소스 마이크(마이크 송신이면 ModeBSender.micTap,
+  미디어 송신이면 SyncMicRecorder) 녹음에서 `SyncChirp.find`(정합 필터+포물선 보간) 중앙값 → `SyncCalibration.compute`로
+  가장 늦은 스피커 기준 `calUs`를 `sync set`으로 저장(Android prefs `calibrationUs`, Windows `%APPDATA%\AudioBridge\sync.txt`).
+  옛 음향 왕복 보정(AcousticCalibrator·AcousticCalibrationResponder, `cal` 메시지)은 삭제.
+  ③ **수동** — 설정: 공통 지연 자동 스위치("지금 ○○ms"), 끄면 40–2000ms 슬라이더(재생 중에도 즉시 적용), 보정값 표시·초기화,
+  기존 기기별 추가 지연 0–300ms 유지.
+  시계 동기 질의를 250ms 간격으로 고정(1초 대비 오프셋 치우침 감소, 정밀 보정 p99 0.88→0.38ms).
+  시뮬(10분): 스피커 소리 맞추기(녹음 합성·반사·거리차 포함) 싱크 p99 **0.41ms**, 자동 지연 좋은 5GHz 114ms/보통 194ms/혼잡
+  374ms에서 지연 탓 끊김 0.3–0.7회/분. LATENCY_POLICY.md 전면 재작성, PROTOCOL(need/delay/sync), README 갱신.
+  **실기기 미검증**: 시험음 끼우기(ModeAPlayer/ModeBPlayer), 실제 마이크 검출 성공률, 기기별 getTimestamp 품질.
+- [x] **v2.10.25 배포** (2026-10-02, 사용자: "업데이트 기능이 작동을 안해"): PR 빌드는 의도적으로 릴리스를 건너뛰므로 서버
+  `latest.json`이 2.7.19에 머물러 있었다. `claude/gracious-albattani-c6e0b9`에서 build.yml을 수동 실행(workflow_dispatch)해
+  롤링 릴리스를 교체: versionCode 25 / 2.10.25, 태그 v1.0.0-build → 414f5cb. 공개 URL에서 APK(6,598,863B)·EXE(162,198,147B)를
+  다시 받아 SHA-256이 latest.json과 일치함을 확인. 이후 배포도 같은 방법(브랜치 push는 PR #2 브랜치만 자동 배포).
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
@@ -251,7 +310,9 @@ digest에 모두 일치했다. 실제 Android↔Android 및 Android↔Windows �
 **GitHub Actions**(`.github/workflows/build.yml`)가 APK/AAB/단일 EXE를 같은 버전으로 만들고 롤링
 릴리스를 교체하는 유일한 기준이며, 로컬 산출물만으로 배포 완료를 주장하지 않는다.
 
-**다음 할 일:** GitHub Actions v2.7 배포와 공개 APK/EXE 해시 확인 → Android 두 대 및
+**다음 할 일:** v2.8.1 PR(빌드 전용 CI) 통과 → PR #2 브랜치로 병합해 롤링 릴리스 게시·공개 APK/EXE 해시 확인
+→ **Wi-Fi Direct 실기기 확인**(폰 두 대: 검색→초대 수락→그룹장/비그룹장 양쪽에서 스트림 시작, 앱 전환 후
+복귀해도 스피커 목록이 1대로 유지되는지, 거절 시 45초 안에 "연결 중" 해제) → Android 두 대 및
 Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·실패 보존 동작 확인 → 소스 기기를
 음소거하고 10분 이상 재생하며 선택한 공통 지연과 기기별 추가 지연의 체감 시차/드리프트 측정.
 
@@ -265,19 +326,12 @@ Android↔Windows에서 조용한 방/소음 환경으로 자동 맞춤 성공·
    `latest.json` 다섯 자산과 두 SHA-256을 함께 검증한다.
 3. 동기화 핵심 불변식: 송신 패킷 timestamp와 clk의 `t1`은 반드시 같은 단조시계를 써야 한다.
    수신측은 네트워크 도착 시각이 아니라 하드웨어 재생 헤드 기준으로 목표 시각을 계산한다.
-4. 지연 정책 불변식: 공통 초기값은 600ms, 사용자 범위는 600–2000ms/200ms 단위이고 수신기 보정은
-   0–300ms 추가 지연만 가능하다. 자동 음향 맞춤 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
+4. 지연 정책 불변식: 공통 지연은 기본 자동(스피커 need 최댓값), 수동 40–2000ms/10ms. 스피커별로는 음향 보정 calUs(0–300ms)
+   + 사용자 추가 지연(0–300ms)으로 늦추기만 가능하다. 스피커 소리 맞추기 실패 시 기존 값을 바꾸지 않는다. 다른 앱이
    소스 기기에 직접 내는 원음은 AudioBridge가 늦출 수 없으므로 그 경로까지 동기화됐다고 주장하지 않는다.
-5. 최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
+5. 가상 시뮬레이션: `python3 audiobridge/sim/sim.py`(프로토콜·지터·역할), `bash audiobridge/sim/sync/run.sh`(동기 재생 — 실제 코드),
+   `bash audiobridge/sim/p2p/run.sh`(Wi-Fi Direct 가상 폰). 동기 코드를 바꾸면 Kotlin·C# 판을 함께 바꾸고 sync 시뮬을 돌린다.
+   최소 검증 명령: Windows `dotnet build audiobridge/windows/AudioBridgeWin.csproj -c Release`, Android
    `cd audiobridge/android && ./gradlew --no-daemon compileReleaseKotlin`. 이후 Actions 성공과 릴리스 해시까지 본다.
 6. 작업을 끝낼 때 이 문서의 현재 상태·검증 결과·다음 할 일을 갱신한다. 확인하지 않은 실기기 결과를
    완료로 표기하지 않는다.
-- [x] v2.8 (사용자 선택 A: Wi-Fi Direct 옵션 추가 — 블루투스는 A2DP sink 불가로 대체):
-  net/WifiDirect.kt(WifiP2pManager 래퍼: discoverPeers/connect/requestConnectionInfo,
-  리시버는 액티비티 onResume/onPause에서 register/unregister, ContextCompat.RECEIVER_NOT_EXPORTED).
-  그룹 형성 시 BridgeEngine.onWifiDirectConnected(isGO, goHost): 비-GO는 기존 connect(goHost,48550)
-  재사용, GO는 상시 서버가 수신 → 오디오·동기·다대일 로직 무변경. UI: DiscoveryCard에
-  "Wi-Fi Direct로 연결" 섹션(P2P 피어 목록). 권한: NEARBY_WIFI_DEVICES(33+)/ACCESS_FINE_LOCATION(≤32),
-  CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE. BridgeState에 p2p* 상태 추가.
-  주의: Wi-Fi Direct는 기기 편차 크고 이 환경에서 테스트 불가 — CI 컴파일만 검증, 실기기 확인 필요.
-  블루투스(RFCOMM) 미채택 이유: 폰을 BT 스피커로 만드는 A2DP sink를 앱에 안 열어 줌.

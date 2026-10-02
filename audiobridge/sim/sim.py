@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""AudioBridge 가상 시뮬레이터.
-실제 Kotlin/C# 로직을 바이트/산술 단위로 재현해 다기기 동기·프로토콜·지터를 검증한다.
-목표: 실사용에서 나온 '기기 간 레이턴시 차이' 버그를 재현/확인한다.
+"""AudioBridge 가상 시뮬레이터 — 프로토콜 바이트·스테레오 채널·지터 버퍼·역할 협상.
+동기 재생(시계 동기·재생 시각·지연)은 실제 앱 코드를 돌리는 sim/sync/run.sh 가 맡는다.
 """
 import random, struct
 
@@ -80,103 +79,9 @@ def test_stereo():
     check("오른쪽 채널만 추출", all(v==-1000 for v in rvals), f"{set(rvals)}")
     check("모노 길이 = 스테레오/2", len(L)==len(frame)//2)
 
-# ---------- 3. 시계 동기 (ClockSync min-RTT) ----------
-class ClockSync:
-    def __init__(self): self.offset=None; self.best=float('inf')
-    def sample(self, t0, t1, t2):
-        rtt = t2-t0
-        if rtt<0 or rtt>2_000_000: return
-        if rtt <= self.best:
-            self.best = rtt
-            self.offset = (t0+t2)//2 - t1
-
-def test_clock():
-    print("\n== 3. 시계 동기 (비대칭 지연에서 오프셋 추정) ==")
-    # 실제: source_clock = local_clock + true_offset. 목표: offset 추정 ≈ true_offset
-    # 정의: source_clock = local_clock + src_ahead. offset(추정대상) = local - source = -src_ahead
-    src_ahead = 5_000_000  # 소스가 로컬보다 5초 앞섬
-    expected_offset = -src_ahead
-    cs = ClockSync()
-    rng = random.Random(1)
-    for _ in range(40):
-        t0 = rng.randint(0, 10**9)                 # 로컬 송신
-        up = rng.randint(2000, 40000)              # 상행 지연
-        down = rng.randint(2000, 40000)            # 하행 지연
-        t1 = (t0+up) + src_ahead                    # 소스 시계로 찍은 수신시각
-        t2 = t0 + up + down                         # 로컬 수신
-        cs.sample(t0, t1, t2)
-    err = abs(cs.offset - expected_offset)
-    # 최소 RTT 샘플이면 오차 ≈ (up-down)/2, 최대 ~19ms
-    check("오프셋 추정 오차 < 25ms", err < 25000, f"err={err/1000:.1f}ms offset={cs.offset} expected={expected_offset}")
-    # toLocal 변환 검증
-    src_ts = 5_500_000
-    local = src_ts - cs.offset  # toLocal(srcTs) = srcTs + offset? 확인!
-    # 실제 코드: toLocal = srcTs + offset, offset=(t0+t2)/2 - t1(=src)
-    # 즉 offset은 (local - source). local = src + offset
-    local2 = src_ts + cs.offset
-    # source가 local보다 앞서므로 local < source → local2 < src_ts 이어야
-    check("toLocal = srcTs + offset 부호 정합", local2 < src_ts, f"local2={local2} src={src_ts} off={cs.offset}")
-
-# ---------- 4. 다기기 동기 재생 (핵심) ----------
-# 해석 모델: 한 프레임(소스시각 ts)이 스피커에서 실제로 나오는 로컬 벽시계는
-#   emit_local = max(  ideal = toLocal(ts) + delay + nudge,           # 스케줄 목표
-#                       floor = arrival_local + device_out_latency )  # 물리 하한
-#   arrival_local = toLocal(ts) + net_delay,  toLocal(ts)=ts+offset (offset=local-source)
-# 소스시계로 환산: emit_source = emit_local - offset
-#                = ts + max( delay+nudge , net_delay + device_out_latency )
-# → offset/net/device 가 delay 안에 흡수되면 모든 스피커가 ts+delay+nudge 로 완전 일치.
-#   흡수 못 하면(net+device > delay) 그 기기만 (net+device-delay) 만큼 늦음.
-def emit_source_domain(device_lat_ms, net_delay_ms, clock_offset_us, nudge_ms,
-                       delay_ms=60, has_sync=True, source_ts=1_000_000):
-    offset = clock_offset_us if has_sync else 0
-    ideal_local = source_ts + offset + (delay_ms + nudge_ms)*1000
-    arrival_local = source_ts + offset + net_delay_ms*1000
-    floor_local = arrival_local + device_lat_ms*1000
-    if has_sync:
-        emit_local = max(ideal_local, floor_local)
-        return emit_local - offset            # 소스시계 환산
-    else:
-        # 무동기: 첫 패킷 도착 기준 잠정오프셋 → 기기마다 시작점이 제각각(offset 미보정)
-        # 근사: emit_local ≈ arrival_local + max(delay, device_lat); 소스환산 시 offset 안 빠짐
-        emit_local = arrival_local + max(delay_ms, device_lat_ms)*1000
-        return emit_local - offset + offset   # offset 미보정 반영 = emit_local (오프셋 남음)
-
-def test_multidevice():
-    print("\n== 4. 다기기 동기 재생 (같은 소스 샘플이 같은 벽시계에 나오는가) ==")
-    specs = [
-        dict(device_lat_ms=20,  net_delay_ms=8,  clock_offset_us=0,         nudge_ms=0),
-        dict(device_lat_ms=45,  net_delay_ms=15, clock_offset_us=3_000_000, nudge_ms=0),
-        dict(device_lat_ms=30,  net_delay_ms=25, clock_offset_us=-1_500_000,nudge_ms=0),
-    ]
-    res=[]
-    for i,s in enumerate(specs):
-        e = emit_source_domain(**s)
-        res.append(e)
-        print(f"    스피커{i}: 방출(소스시계) {e/1000:.1f}ms  "
-              f"[기기 {s['device_lat_ms']}ms · 망 {s['net_delay_ms']}ms · 오프셋 {s['clock_offset_us']/1000:.0f}ms]")
-    spread=max(res)-min(res)
-    check("스피커 간 방출 시차 < 5ms (delay가 망+기기 흡수)", spread < 5000, f"spread={spread/1000:.1f}ms")
-
-def test_latency_floor():
-    print("\n== 4b. 지연 하한 버그: delay < (망+기기지연) 인 스피커는 늦음 ==")
-    # delay=60ms인데 한 스피커의 망+기기 = 100ms → 40ms 늦게 나옴 (실사용 증상!)
-    a = emit_source_domain(device_lat_ms=20, net_delay_ms=8,  clock_offset_us=0, nudge_ms=0, delay_ms=60)
-    b = emit_source_domain(device_lat_ms=90, net_delay_ms=15, clock_offset_us=0, nudge_ms=0, delay_ms=60)
-    lag=(b-a)/1000
-    print(f"    빠른기기 {a/1000:.1f}ms vs 느린기기(버퍼90ms) {b/1000:.1f}ms → 시차 {lag:.1f}ms")
-    check("이 조건에서 시차 발생을 시뮬이 포착", lag > 10, f"lag={lag:.1f}ms")
-    # 완화책 검증: 느린 기기에서 delay를 키우면(=대기시간↑) 정렬 회복
-    a2 = emit_source_domain(device_lat_ms=20, net_delay_ms=8,  clock_offset_us=0, nudge_ms=0, delay_ms=120)
-    b2 = emit_source_domain(device_lat_ms=90, net_delay_ms=15, clock_offset_us=0, nudge_ms=0, delay_ms=120)
-    check("delay를 120ms로 키우면 정렬 회복", abs(b2-a2) < 5000, f"spread={(b2-a2)/1000:.1f}ms")
-
-def test_multidevice_nosync():
-    print("\n== 4c. 시계동기 없이(구버전) — 대조군 ==")
-    res=[]
-    for s in [dict(device_lat_ms=20,net_delay_ms=8,clock_offset_us=0,nudge_ms=0,has_sync=False),
-              dict(device_lat_ms=45,net_delay_ms=15,clock_offset_us=3_000_000,nudge_ms=0,has_sync=False)]:
-        res.append(emit_source_domain(**s))
-    print(f"    (참고) 무동기 시차 = {(max(res)-min(res))/1000:.0f}ms — 시계오프셋만큼 어긋남(동기가 필요한 이유)")
+# ---------- 3·4. 시계 동기·다기기 동기 재생 ----------
+# 실제 앱 코드(ClockSync·PlayoutScheduler·CaptureTimeline·JitterBuffer)를 가상 기기·가상 Wi-Fi 위에서
+# 그대로 돌리는 sim/sync/run.sh 로 옮겼다. 여기 있던 단순화 모델은 실제 코드와 달라 삭제.
 
 # ---------- 5. 지터 버퍼 ----------
 def test_jitter():
@@ -235,15 +140,12 @@ def test_roles():
 if __name__=="__main__":
     test_protocol()
     test_stereo()
-    test_clock()
-    test_multidevice()
-    test_latency_floor()
-    test_multidevice_nosync()
     test_jitter()
     test_roles()
     print("\n"+"="*50)
     if FAIL:
         print(f"실패 {len(FAIL)}건:")
         for f in FAIL: print("  ✗", f)
+        raise SystemExit(1)
     else:
         print("전체 통과 ✓")

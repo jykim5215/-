@@ -45,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,8 +83,8 @@ class MainActivity : ComponentActivity() {
             context = applicationContext,
             onPeers = { list ->
                 BridgeState.p2pPeers.value = list.map { app.audiobridge.P2pDevice(it.first, it.second) }
-                BridgeState.p2pDiscovering.value = false
             },
+            onDiscovering = { BridgeState.p2pDiscovering.value = it },
             onStatus = { BridgeState.p2pStatus.value = it },
             onConnected = { go, host -> BridgeEngine.onWifiDirectConnected(go, host) },
             onUnsupported = { BridgeState.p2pSupported.value = false },
@@ -92,7 +93,7 @@ class MainActivity : ComponentActivity() {
         wifiDirect = wd
         // UI가 접근하는 컨트롤러 훅
         BridgeEngine.wifiDirect = object : BridgeEngine.WifiDirectController {
-            override fun discover() { BridgeState.p2pDiscovering.value = true; wd.discover() }
+            override fun discover() = wd.discover()
             override fun connect(deviceAddress: String) = wd.connect(deviceAddress)
             override fun disconnect() = wd.disconnect()
         }
@@ -156,6 +157,9 @@ fun MainScreen() {
     val isServerSession by BridgeState.isServerSession.collectAsState()
     val extraDelayMs by BridgeState.extraDelayMs.collectAsState()
     val calibrationRunning by BridgeState.calibrationRunning.collectAsState()
+    val autoDelay by BridgeState.autoDelay.collectAsState()
+    val activeDelayMs by BridgeState.activeDelayMs.collectAsState()
+    val calibrationUs by BridgeState.calibrationUs.collectAsState()
     val p2pSupported by BridgeState.p2pSupported.collectAsState()
     val p2pDiscovering by BridgeState.p2pDiscovering.collectAsState()
     val p2pStatus by BridgeState.p2pStatus.collectAsState()
@@ -221,28 +225,12 @@ fun MainScreen() {
         else BridgeEngine.cancelSend("마이크 권한이 없어 소리를 보낼 수 없어요")
     }
 
-    var startCalibrationAfterPermission by remember { mutableStateOf(false) }
+    // 스피커 소리 맞추기: 미디어 소리를 보내는 중이면 마이크를 따로 열어야 해서 권한을 묻는다
     val calibrationMicLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        BridgeEngine.onCalibrationPermission(granted)
-        if (granted && startCalibrationAfterPermission) BridgeEngine.requestAcousticCalibration()
-        if (!granted && startCalibrationAfterPermission) BridgeState.notify("마이크 권한이 없어 자동 보정을 시작할 수 없어요")
-        startCalibrationAfterPermission = false
-    }
+    ) { granted -> BridgeEngine.onCalibrationPermission(granted) }
     LaunchedEffect(Unit) {
         BridgeState.calibrationPermissionRequest.collect {
-            startCalibrationAfterPermission = false
-            calibrationMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-    val requestCalibration: () -> Unit = {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (granted) {
-            BridgeEngine.requestAcousticCalibration()
-        } else {
-            startCalibrationAfterPermission = true
             calibrationMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
@@ -353,6 +341,8 @@ fun MainScreen() {
                     speakers = speakers,
                     isServer = isServerSession,
                     onAddSpeaker = { showAddSpeaker = true },
+                    syncRunning = calibrationRunning,
+                    onSyncSpeakers = { BridgeEngine.requestSpeakerSync() },
                 )
                 ConnState.CONNECTING -> Surface(shape = RoundedCornerShape(28.dp), color = cs.surface, border = BorderStroke(1.dp, cs.outline)) {
                     Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -478,49 +468,47 @@ fun MainScreen() {
                         singleLine = true,
                         supportingText = { Text("상대 기기 목록에 이 이름으로 보여요") },
                     )
-                    val canChangeDelay = !listening && !sending && !sendPending
-                    Text("기본 재생 대기 (${bufferMs}ms)", style = MaterialTheme.typography.labelLarge)
-                    Slider(
-                        value = bufferMs.toFloat(),
-                        onValueChange = { BridgeEngine.setPlayoutDelayMs(it.toInt()) },
-                        valueRange = Protocol.MIN_PLAYOUT_DELAY_MS.toFloat()..
-                            Protocol.MAX_PLAYOUT_DELAY_MS.toFloat(),
-                        steps = (Protocol.MAX_PLAYOUT_DELAY_MS - Protocol.MIN_PLAYOUT_DELAY_MS) /
-                            Protocol.PLAYOUT_DELAY_STEP_MS - 1,
-                        enabled = canChangeDelay,
-                    )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("600ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                        Text("2000ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                    }
-                    Text(
-                        if (canChangeDelay) "200ms 단위로 선택하며 다음 연결에도 유지돼요"
-                        else "소리가 흐르는 중에는 끈 뒤 변경할 수 있어요",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant,
-                    )
-                    Button(
-                        onClick = requestCalibration,
-                        enabled = canChangeDelay && conn == ConnState.CONNECTED && !calibrationRunning,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (calibrationRunning) {
-                            CircularProgressIndicator(
-                                Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = cs.onPrimary,
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("공통 지연 자동", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "지금 ${activeDelayMs}ms · " + if (autoDelay) "끊기지 않는 가장 짧은 값으로 맞춰요" else "직접 고른 값",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cs.onSurfaceVariant,
                             )
-                            Spacer(Modifier.width(10.dp))
-                            Text("시험음 측정 중")
-                        } else {
-                            Text("두 기기의 마이크·스피커로 자동 맞춤")
                         }
+                        Switch(checked = autoDelay, onCheckedChange = { BridgeEngine.setAutoDelay(it) })
                     }
-                    Text(
-                        "기기 한 대와 연결한 뒤, 조용한 곳에서 두 기기를 0.5–1.5m 떨어뜨리고 볼륨을 60% 이상으로 올려 주세요. 실패하면 현재 값이 유지돼요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant,
-                    )
+                    if (!autoDelay) {
+                        Text("공통 지연 (${bufferMs}ms)", style = MaterialTheme.typography.labelLarge)
+                        Slider(
+                            value = bufferMs.toFloat(),
+                            onValueChange = { BridgeEngine.setPlayoutDelayMs(it.toInt()) },
+                            valueRange = Protocol.MIN_PLAYOUT_DELAY_MS.toFloat()..
+                                Protocol.MAX_PLAYOUT_DELAY_MS.toFloat(),
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${Protocol.MIN_PLAYOUT_DELAY_MS}ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            Text("${Protocol.MAX_PLAYOUT_DELAY_MS}ms", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                        Text(
+                            "짧을수록 빠르지만 Wi-Fi가 잠깐 멈추면 끊겨요. 소리가 흐르는 중에도 바꿀 수 있어요",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("스피커 소리 맞추기 보정", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                if (calibrationUs > 0) "이 기기를 +${"%.1f".format(calibrationUs / 1000.0)}ms 늦춰요"
+                                else "없음 — 여러 스피커로 보낼 때 '스피커 소리 맞추기'로 재요",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cs.onSurfaceVariant,
+                            )
+                        }
+                        if (calibrationUs > 0) TextButton(onClick = { BridgeEngine.setCalibrationUs(0L) }) { Text("초기화") }
+                    }
                     Text("연결 방식", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SelectChip(label = "빠름 (권장)", selected = !transportTcp) { BridgeEngine.setTransportTcp(false) }
@@ -705,6 +693,8 @@ private fun ConnectedCard(
     speakers: List<SpeakerInfo>,
     isServer: Boolean,
     onAddSpeaker: () -> Unit,
+    syncRunning: Boolean,
+    onSyncSpeakers: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val multi = speakers.size > 1
@@ -846,6 +836,26 @@ private fun ConnectedCard(
                     }
                     if (speakers.size < 4) {
                         TextButton(onClick = onAddSpeaker) { Text("+ 스피커 추가") }
+                    }
+                    if (sending && speakers.size >= 2) {
+                        Button(
+                            onClick = onSyncSpeakers,
+                            enabled = !syncRunning,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (syncRunning) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+                                Spacer(Modifier.width(10.dp))
+                                Text("시험음 듣는 중…")
+                            } else {
+                                Text("스피커 소리 맞추기")
+                            }
+                        }
+                        Text(
+                            "스피커들을 이 폰 옆에 같은 거리로 모아 두고 볼륨을 올린 뒤 누르세요",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                        )
                     }
                 }
             }
