@@ -258,6 +258,10 @@ audiobridge/
   시뮬(10분): 스피커 소리 맞추기(녹음 합성·반사·거리차 포함) 싱크 p99 **0.41ms**, 자동 지연 좋은 5GHz 114ms/보통 194ms/혼잡
   374ms에서 지연 탓 끊김 0.3–0.7회/분. LATENCY_POLICY.md 전면 재작성, PROTOCOL(need/delay/sync), README 갱신.
   **실기기 미검증**: 시험음 끼우기(ModeAPlayer/ModeBPlayer), 실제 마이크 검출 성공률, 기기별 getTimestamp 품질.
+- [x] **v2.10.25 배포** (2026-10-02, 사용자: "업데이트 기능이 작동을 안해"): PR 빌드는 의도적으로 릴리스를 건너뛰므로 서버
+  `latest.json`이 2.7.19에 머물러 있었다. `claude/gracious-albattani-c6e0b9`에서 build.yml을 수동 실행(workflow_dispatch)해
+  롤링 릴리스를 교체: versionCode 25 / 2.10.25, 태그 v1.0.0-build → 414f5cb. 공개 URL에서 APK(6,598,863B)·EXE(162,198,147B)를
+  다시 받아 SHA-256이 latest.json과 일치함을 확인. 이후 배포도 같은 방법(브랜치 push는 PR #2 브랜치만 자동 배포).
 **v2.4 검증 상태:** 로컬 Windows Release 빌드·win-x64 단일 EXE publish 경고/오류 0. GitHub Actions
 run `29264763836` 성공(Android APK/AAB + Windows EXE + 배포 패키지 + 릴리스 게시 전 단계 통과).
 배포 버전 `2.4.13`, 자산 5개(`APK`, `AAB`, 직접 `EXE`, `ZIP`, `latest.json`) 확인. `latest.json`의
